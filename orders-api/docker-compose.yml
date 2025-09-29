@@ -1,0 +1,260 @@
+version: '3.8'
+
+services:
+  # Orders API Service
+  orders-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - SERVER_DEBUG=false
+      - SERVER_CORS_ENABLED=true
+      - SERVER_READ_TIMEOUT=30s
+      - SERVER_WRITE_TIMEOUT=30s
+      - SERVER_IDLE_TIMEOUT=120s
+      - SERVER_SHUTDOWN_TIMEOUT=30s
+
+      # Database Configuration
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=cryptosim_orders
+      - MONGODB_COLLECTION=orders
+      - MONGODB_MAX_POOL_SIZE=100
+      - MONGODB_MIN_POOL_SIZE=5
+      - MONGODB_CONNECTION_TIMEOUT=10s
+      - MONGODB_SOCKET_TIMEOUT=30s
+
+      # Authentication Configuration
+      - JWT_SECRET_KEY=super-secret-jwt-key-change-in-production
+      - JWT_ISSUER=orders-api
+      - JWT_AUDIENCE=cryptosim
+      - JWT_TOKEN_EXPIRY=24h
+
+      # Logging Configuration
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_OUTPUT=stdout
+      - LOG_BODY=false
+      - LOG_HEADERS=false
+
+      # RabbitMQ Configuration
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=orders
+      - RABBITMQ_DLX=orders.dlx
+      - RABBITMQ_QUEUE_PREFIX=orders
+      - RABBITMQ_CONSUMER_TAG=orders-consumer
+      - RABBITMQ_MAX_RETRIES=3
+      - RABBITMQ_RETRY_DELAY=5s
+      - RABBITMQ_MESSAGE_TTL=24h
+      - RABBITMQ_PERSISTENT=true
+      - RABBITMQ_PREFETCH_COUNT=10
+      - RABBITMQ_WORKER_COUNT=5
+
+      # External API Configuration
+      - USER_API_BASE_URL=http://user-api:8081
+      - USER_API_KEY=user-api-key-change-in-production
+      - USER_API_TIMEOUT=10s
+      - WALLET_API_BASE_URL=http://wallet-api:8082
+      - WALLET_API_KEY=wallet-api-key-change-in-production
+      - WALLET_API_TIMEOUT=15s
+      - MARKET_API_BASE_URL=http://market-api:8083
+      - MARKET_API_KEY=market-api-key-change-in-production
+      - MARKET_API_TIMEOUT=10s
+
+      # Execution Configuration
+      - EXECUTION_MAX_WORKERS=10
+      - EXECUTION_QUEUE_SIZE=100
+      - EXECUTION_TIMEOUT=30s
+      - EXECUTION_MAX_SLIPPAGE=0.05
+      - EXECUTION_SIMULATE_LATENCY=true
+      - EXECUTION_MIN_TIME=100ms
+      - EXECUTION_MAX_TIME=2s
+
+      # Fee Configuration
+      - FEE_BASE_PERCENTAGE=0.001
+      - FEE_MAKER=0.0008
+      - FEE_TAKER=0.0012
+      - FEE_MINIMUM=0.01
+      - FEE_MAXIMUM=1000.0
+      - FEE_VIP_BRONZE=0.05
+      - FEE_VIP_SILVER=0.10
+      - FEE_VIP_GOLD=0.15
+      - FEE_VIP_PLATINUM=0.25
+
+      # Worker Configuration
+      - WORKER_POOL_SIZE=10
+      - WORKER_QUEUE_SIZE=100
+      - WORKER_TIMEOUT=30s
+      - WORKER_MAX_RETRIES=3
+      - WORKER_RETRY_DELAY=5s
+    depends_on:
+      - mongodb
+      - rabbitmq
+    networks:
+      - cryptosim-network
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=cryptosim_orders
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongodb-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_VHOST=/
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./scripts/rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./scripts/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  # Mock User API (for development/testing)
+  user-api:
+    image: mockserver/mockserver:5.15.0
+    ports:
+      - "8081:1080"
+    environment:
+      - MOCKSERVER_INITIALIZATION_JSON_PATH=/config/user-api-expectations.json
+    volumes:
+      - ./mocks/user-api-expectations.json:/config/user-api-expectations.json:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # Mock Wallet API (for development/testing)
+  wallet-api:
+    image: mockserver/mockserver:5.15.0
+    ports:
+      - "8082:1080"
+    environment:
+      - MOCKSERVER_INITIALIZATION_JSON_PATH=/config/wallet-api-expectations.json
+    volumes:
+      - ./mocks/wallet-api-expectations.json:/config/wallet-api-expectations.json:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # Mock Market Data API (for development/testing)
+  market-api:
+    image: mockserver/mockserver:5.15.0
+    ports:
+      - "8083:1080"
+    environment:
+      - MOCKSERVER_INITIALIZATION_JSON_PATH=/config/market-api-expectations.json
+    volumes:
+      - ./mocks/market-api-expectations.json:/config/market-api-expectations.json:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # Prometheus (for metrics collection)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # Grafana (for metrics visualization)
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # Redis (for caching - optional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  cryptosim-network:
+    driver: bridge
+    name: cryptosim-network
+
+volumes:
+  mongodb_data:
+    name: cryptosim_mongodb_data
+  rabbitmq_data:
+    name: cryptosim_rabbitmq_data
+  prometheus_data:
+    name: cryptosim_prometheus_data
+  grafana_data:
+    name: cryptosim_grafana_data
+  redis_data:
+    name: cryptosim_redis_data

@@ -1,0 +1,330 @@
+package handlers
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"orders-api/internal/clients"
+	"orders-api/internal/messaging"
+	"orders-api/internal/repository"
+)
+
+type HealthHandler struct {
+	orderRepo     *repository.OrderRepository
+	userClient    *clients.UserClient
+	walletClient  *clients.WalletClient
+	marketClient  *clients.MarketClient
+	publisher     *messaging.Publisher
+	consumer      *messaging.Consumer
+}
+
+type HealthResponse struct {
+	Status      string                    `json:"status"`
+	Timestamp   time.Time                 `json:"timestamp"`
+	Version     string                    `json:"version"`
+	Uptime      time.Duration             `json:"uptime"`
+	Environment string                    `json:"environment"`
+	Services    map[string]ServiceHealth  `json:"services"`
+}
+
+type ServiceHealth struct {
+	Status      string        `json:"status"`
+	ResponseTime time.Duration `json:"response_time,omitempty"`
+	Error       string        `json:"error,omitempty"`
+	LastCheck   time.Time     `json:"last_check"`
+	Details     interface{}   `json:"details,omitempty"`
+}
+
+type ReadinessResponse struct {
+	Ready    bool                     `json:"ready"`
+	Services map[string]ServiceHealth `json:"services"`
+}
+
+type LivenessResponse struct {
+	Alive bool `json:"alive"`
+}
+
+var startTime = time.Now()
+
+func NewHealthHandler(
+	orderRepo *repository.OrderRepository,
+	userClient *clients.UserClient,
+	walletClient *clients.WalletClient,
+	marketClient *clients.MarketClient,
+	publisher *messaging.Publisher,
+	consumer *messaging.Consumer,
+) *HealthHandler {
+	return &HealthHandler{
+		orderRepo:    orderRepo,
+		userClient:   userClient,
+		walletClient: walletClient,
+		marketClient: marketClient,
+		publisher:    publisher,
+		consumer:     consumer,
+	}
+}
+
+func (h *HealthHandler) Health(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	services := make(map[string]ServiceHealth)
+
+	// Check MongoDB
+	services["mongodb"] = h.checkMongoDB(ctx)
+
+	// Check User API
+	services["user_api"] = h.checkUserAPI(ctx)
+
+	// Check Wallet API
+	services["wallet_api"] = h.checkWalletAPI(ctx)
+
+	// Check Market Data API
+	services["market_api"] = h.checkMarketAPI(ctx)
+
+	// Check RabbitMQ Publisher
+	services["rabbitmq_publisher"] = h.checkRabbitMQPublisher()
+
+	// Check RabbitMQ Consumer
+	services["rabbitmq_consumer"] = h.checkRabbitMQConsumer()
+
+	// Determine overall status
+	overallStatus := "healthy"
+	for _, service := range services {
+		if service.Status != "healthy" {
+			overallStatus = "unhealthy"
+			break
+		}
+	}
+
+	response := &HealthResponse{
+		Status:      overallStatus,
+		Timestamp:   time.Now(),
+		Version:     "1.0.0",
+		Uptime:      time.Since(startTime),
+		Environment: getEnvironment(),
+		Services:    services,
+	}
+
+	statusCode := http.StatusOK
+	if overallStatus == "unhealthy" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	c.JSON(statusCode, response)
+}
+
+func (h *HealthHandler) Readiness(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	services := make(map[string]ServiceHealth)
+
+	// Check critical services for readiness
+	services["mongodb"] = h.checkMongoDB(ctx)
+	services["user_api"] = h.checkUserAPI(ctx)
+	services["wallet_api"] = h.checkWalletAPI(ctx)
+	services["market_api"] = h.checkMarketAPI(ctx)
+
+	ready := true
+	for _, service := range services {
+		if service.Status != "healthy" {
+			ready = false
+		}
+	}
+
+	response := &ReadinessResponse{
+		Ready:    ready,
+		Services: services,
+	}
+
+	statusCode := http.StatusOK
+	if !ready {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	c.JSON(statusCode, response)
+}
+
+func (h *HealthHandler) Liveness(c *gin.Context) {
+	response := &LivenessResponse{
+		Alive: true,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *HealthHandler) checkMongoDB(ctx context.Context) ServiceHealth {
+	start := time.Now()
+
+	err := h.orderRepo.Ping(ctx)
+	responseTime := time.Since(start)
+
+	if err != nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: responseTime,
+			Error:        err.Error(),
+			LastCheck:    time.Now(),
+		}
+	}
+
+	return ServiceHealth{
+		Status:       "healthy",
+		ResponseTime: responseTime,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"database": "orders",
+		},
+	}
+}
+
+func (h *HealthHandler) checkUserAPI(ctx context.Context) ServiceHealth {
+	start := time.Now()
+
+	err := h.userClient.HealthCheck(ctx)
+	responseTime := time.Since(start)
+
+	if err != nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: responseTime,
+			Error:        err.Error(),
+			LastCheck:    time.Now(),
+		}
+	}
+
+	return ServiceHealth{
+		Status:       "healthy",
+		ResponseTime: responseTime,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"service": "user-api",
+		},
+	}
+}
+
+func (h *HealthHandler) checkWalletAPI(ctx context.Context) ServiceHealth {
+	start := time.Now()
+
+	err := h.walletClient.HealthCheck(ctx)
+	responseTime := time.Since(start)
+
+	if err != nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: responseTime,
+			Error:        err.Error(),
+			LastCheck:    time.Now(),
+		}
+	}
+
+	return ServiceHealth{
+		Status:       "healthy",
+		ResponseTime: responseTime,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"service": "wallet-api",
+		},
+	}
+}
+
+func (h *HealthHandler) checkMarketAPI(ctx context.Context) ServiceHealth {
+	start := time.Now()
+
+	err := h.marketClient.HealthCheck(ctx)
+	responseTime := time.Since(start)
+
+	if err != nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: responseTime,
+			Error:        err.Error(),
+			LastCheck:    time.Now(),
+		}
+	}
+
+	return ServiceHealth{
+		Status:       "healthy",
+		ResponseTime: responseTime,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"service": "market-data-api",
+		},
+	}
+}
+
+func (h *HealthHandler) checkRabbitMQPublisher() ServiceHealth {
+	start := time.Now()
+
+	err := h.publisher.HealthCheck()
+	responseTime := time.Since(start)
+
+	if err != nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: responseTime,
+			Error:        err.Error(),
+			LastCheck:    time.Now(),
+		}
+	}
+
+	return ServiceHealth{
+		Status:       "healthy",
+		ResponseTime: responseTime,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"component": "rabbitmq-publisher",
+		},
+	}
+}
+
+func (h *HealthHandler) checkRabbitMQConsumer() ServiceHealth {
+	start := time.Now()
+
+	err := h.consumer.HealthCheck()
+	responseTime := time.Since(start)
+
+	status := "healthy"
+	var errorMsg string
+
+	if err != nil {
+		status = "unhealthy"
+		errorMsg = err.Error()
+	}
+
+	return ServiceHealth{
+		Status:       status,
+		ResponseTime: responseTime,
+		Error:        errorMsg,
+		LastCheck:    time.Now(),
+		Details: map[string]interface{}{
+			"component":     "rabbitmq-consumer",
+			"handlers":      h.consumer.GetHandlerCount(),
+			"queues":        h.consumer.GetQueueCount(),
+			"consuming":     h.consumer.IsConsuming(),
+		},
+	}
+}
+
+func getEnvironment() string {
+	// This would typically come from environment variables
+	// For now, return a default value
+	return "development"
+}
+
+func (h *HealthHandler) Metrics(c *gin.Context) {
+	// Basic metrics endpoint
+	metrics := map[string]interface{}{
+		"uptime_seconds":    time.Since(startTime).Seconds(),
+		"timestamp":         time.Now().Unix(),
+		"goroutines":        "N/A", // Would need runtime.NumGoroutine()
+		"memory_usage":      "N/A", // Would need runtime.MemStats
+		"requests_total":    "N/A", // Would need request counter middleware
+		"requests_duration": "N/A", // Would need request duration middleware
+	}
+
+	c.JSON(http.StatusOK, metrics)
+}
