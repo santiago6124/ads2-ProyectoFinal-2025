@@ -1,0 +1,39 @@
+services:
+  market-data-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: market-data-api
+    ports:
+      - "8004:8004"
+    environment:
+      SERVER_PORT: "8004"
+      REDIS_URL: redis://redis:6379
+      ENVIRONMENT: development
+    depends_on:
+      - redis
+    networks:
+      - market-data-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: market-data-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - market-data-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  market-data-network:
+    driver: bridge
