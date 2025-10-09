@@ -11,7 +11,6 @@ import (
 	"orders-api/internal/concurrent"
 	"orders-api/internal/messaging"
 	"orders-api/internal/middleware"
-	"orders-api/internal/repository"
 	"orders-api/internal/services"
 )
 
@@ -285,19 +284,6 @@ func loadWorkerConfig() *WorkerConfig {
 }
 
 // Convert config to service-specific configs
-func (c *Config) ToRepositoryConfig() *repository.Config {
-	return &repository.Config{
-		URI:                    c.Database.URI,
-		Database:               c.Database.Database,
-		Collection:             c.Database.Collection,
-		MaxPoolSize:            c.Database.MaxPoolSize,
-		MinPoolSize:            c.Database.MinPoolSize,
-		MaxConnIdleTime:        c.Database.MaxConnIdleTime,
-		ConnectionTimeout:      c.Database.ConnectionTimeout,
-		SocketTimeout:          c.Database.SocketTimeout,
-		ServerSelectionTimeout: c.Database.ServerSelectionTimeout,
-	}
-}
 
 func (c *Config) ToUserClientConfig() *clients.UserClientConfig {
 	return &clients.UserClientConfig{
@@ -401,13 +387,32 @@ func getEnv(key, defaultValue string) string {
 }
 
 func getEnvAsInt(key string, defaultValue int) int {
-	if value, exists := os.LookupEnv(key); exists {
+	if value := getEnv(key, ""); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
 		}
 	}
 	return defaultValue
 }
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := getEnv(key, ""); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := getEnv(key, ""); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return defaultValue
+}
+
 
 func getEnvAsInt64(key string, defaultValue int64) int64 {
 	if value, exists := os.LookupEnv(key); exists {
@@ -427,23 +432,6 @@ func getEnvAsUint64(key string, defaultValue uint64) uint64 {
 	return defaultValue
 }
 
-func getEnvAsBool(key string, defaultValue bool) bool {
-	if value, exists := os.LookupEnv(key); exists {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
-}
-
-func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
-	if value, exists := os.LookupEnv(key); exists {
-		if duration, err := time.ParseDuration(value); err == nil {
-			return duration
-		}
-	}
-	return defaultValue
-}
 
 func getEnvAsDecimal(key string, defaultValue decimal.Decimal) decimal.Decimal {
 	if value, exists := os.LookupEnv(key); exists {
@@ -482,3 +470,4 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+

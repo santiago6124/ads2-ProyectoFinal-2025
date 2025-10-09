@@ -269,7 +269,7 @@ func (a *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 func (a *AuthMiddleware) ExtractUserID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Try to get user ID from token claims first
-		if userID, exists := c.Get("user_id"); exists {
+		if _, exists := c.Get("user_id"); exists {
 			c.Next()
 			return
 		}

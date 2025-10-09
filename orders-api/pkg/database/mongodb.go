@@ -223,6 +223,7 @@ type DatabaseStats struct {
 	OrdersCount  int64  `json:"orders_count"`
 }
 
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

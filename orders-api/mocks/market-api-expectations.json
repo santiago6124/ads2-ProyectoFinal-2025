@@ -1,0 +1,27 @@
+[
+    {
+        "httpRequest": {
+            "path": "/health"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "status": "ok"
+            }
+        }
+    },
+    {
+        "httpRequest": {
+            "path": "/api/v1/market/price/.*",
+            "method": "GET"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "symbol": "BTC",
+                "price": 50000.0,
+                "timestamp": "2025-01-27T00:00:00Z"
+            }
+        }
+    }
+]

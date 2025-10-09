@@ -204,7 +204,7 @@ func (p *Publisher) PublishOrderExecuted(ctx context.Context, order *models.Orde
 			"slippage":         executionResult.MarketPrice.Slippage.String(),
 			"total_fee":        executionResult.FeeCalculation.TotalFee.String(),
 			"fee_type":         executionResult.FeeCalculation.FeeType,
-			"execution_steps":  len(executionResult.Steps),
+			"execution_steps":  len(executionResult.ProcessingSteps),
 			"success":          executionResult.Success,
 		},
 	}

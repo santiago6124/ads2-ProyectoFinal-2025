@@ -24,6 +24,9 @@ type ValidationResult struct {
 	IsActive     bool   `json:"is_active"`
 	Role         string `json:"role"`
 	Validated    bool   `json:"validated"`
+	IsValid      bool   `json:"is_valid"`
+	Message      string `json:"message"`
+	UserData     interface{} `json:"user_data"`
 	ErrorMessage string `json:"error_message,omitempty"`
 }
 
@@ -31,6 +34,9 @@ type BalanceResult struct {
 	Available     decimal.Decimal `json:"available"`
 	Locked        decimal.Decimal `json:"locked"`
 	Required      decimal.Decimal `json:"required"`
+	Total         decimal.Decimal `json:"total"`
+	Currency      string          `json:"currency"`
+	Message       string          `json:"message"`
 	HasSufficient bool            `json:"has_sufficient"`
 	ErrorMessage  string          `json:"error_message,omitempty"`
 }
@@ -38,11 +44,20 @@ type BalanceResult struct {
 type PriceResult struct {
 	Symbol         string          `json:"symbol"`
 	MarketPrice    decimal.Decimal `json:"market_price"`
+	BidPrice       decimal.Decimal `json:"bid_price"`
+	AskPrice       decimal.Decimal `json:"ask_price"`
 	ExecutionPrice decimal.Decimal `json:"execution_price"`
+	Volume24h      string          `json:"volume_24h"`
+	Change24h      string          `json:"change_24h"`
+	ChangePercent  string          `json:"change_percent"`
+	High24h        decimal.Decimal `json:"high_24h"`
+	Low24h         decimal.Decimal `json:"low_24h"`
+	Source         string          `json:"source"`
+	Confidence     string          `json:"confidence"`
+	LastUpdated    string          `json:"last_updated"`
 	Slippage       decimal.Decimal `json:"slippage"`
 	SlippagePerc   decimal.Decimal `json:"slippage_percentage"`
 	Timestamp      time.Time       `json:"timestamp"`
-	Source         string          `json:"source"`
 }
 
 type FeeResult struct {
@@ -64,14 +79,19 @@ type ProcessingStep struct {
 }
 
 type MarketConditions struct {
-	Symbol          string          `json:"symbol"`
-	CurrentPrice    decimal.Decimal `json:"current_price"`
-	Volume24h       decimal.Decimal `json:"volume_24h"`
-	PriceChange24h  decimal.Decimal `json:"price_change_24h"`
-	MarketCap       decimal.Decimal `json:"market_cap"`
-	Liquidity       string          `json:"liquidity"` // "high", "medium", "low"
-	Volatility      string          `json:"volatility"` // "high", "medium", "low"
-	LastUpdated     time.Time       `json:"last_updated"`
+	Symbol              string          `json:"symbol"`
+	CurrentPrice        decimal.Decimal `json:"current_price"`
+	Volume24h           decimal.Decimal `json:"volume_24h"`
+	PriceChange24h      decimal.Decimal `json:"price_change_24h"`
+	MarketCap           decimal.Decimal `json:"market_cap"`
+	Liquidity           string          `json:"liquidity"` // "high", "medium", "low"
+	Volatility          string          `json:"volatility"` // "high", "medium", "low"
+	Spread              decimal.Decimal `json:"spread"`
+	SpreadPercent       decimal.Decimal `json:"spread_percent"`
+	TradingVolume       decimal.Decimal `json:"trading_volume"`
+	OrderBookDepth      decimal.Decimal `json:"order_book_depth"`
+	CirculatingSupply   decimal.Decimal `json:"circulating_supply"`
+	LastUpdated         time.Time       `json:"last_updated"`
 }
 
 type ExecutionContext struct {

@@ -1,0 +1,27 @@
+[
+    {
+        "httpRequest": {
+            "path": "/health"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "status": "ok"
+            }
+        }
+    },
+    {
+        "httpRequest": {
+            "path": "/api/v1/wallets/.*/balance",
+            "method": "GET"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "available": 1000.0,
+                "locked": 0.0,
+                "total": 1000.0
+            }
+        }
+    }
+]

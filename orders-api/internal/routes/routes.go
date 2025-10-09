@@ -143,7 +143,7 @@ func (r *Router) setupAPIRoutes(v1 *gin.RouterGroup) {
 	orders := v1.Group("/orders")
 	{
 		orders.POST("", r.orderHandler.CreateOrder)
-		orders.GET("", r.orderHandler.GetOrders)
+		orders.GET("", r.orderHandler.ListUserOrders)
 		orders.GET("/:id", r.orderHandler.GetOrder)
 		orders.PUT("/:id", r.orderHandler.UpdateOrder)
 		orders.DELETE("/:id", r.orderHandler.CancelOrder)
@@ -156,7 +156,7 @@ func (r *Router) setupAPIRoutes(v1 *gin.RouterGroup) {
 	{
 		userOrders := users.Group("/orders")
 		{
-			userOrders.GET("", r.orderHandler.GetOrders)
+			userOrders.GET("", r.orderHandler.ListUserOrders)
 			userOrders.POST("", r.orderHandler.CreateOrder)
 		}
 	}
@@ -167,7 +167,7 @@ func (r *Router) setupAPIRoutes(v1 *gin.RouterGroup) {
 	{
 		adminOrders := admin.Group("/orders")
 		{
-			adminOrders.GET("", r.orderHandler.GetOrders)
+			adminOrders.GET("", r.orderHandler.ListUserOrders)
 			adminOrders.GET("/:id", r.orderHandler.GetOrder)
 			adminOrders.PUT("/:id", r.orderHandler.UpdateOrder)
 			adminOrders.DELETE("/:id", r.orderHandler.CancelOrder)

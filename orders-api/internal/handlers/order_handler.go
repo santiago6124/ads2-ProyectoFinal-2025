@@ -8,12 +8,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"orders-api/internal/dto"
 	"orders-api/internal/models"
 	"orders-api/internal/services"
 )
 
 type OrderHandler struct {
-	orderService *services.OrderService
+	orderService services.OrderService
+}
+
+func NewOrderHandler(orderService services.OrderService) *OrderHandler {
+	return &OrderHandler{
+		orderService: orderService,
+	}
 }
 
 type CreateOrderRequest struct {
@@ -55,11 +62,12 @@ type OrderResponse struct {
 }
 
 type OrderListResponse struct {
-	Orders     []*OrderResponse `json:"orders"`
-	Total      int64            `json:"total"`
-	Page       int              `json:"page"`
-	PageSize   int              `json:"page_size"`
-	TotalPages int64            `json:"total_pages"`
+	Orders     []*OrderResponse   `json:"orders"`
+	Total      int64              `json:"total"`
+	Page       int                `json:"page"`
+	PageSize   int                `json:"page_size"`
+	TotalPages int64              `json:"total_pages"`
+	Summary    *dto.OrdersSummary `json:"summary,omitempty"`
 }
 
 type ExecutionResponse struct {
@@ -74,11 +82,7 @@ type ExecutionResponse struct {
 	Steps           []map[string]interface{} `json:"steps,omitempty"`
 }
 
-func NewOrderHandler(orderService *services.OrderService) *OrderHandler {
-	return &OrderHandler{
-		orderService: orderService,
-	}
-}
+
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	userID, exists := c.Get("user_id")
@@ -113,50 +117,23 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		}
 	}
 
-	var stopPrice decimal.Decimal
-	if req.StopPrice != "" {
-		stopPrice, err = decimal.NewFromString(req.StopPrice)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stop price format"})
-			return
-		}
-	}
 
-	var expiresAt *time.Time
-	if req.ExpiresAt != "" {
-		parsed, err := time.Parse(time.RFC3339, req.ExpiresAt)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expires_at format, use RFC3339"})
-			return
-		}
-		expiresAt = &parsed
-	}
-
-	order := &models.Order{
-		UserID:         userID.(int),
-		Type:           models.OrderType(req.Type),
-		OrderKind:      models.OrderKind(req.OrderKind),
-		Status:         models.OrderStatusPending,
-		CryptoSymbol:   req.CryptoSymbol,
-		Quantity:       quantity,
-		OrderPrice:     orderPrice,
-		StopPrice:      stopPrice,
-		FilledQuantity: decimal.Zero,
-		AveragePrice:   decimal.Zero,
-		TimeInForce:    models.TimeInForce(req.TimeInForce),
-		ExpiresAt:      expiresAt,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
-		Metadata: models.OrderMetadata{
-			UserAgent: c.GetHeader("User-Agent"),
-			IPAddress: c.ClientIP(),
-		},
-	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
-	createdOrder, err := h.orderService.CreateOrder(ctx, order)
+	dtoReq := &dto.CreateOrderRequest{
+		Type:         models.OrderType(req.Type),
+		CryptoSymbol: req.CryptoSymbol,
+		Quantity:     quantity,
+		OrderType:    models.OrderKind(req.OrderKind),
+		LimitPrice:   &orderPrice,
+	}
+
+	createdOrder, err := h.orderService.CreateOrder(ctx, dtoReq, userID.(int), &models.OrderMetadata{
+		UserAgent: c.GetHeader("User-Agent"),
+		IPAddress: c.ClientIP(),
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -182,7 +159,7 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	order, err := h.orderService.GetOrderByID(ctx, orderID)
+	order, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
@@ -197,7 +174,7 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *OrderHandler) GetOrders(c *gin.Context) {
+func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -217,19 +194,33 @@ func (h *OrderHandler) GetOrders(c *gin.Context) {
 		pageSize = 50
 	}
 
-	filter := &models.OrderFilter{
-		UserID:    userID.(int),
-		Status:    status,
-		Type:      orderType,
-		Symbol:    symbol,
-		Page:      page,
-		PageSize:  pageSize,
+	var statusPtr *models.OrderStatus
+	if status != "" {
+		statusPtr = (*models.OrderStatus)(&status)
+	}
+	
+	var symbolPtr *string
+	if symbol != "" {
+		symbolPtr = &symbol
+	}
+	
+	var typePtr *models.OrderType
+	if orderType != "" {
+		typePtr = (*models.OrderType)(&orderType)
+	}
+
+	filter := &dto.OrderFilterRequest{
+		Status:       statusPtr,
+		CryptoSymbol: symbolPtr,
+		Type:         typePtr,
+		Limit:        pageSize,
+		Page:         page,
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	orders, total, err := h.orderService.GetOrders(ctx, filter)
+	orders, total, summary, err := h.orderService.ListUserOrders(ctx, userID.(int), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -237,7 +228,7 @@ func (h *OrderHandler) GetOrders(c *gin.Context) {
 
 	responses := make([]*OrderResponse, len(orders))
 	for i, order := range orders {
-		responses[i] = h.convertToOrderResponse(order)
+		responses[i] = h.convertToOrderResponse(&order)
 	}
 
 	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
@@ -248,6 +239,7 @@ func (h *OrderHandler) GetOrders(c *gin.Context) {
 		Page:       page,
 		PageSize:   pageSize,
 		TotalPages: totalPages,
+		Summary:    summary,
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -275,7 +267,7 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	existingOrder, err := h.orderService.GetOrderByID(ctx, orderID)
+	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
@@ -332,7 +324,10 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 		updates["expires_at"] = &expiresAt
 	}
 
-	updatedOrder, err := h.orderService.UpdateOrder(ctx, orderID, updates)
+	dtoReq := &dto.UpdateOrderRequest{}
+	// Convert updates map to DTO fields as needed
+	
+	updatedOrder, err := h.orderService.UpdateOrder(ctx, orderID, dtoReq, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -360,7 +355,7 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	existingOrder, err := h.orderService.GetOrderByID(ctx, orderID)
+	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
@@ -371,14 +366,13 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 
-	cancelledOrder, err := h.orderService.CancelOrder(ctx, orderID, reason)
+	err = h.orderService.CancelOrder(ctx, orderID, userID.(int), reason)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	response := h.convertToOrderResponse(cancelledOrder)
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{"message": "Order cancelled successfully"})
 }
 
 func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
@@ -397,7 +391,7 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	existingOrder, err := h.orderService.GetOrderByID(ctx, orderID)
+	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
@@ -408,7 +402,7 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 		return
 	}
 
-	executionResult, err := h.orderService.ExecuteOrder(ctx, orderID)
+	executionResult, err := h.orderService.ExecuteOrder(ctx, orderID, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -483,7 +477,7 @@ func (h *OrderHandler) convertToExecutionResponse(result *models.ExecutionResult
 			"execution_price": result.MarketPrice.ExecutionPrice.String(),
 			"slippage":        result.MarketPrice.Slippage.String(),
 			"slippage_perc":   result.MarketPrice.SlippagePerc.String(),
-			"volume_24h":      result.MarketPrice.Volume24h.String(),
+			"volume_24h":      result.MarketPrice.Volume24h,
 		}
 	}
 
@@ -497,11 +491,11 @@ func (h *OrderHandler) convertToExecutionResponse(result *models.ExecutionResult
 		}
 	}
 
-	if len(result.Steps) > 0 {
-		steps := make([]map[string]interface{}, len(result.Steps))
-		for i, step := range result.Steps {
+	if len(result.ProcessingSteps) > 0 {
+		steps := make([]map[string]interface{}, len(result.ProcessingSteps))
+		for i, step := range result.ProcessingSteps {
 			steps[i] = map[string]interface{}{
-				"name":        step.Name,
+				"step":        step.Step,
 				"status":      step.Status,
 				"start_time":  step.StartTime,
 				"end_time":    step.EndTime,

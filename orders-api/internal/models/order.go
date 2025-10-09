@@ -30,6 +30,32 @@ const (
 	OrderKindLimit  OrderKind = "limit"
 )
 
+type TimeInForce string
+
+const (
+	TimeInForceGTC TimeInForce = "GTC" // Good Till Cancelled
+	TimeInForceGTD TimeInForce = "GTD" // Good Till Date
+	TimeInForceIOC TimeInForce = "IOC" // Immediate Or Cancel
+	TimeInForceFOK TimeInForce = "FOK" // Fill Or Kill
+)
+
+type OrderFilter struct {
+	Status       []OrderStatus `json:"status,omitempty"`
+	CryptoSymbol string        `json:"crypto_symbol,omitempty"`
+	OrderType    []OrderType   `json:"order_type,omitempty"`
+	StartDate    *time.Time    `json:"start_date,omitempty"`
+	EndDate      *time.Time    `json:"end_date,omitempty"`
+	Limit        int           `json:"limit,omitempty"`
+	Offset       int           `json:"offset,omitempty"`
+}
+
+type CryptoInfo struct {
+	Symbol   string `json:"symbol"`
+	IsActive bool   `json:"is_active"`
+	Name     string `json:"name"`
+}
+
+
 type Order struct {
 	ID               primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	OrderNumber      string            `bson:"order_number" json:"order_number"`
@@ -51,6 +77,11 @@ type Order struct {
 	UpdatedAt        time.Time         `bson:"updated_at" json:"updated_at"`
 	CancelledAt      *time.Time        `bson:"cancelled_at,omitempty" json:"cancelled_at,omitempty"`
 	ExecutionDetails *ExecutionDetails `bson:"execution_details,omitempty" json:"execution_details,omitempty"`
+	StopPrice        *decimal.Decimal  `bson:"stop_price,omitempty" json:"stop_price,omitempty"`
+	FilledQuantity   decimal.Decimal   `bson:"filled_quantity" json:"filled_quantity"`
+	AveragePrice     *decimal.Decimal  `bson:"average_price,omitempty" json:"average_price,omitempty"`
+	TimeInForce      TimeInForce       `bson:"time_in_force" json:"time_in_force"`
+	ExpiresAt        *time.Time        `bson:"expires_at,omitempty" json:"expires_at,omitempty"`
 	Validation       *OrderValidation  `bson:"validation,omitempty" json:"validation,omitempty"`
 	Metadata         *OrderMetadata    `bson:"metadata,omitempty" json:"metadata,omitempty"`
 	Audit            *OrderAudit       `bson:"audit,omitempty" json:"audit,omitempty"`

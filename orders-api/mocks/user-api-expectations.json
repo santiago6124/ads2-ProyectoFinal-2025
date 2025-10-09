@@ -1,0 +1,27 @@
+[
+    {
+        "httpRequest": {
+            "path": "/health"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "status": "ok"
+            }
+        }
+    },
+    {
+        "httpRequest": {
+            "path": "/api/v1/users/.*",
+            "method": "GET"
+        },
+        "httpResponse": {
+            "statusCode": 200,
+            "body": {
+                "id": 1,
+                "username": "testuser",
+                "email": "test@example.com"
+            }
+        }
+    }
+]

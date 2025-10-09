@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 
 	"orders-api/internal/clients"
@@ -18,9 +19,11 @@ import (
 	"orders-api/internal/handlers"
 	"orders-api/internal/messaging"
 	"orders-api/internal/middleware"
-	"orders-api/internal/repository"
+	"orders-api/internal/models"
+	"orders-api/internal/repositories"
 	"orders-api/internal/routes"
 	"orders-api/internal/services"
+	"orders-api/pkg/database"
 )
 
 func main() {
@@ -45,14 +48,16 @@ func main() {
 
 	// Initialize database repository
 	logger.Info("Connecting to MongoDB...")
-	orderRepo, err := repository.NewOrderRepository(cfg.ToRepositoryConfig())
+	db, err := database.NewConnection()
 	if err != nil {
-		logger.Fatalf("Failed to create order repository: %v", err)
+		logger.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer orderRepo.Close()
+	defer db.Close()
+
+	orderRepo := repositories.NewOrderRepository(db)
 
 	// Test database connection
-	if err := orderRepo.Ping(ctx); err != nil {
+	if err := db.Client.Ping(ctx, nil); err != nil {
 		logger.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 	logger.Info("Successfully connected to MongoDB")
@@ -129,11 +134,20 @@ func main() {
 
 	// Initialize business services
 	logger.Info("Initializing business services...")
+	
+	// Create market service (mock implementation)
+	marketService := &mockMarketService{}
+	
+	// Create event publisher wrapper
+	eventPublisher := &eventPublisherWrapper{publisher: publisher}
+	
 	orderService := services.NewOrderService(
 		orderRepo,
-		feeCalculator,
+		orchestrator,
 		executionService,
-		publisher,
+		feeCalculator,
+		marketService,
+		eventPublisher,
 	)
 
 	// Initialize middleware
@@ -309,6 +323,88 @@ func setupMessageHandlers(consumer *messaging.Consumer, logger *logrus.Logger) {
 	})
 
 	logger.Info("Message handlers registered successfully")
+}
+
+// Mock implementations for services
+type mockMarketService struct{}
+
+func (m *mockMarketService) GetMarketPrice(ctx context.Context, symbol string) (*models.PriceResult, error) {
+	return &models.PriceResult{
+		Symbol:         symbol,
+		MarketPrice:    decimal.NewFromFloat(50000.0),
+		BidPrice:       decimal.NewFromFloat(49995.0),
+		AskPrice:       decimal.NewFromFloat(50005.0),
+		ExecutionPrice: decimal.NewFromFloat(50000.0),
+		Volume24h:      "1000000",
+		Change24h:      "1000",
+		ChangePercent:  "2.0",
+		High24h:        decimal.NewFromFloat(51000.0),
+		Low24h:         decimal.NewFromFloat(49000.0),
+		Source:         "mock",
+		Confidence:     "high",
+		LastUpdated:    time.Now().Format(time.RFC3339),
+		Slippage:       decimal.Zero,
+		SlippagePerc:   decimal.Zero,
+		Timestamp:      time.Now(),
+	}, nil
+}
+
+func (m *mockMarketService) GetMarketConditions(ctx context.Context, symbol string) (*models.MarketConditions, error) {
+	return &models.MarketConditions{
+		Symbol:              symbol,
+		CurrentPrice:        decimal.NewFromFloat(50000.0),
+		Volume24h:           decimal.NewFromFloat(1000000.0),
+		PriceChange24h:      decimal.NewFromFloat(1000.0),
+		MarketCap:           decimal.NewFromFloat(1000000000.0),
+		Liquidity:           "high",
+		Volatility:          "medium",
+		Spread:              decimal.NewFromFloat(10.0),
+		SpreadPercent:       decimal.NewFromFloat(0.02),
+		TradingVolume:       decimal.NewFromFloat(1000000.0),
+		OrderBookDepth:      decimal.NewFromFloat(10000.0),
+		CirculatingSupply:   decimal.NewFromFloat(21000000.0),
+		LastUpdated:         time.Now(),
+	}, nil
+}
+
+func (m *mockMarketService) ValidateSymbol(ctx context.Context, symbol string) (*services.CryptoInfo, error) {
+	return &services.CryptoInfo{
+		Symbol:      symbol,
+		IsActive:    true,
+		Name:        "Mock " + symbol,
+		CurrentPrice: decimal.NewFromFloat(50000.0),
+		MinQuantity: decimal.NewFromFloat(0.001),
+		MaxQuantity: decimal.NewFromFloat(100.0),
+	}, nil
+}
+
+func (m *mockMarketService) GetCurrentPrice(ctx context.Context, symbol string) (decimal.Decimal, error) {
+	return decimal.NewFromFloat(50000.0), nil
+}
+
+func (m *mockMarketService) IsMarketOpen(ctx context.Context) bool {
+	return true
+}
+
+// Event publisher wrapper to match the interface
+type eventPublisherWrapper struct {
+	publisher *messaging.Publisher
+}
+
+func (e *eventPublisherWrapper) PublishOrderExecuted(ctx context.Context, order *models.Order) error {
+	return e.publisher.PublishOrderExecuted(ctx, order, nil)
+}
+
+func (e *eventPublisherWrapper) PublishOrderCancelled(ctx context.Context, order *models.Order, reason string) error {
+	return e.publisher.PublishOrderCancelled(ctx, order, reason)
+}
+
+func (e *eventPublisherWrapper) PublishOrderFailed(ctx context.Context, order *models.Order, reason string) error {
+	return e.publisher.PublishOrderFailed(ctx, order, reason)
+}
+
+func (e *eventPublisherWrapper) PublishOrderCreated(ctx context.Context, order *models.Order) error {
+	return e.publisher.PublishOrderCreated(ctx, order)
 }
 
 // Type alias to avoid import cycle

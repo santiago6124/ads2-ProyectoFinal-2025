@@ -63,24 +63,6 @@ type EventPublisher interface {
 	PublishOrderFailed(ctx context.Context, order *models.Order, reason string) error
 }
 
-func NewOrderService(
-	orderRepo repositories.OrderRepository,
-	orchestrator *concurrent.OrderOrchestrator,
-	executor *concurrent.ExecutionService,
-	feeCalculator FeeCalculator,
-	marketService MarketService,
-	publisher EventPublisher,
-) OrderService {
-	return &orderService{
-		orderRepo:     orderRepo,
-		orchestrator:  orchestrator,
-		executor:      executor,
-		feeCalculator: feeCalculator,
-		marketService: marketService,
-		publisher:     publisher,
-	}
-}
-
 func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int, metadata *models.OrderMetadata) (*models.Order, error) {
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
@@ -485,4 +467,22 @@ func (s *orderService) GetOrdersSummary(ctx context.Context, userID int) (*dto.O
 	}
 
 	return summary, nil
+}
+
+func NewOrderService(
+	orderRepo repositories.OrderRepository,
+	orchestrator *concurrent.OrderOrchestrator,
+	executor *concurrent.ExecutionService,
+	feeCalculator FeeCalculator,
+	marketService MarketService,
+	publisher EventPublisher,
+) OrderService {
+	return &orderService{
+		orderRepo:     orderRepo,
+		orchestrator:  orchestrator,
+		executor:      executor,
+		feeCalculator: feeCalculator,
+		marketService: marketService,
+		publisher:     publisher,
+	}
 }

@@ -1,0 +1,19 @@
+{
+    "exchanges": [
+        {
+            "name": "orders",
+            "type": "topic",
+            "durable": true
+        }
+    ],
+    "queues": [
+        {
+            "name": "orders.created",
+            "durable": true
+        },
+        {
+            "name": "orders.updated",
+            "durable": true
+        }
+    ]
+}

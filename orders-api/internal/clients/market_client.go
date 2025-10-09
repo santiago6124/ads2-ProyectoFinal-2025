@@ -155,13 +155,13 @@ func (c *MarketClient) GetCurrentPrice(ctx context.Context, symbol string) (*mod
 		BidPrice:       priceResp.Price.BidPrice,
 		AskPrice:       priceResp.Price.AskPrice,
 		ExecutionPrice: priceResp.Price.Price, // Will be adjusted with slippage
-		Volume24h:      priceResp.Price.Volume24h,
-		Change24h:      priceResp.Price.Change24h,
-		ChangePercent:  priceResp.Price.ChangePercent,
+		Volume24h:      priceResp.Price.Volume24h.String(),
+		Change24h:      priceResp.Price.Change24h.String(),
+		ChangePercent:  priceResp.Price.ChangePercent.String(),
 		High24h:        priceResp.Price.High24h,
 		Low24h:         priceResp.Price.Low24h,
 		Source:         priceResp.Price.Source,
-		Confidence:     priceResp.Price.Confidence,
+		Confidence:     fmt.Sprintf("%.2f", priceResp.Price.Confidence),
 		LastUpdated:    priceResp.Price.LastUpdated,
 		Slippage:       decimal.Zero, // Will be calculated separately
 		SlippagePerc:   decimal.Zero, // Will be calculated separately
@@ -202,18 +202,19 @@ func (c *MarketClient) GetMarketConditions(ctx context.Context, symbol string) (
 
 	conditions := conditionsResp.Conditions
 	result := &models.MarketConditions{
-		Symbol:            conditions.Symbol,
-		Volatility:        conditions.Volatility,
-		Liquidity:         conditions.Liquidity,
-		Spread:            conditions.Spread,
-		SpreadPercent:     conditions.SpreadPercent,
-		TradingVolume:     conditions.TradingVolume,
-		OrderBookDepth:    conditions.OrderBookDepth,
-		MarketCap:         conditions.MarketCap,
-		CirculatingSupply: conditions.CirculatingSupply,
-		MarketSentiment:   conditions.MarketSentiment,
-		TradingStatus:     conditions.TradingStatus,
-		LastUpdated:       conditions.LastUpdated,
+		Symbol:              conditions.Symbol,
+		CurrentPrice:        decimal.Zero, // Default value
+		Volume24h:           decimal.Zero, // Default value
+		PriceChange24h:      decimal.Zero, // Default value
+		MarketCap:           conditions.MarketCap,
+		Volatility:          conditions.Volatility.String(),
+		Liquidity:           conditions.Liquidity.String(),
+		Spread:              conditions.Spread,
+		SpreadPercent:       conditions.SpreadPercent,
+		TradingVolume:       conditions.TradingVolume,
+		OrderBookDepth:      conditions.OrderBookDepth,
+		CirculatingSupply:   conditions.CirculatingSupply,
+		LastUpdated:         time.Now(), // Convert string to time.Time
 	}
 
 	return result, nil
