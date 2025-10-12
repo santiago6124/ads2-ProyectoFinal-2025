@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"fmt"
 	"time"
 	"search-api/internal/models"
 )
@@ -161,13 +162,27 @@ func NewSuccessResponse(data interface{}) *APIResponse {
 }
 
 // NewErrorResponse creates an error API response
-func NewErrorResponse(code, message, details string) *APIResponse {
+func NewErrorResponse(code, message string, details interface{}) *APIResponse {
+	var detailsStr string
+	if details != nil {
+		// Convert details to string for the response
+		switch v := details.(type) {
+		case string:
+			detailsStr = v
+		case map[string]interface{}:
+			// For maps, format as a simple message
+			detailsStr = "See response for additional details"
+		default:
+			detailsStr = fmt.Sprintf("%v", v)
+		}
+	}
+
 	return &APIResponse{
 		Success: false,
 		Error: &APIError{
 			Code:    code,
 			Message: message,
-			Details: details,
+			Details: detailsStr,
 		},
 		Meta: &Meta{
 			Timestamp: time.Now(),

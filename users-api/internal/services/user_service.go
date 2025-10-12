@@ -11,14 +11,14 @@ import (
 
 type UserService interface {
 	CreateUser(req *models.RegisterRequest) (*models.User, error)
-	GetUserByID(id uint) (*models.User, error)
+	GetUserByID(id int32) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
-	UpdateUser(id uint, req *models.UpdateUserRequest) (*models.User, error)
-	ChangePassword(id uint, req *models.ChangePasswordRequest) error
-	DeactivateUser(id uint) error
+	UpdateUser(id int32, req *models.UpdateUserRequest) (*models.User, error)
+	ChangePassword(id int32, req *models.ChangePasswordRequest) error
+	DeactivateUser(id int32) error
 	ListUsers(page, limit int, search, role string, isActive *bool) ([]models.User, int64, error)
-	UpgradeUserToAdmin(id uint) (*models.User, error)
-	VerifyUser(id uint) (*models.UserVerificationResponse, error)
+	UpgradeUserToAdmin(id int32) (*models.User, error)
+	VerifyUser(id int32) (*models.UserVerificationResponse, error)
 }
 
 type userService struct {
@@ -88,7 +88,7 @@ func (s *userService) CreateUser(req *models.RegisterRequest) (*models.User, err
 	return user, nil
 }
 
-func (s *userService) GetUserByID(id uint) (*models.User, error) {
+func (s *userService) GetUserByID(id int32) (*models.User, error) {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -111,7 +111,7 @@ func (s *userService) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *userService) UpdateUser(id uint, req *models.UpdateUserRequest) (*models.User, error) {
+func (s *userService) UpdateUser(id int32, req *models.UpdateUserRequest) (*models.User, error) {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -150,7 +150,7 @@ func (s *userService) UpdateUser(id uint, req *models.UpdateUserRequest) (*model
 	return user, nil
 }
 
-func (s *userService) ChangePassword(id uint, req *models.ChangePasswordRequest) error {
+func (s *userService) ChangePassword(id int32, req *models.ChangePasswordRequest) error {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
@@ -182,7 +182,7 @@ func (s *userService) ChangePassword(id uint, req *models.ChangePasswordRequest)
 	return nil
 }
 
-func (s *userService) DeactivateUser(id uint) error {
+func (s *userService) DeactivateUser(id int32) error {
 	exists, err := s.userRepo.Exists(id)
 	if err != nil {
 		return fmt.Errorf("failed to check user existence: %w", err)
@@ -218,7 +218,7 @@ func (s *userService) ListUsers(page, limit int, search, role string, isActive *
 	return users, total, nil
 }
 
-func (s *userService) UpgradeUserToAdmin(id uint) (*models.User, error) {
+func (s *userService) UpgradeUserToAdmin(id int32) (*models.User, error) {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -241,7 +241,7 @@ func (s *userService) UpgradeUserToAdmin(id uint) (*models.User, error) {
 	return user, nil
 }
 
-func (s *userService) VerifyUser(id uint) (*models.UserVerificationResponse, error) {
+func (s *userService) VerifyUser(id int32) (*models.UserVerificationResponse, error) {
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
 		return &models.UserVerificationResponse{

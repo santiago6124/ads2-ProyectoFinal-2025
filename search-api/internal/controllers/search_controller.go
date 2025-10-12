@@ -174,7 +174,7 @@ func (sc *SearchController) GetTrending(c *gin.Context) {
 	sc.logger.WithFields(logrus.Fields{
 		"period":  period,
 		"limit":   limit,
-		"results": len(response.Results),
+		"results": len(response.Trending),
 		"time":    time.Since(startTime),
 	}).Info("Trending search completed")
 
@@ -328,8 +328,6 @@ func (sc *SearchController) GetFilters(c *gin.Context) {
 
 	sc.logger.WithFields(logrus.Fields{
 		"categories": len(filters.Categories),
-		"platforms":  len(filters.Platforms),
-		"tags":       len(filters.Tags),
 		"time":       time.Since(startTime),
 	}).Debug("Filters lookup completed")
 

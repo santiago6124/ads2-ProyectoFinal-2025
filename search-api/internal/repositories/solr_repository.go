@@ -2,9 +2,9 @@ package repositories
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"search-api/internal/dto"
@@ -60,8 +60,6 @@ func (r *SolrRepository) Search(ctx context.Context, req *dto.SearchRequest) (*S
 	if err != nil {
 		return nil, fmt.Errorf("search query failed: %w", err)
 	}
-
-	queryTime := time.Duration(response.ResponseHeader.QTime) * time.Millisecond
 
 	// Convert documents to search results
 	results := make([]models.SearchResult, 0, len(response.Response.Docs))
@@ -475,6 +473,3 @@ func calculateMentionsCount(trendingScore float64) int64 {
 	// Simple calculation based on trending score
 	return int64(trendingScore * 100)
 }
-
-// Import missing package
-import "strings"

@@ -16,7 +16,7 @@ type TokenService interface {
 	ValidateAccessToken(tokenString string) (*models.CustomClaims, error)
 	RefreshAccessToken(refreshToken string) (*models.TokenPair, error)
 	RevokeRefreshToken(token string) error
-	RevokeAllUserTokens(userID uint) error
+	RevokeAllUserTokens(userID int32) error
 }
 
 type tokenService struct {
@@ -136,6 +136,6 @@ func (s *tokenService) RevokeRefreshToken(token string) error {
 	return s.refreshTokenRepository.RevokeByToken(token)
 }
 
-func (s *tokenService) RevokeAllUserTokens(userID uint) error {
+func (s *tokenService) RevokeAllUserTokens(userID int32) error {
 	return s.refreshTokenRepository.RevokeByUserID(userID)
 }

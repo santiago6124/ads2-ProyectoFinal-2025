@@ -7,7 +7,7 @@ import (
 )
 
 type User struct {
-	ID             uint           `json:"id" gorm:"primaryKey;autoIncrement"`
+	ID             int32          `json:"id" gorm:"primaryKey;autoIncrement"`
 	Username       string         `json:"username" gorm:"uniqueIndex;not null;size:50"`
 	Email          string         `json:"email" gorm:"uniqueIndex;not null;size:100"`
 	PasswordHash   string         `json:"-" gorm:"not null;size:255"`
@@ -87,8 +87,8 @@ func (u *User) GetFullName() string {
 }
 
 type RefreshToken struct {
-	ID        uint      `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserID    uint      `json:"user_id" gorm:"not null;index"`
+	ID        int32     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID    int32     `json:"user_id" gorm:"not null;index"`
 	Token     string    `json:"token" gorm:"uniqueIndex;not null;size:500"`
 	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
 	CreatedAt time.Time `json:"created_at"`
@@ -105,12 +105,12 @@ func (rt *RefreshToken) IsExpired() bool {
 }
 
 type LoginAttempt struct {
-	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement"`
+	ID          int32     `json:"id" gorm:"primaryKey;autoIncrement"`
 	Email       string    `json:"email" gorm:"size:100;index"`
 	IPAddress   string    `json:"ip_address" gorm:"size:45;index"`
 	UserAgent   string    `json:"user_agent" gorm:"type:text"`
 	Success     bool      `json:"success"`
-	AttemptedAt time.Time `json:"attempted_at" gorm:"default:CURRENT_TIMESTAMP"`
+	AttemptedAt time.Time `json:"attempted_at" gorm:"autoCreateTime"`
 }
 
 func (la *LoginAttempt) TableName() string {

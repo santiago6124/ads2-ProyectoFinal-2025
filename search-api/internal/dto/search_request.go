@@ -76,6 +76,25 @@ func (r *TrendingRequest) SetDefaults() {
 	}
 }
 
+// Validate validates the trending request
+func (r *TrendingRequest) Validate() error {
+	// Validate period
+	validPeriods := map[string]bool{
+		"1h": true, "24h": true, "7d": true, "30d": true,
+	}
+
+	if r.Period != "" && !validPeriods[r.Period] {
+		return NewValidationError("invalid period: must be one of 1h, 24h, 7d, 30d")
+	}
+
+	// Validate limit
+	if r.Limit < 1 || r.Limit > 50 {
+		return NewValidationError("limit must be between 1 and 50")
+	}
+
+	return nil
+}
+
 // SetDefaults sets default values for suggestion request
 func (r *SuggestionRequest) SetDefaults() {
 	if r.Limit <= 0 {

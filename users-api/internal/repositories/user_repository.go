@@ -11,14 +11,14 @@ import (
 
 type UserRepository interface {
 	Create(user *models.User) error
-	GetByID(id uint) (*models.User, error)
+	GetByID(id int32) (*models.User, error)
 	GetByEmail(email string) (*models.User, error)
 	GetByUsername(username string) (*models.User, error)
 	Update(user *models.User) error
-	Delete(id uint) error
+	Delete(id int32) error
 	List(offset, limit int, search string, role string, isActive *bool) ([]models.User, int64, error)
-	UpdateLastLogin(id uint) error
-	Exists(id uint) (bool, error)
+	UpdateLastLogin(id int32) error
+	Exists(id int32) (bool, error)
 }
 
 type userRepository struct {
@@ -41,7 +41,7 @@ func (r *userRepository) Create(user *models.User) error {
 	return nil
 }
 
-func (r *userRepository) GetByID(id uint) (*models.User, error) {
+func (r *userRepository) GetByID(id int32) (*models.User, error) {
 	var user models.User
 	if err := r.db.First(&user, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -81,7 +81,7 @@ func (r *userRepository) Update(user *models.User) error {
 	return nil
 }
 
-func (r *userRepository) Delete(id uint) error {
+func (r *userRepository) Delete(id int32) error {
 	result := r.db.Model(&models.User{}).Where("id = ?", id).Update("is_active", false)
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete user: %w", result.Error)
@@ -121,7 +121,7 @@ func (r *userRepository) List(offset, limit int, search string, role string, isA
 	return users, total, nil
 }
 
-func (r *userRepository) UpdateLastLogin(id uint) error {
+func (r *userRepository) UpdateLastLogin(id int32) error {
 	now := time.Now()
 	result := r.db.Model(&models.User{}).Where("id = ?", id).Update("last_login", &now)
 	if result.Error != nil {
@@ -130,7 +130,7 @@ func (r *userRepository) UpdateLastLogin(id uint) error {
 	return nil
 }
 
-func (r *userRepository) Exists(id uint) (bool, error) {
+func (r *userRepository) Exists(id int32) (bool, error) {
 	var count int64
 	if err := r.db.Model(&models.User{}).Where("id = ? AND is_active = ?", id, true).Count(&count).Error; err != nil {
 		return false, fmt.Errorf("failed to check user existence: %w", err)
@@ -141,7 +141,7 @@ func (r *userRepository) Exists(id uint) (bool, error) {
 type RefreshTokenRepository interface {
 	Create(token *models.RefreshToken) error
 	GetByToken(token string) (*models.RefreshToken, error)
-	RevokeByUserID(userID uint) error
+	RevokeByUserID(userID int32) error
 	RevokeByToken(token string) error
 	DeleteExpired() error
 }
@@ -174,7 +174,7 @@ func (r *refreshTokenRepository) GetByToken(token string) (*models.RefreshToken,
 	return &refreshToken, nil
 }
 
-func (r *refreshTokenRepository) RevokeByUserID(userID uint) error {
+func (r *refreshTokenRepository) RevokeByUserID(userID int32) error {
 	if err := r.db.Model(&models.RefreshToken{}).Where("user_id = ?", userID).Update("revoked", true).Error; err != nil {
 		return fmt.Errorf("failed to revoke refresh tokens: %w", err)
 	}

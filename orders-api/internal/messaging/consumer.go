@@ -163,10 +163,27 @@ func (c *Consumer) StartConsuming(ctx context.Context, exchangeName string) erro
 func (c *Consumer) consumeWorker(ctx context.Context, queueName, routingKey string, workerID int) {
 	defer c.wg.Done()
 
-	consumerTag := fmt.Sprintf("%s-worker-%d", c.config.ConsumerTag, workerID)
+	// Create dedicated channel for this worker
+	workerChannel, err := c.connection.Channel()
+	if err != nil {
+		log.Printf("Worker %d failed to create channel: %v", workerID, err)
+		return
+	}
+	defer workerChannel.Close()
+
+	// Configure QoS for this worker's channel
+	if c.config.PrefetchCount > 0 {
+		if err := workerChannel.Qos(c.config.PrefetchCount, 0, false); err != nil {
+			log.Printf("Worker %d failed to set QoS: %v", workerID, err)
+			return
+		}
+	}
+
+	consumerTag := fmt.Sprintf("%s-worker-%d-%d", c.config.ConsumerTag, workerID, time.Now().Unix())
 	log.Printf("Worker %d started consuming from queue %s", workerID, queueName)
 
-	deliveries, err := c.channel.Consume(
+	// Use the worker's dedicated channel instead of shared c.channel
+	deliveries, err := workerChannel.Consume(
 		queueName,
 		consumerTag,
 		c.config.AutoAck,

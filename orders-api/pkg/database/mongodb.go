@@ -18,9 +18,9 @@ type Database struct {
 }
 
 func NewConnection() (*Database, error) {
-	mongoURI := getEnv("MONGO_URI", "mongodb://localhost:27017")
-	databaseName := getEnv("MONGO_DATABASE", "orders_db")
-	timeoutStr := getEnv("MONGO_TIMEOUT", "10s")
+	mongoURI := getEnv("MONGODB_URI", "mongodb://localhost:27017")
+	databaseName := getEnv("MONGODB_DATABASE", "orders_db")
+	timeoutStr := getEnv("MONGODB_CONNECTION_TIMEOUT", "10s")
 
 	timeout, err := time.ParseDuration(timeoutStr)
 	if err != nil {

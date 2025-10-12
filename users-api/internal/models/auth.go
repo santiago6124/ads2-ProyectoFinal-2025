@@ -19,7 +19,7 @@ type TokenPair struct {
 }
 
 type CustomClaims struct {
-	UserID   uint     `json:"user_id"`
+	UserID   int32    `json:"user_id"`
 	Username string   `json:"username"`
 	Email    string   `json:"email"`
 	Role     UserRole `json:"role"`
@@ -72,7 +72,7 @@ type UpdateUserRequest struct {
 
 type UserVerificationResponse struct {
 	Exists   bool     `json:"exists"`
-	UserID   uint     `json:"user_id"`
+	UserID   int32    `json:"user_id"`
 	Role     UserRole `json:"role"`
 	IsActive bool     `json:"is_active"`
 }

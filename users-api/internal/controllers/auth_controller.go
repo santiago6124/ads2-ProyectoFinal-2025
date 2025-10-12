@@ -182,7 +182,7 @@ func (ac *AuthController) LogoutAll(c *gin.Context) {
 		return
 	}
 
-	if err := ac.authService.LogoutAll(userID.(uint)); err != nil {
+	if err := ac.authService.LogoutAll(userID.(int32)); err != nil {
 		utils.SendInternalError(c, err)
 		return
 	}

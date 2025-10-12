@@ -39,11 +39,8 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/portfolio-api .
 
-# Copy configuration files
-COPY --from=builder /app/configs ./configs
-
 # Create necessary directories
-RUN mkdir -p /app/logs && \
+RUN mkdir -p /app/logs /app/configs && \
     chown -R appuser:appgroup /app
 
 # Switch to non-root user

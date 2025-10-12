@@ -1,0 +1,152 @@
+# ============================================================================
+# CryptoSim - Git Ignore
+# ============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Go specific
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Docker volumes (local data)
+data/
+volumes/
+
+# Backup files
+backup-*.sql
+backup-*/
+*.backup
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Database files (local development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Monitoring data (local)
+prometheus-data/
+grafana-data/
+
+# Node modules (if frontend is added)
+node_modules/
+.npm
+
+# Build artifacts
+build/
+out/
+
+# Compiled object files
+*.o
+*.a
+
+# Debug files
+debug
+
+# Air live reload
+tmp/
+
+# Configuration overrides (keep examples, ignore real configs)
+config/local.yml
+config/production.yml
+!config/config.example.yml
+
+# Documentation build
+docs/_build/
+site/
+
+# Python (if scripts are added)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+
+# Java/Kotlin (if needed)
+*.class
+*.jar
+*.war
+
+# Terraform (if infrastructure as code)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Kubernetes (if k8s manifests with secrets)
+secrets.yml
+*-secrets.yml
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Large files
+*.iso
+*.dmg

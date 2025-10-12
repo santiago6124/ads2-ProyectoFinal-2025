@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/shopspring/decimal"
 
 	"wallet-api/internal/models"
 )

@@ -56,12 +56,12 @@ func (uc *UserController) GetUser(c *gin.Context) {
 		return
 	}
 
-	if currentUserID.(uint) != uint(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
+	if currentUserID.(int32) != int32(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
 		utils.SendForbiddenError(c, "Access denied")
 		return
 	}
 
-	user, err := uc.userService.GetUserByID(uint(id))
+	user, err := uc.userService.GetUserByID(int32(id))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "deactivated") {
 			utils.SendNotFoundError(c, "User")
@@ -111,7 +111,7 @@ func (uc *UserController) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if currentUserID.(uint) != uint(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
+	if currentUserID.(int32) != int32(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
 		utils.SendForbiddenError(c, "Access denied")
 		return
 	}
@@ -122,7 +122,7 @@ func (uc *UserController) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := uc.userService.UpdateUser(uint(id), &req)
+	user, err := uc.userService.UpdateUser(int32(id), &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "deactivated") {
 			utils.SendNotFoundError(c, "User")
@@ -166,7 +166,7 @@ func (uc *UserController) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if currentUserID.(uint) != uint(id) {
+	if currentUserID.(int32) != int32(id) {
 		utils.SendForbiddenError(c, "Access denied")
 		return
 	}
@@ -177,7 +177,7 @@ func (uc *UserController) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := uc.userService.ChangePassword(uint(id), &req); err != nil {
+	if err := uc.userService.ChangePassword(int32(id), &req); err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "deactivated") {
 			utils.SendNotFoundError(c, "User")
 			return
@@ -227,12 +227,12 @@ func (uc *UserController) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if currentUserID.(uint) != uint(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
+	if currentUserID.(int32) != int32(id) && currentUserRole.(models.UserRole) != models.RoleAdmin {
 		utils.SendForbiddenError(c, "Access denied")
 		return
 	}
 
-	if err := uc.userService.DeactivateUser(uint(id)); err != nil {
+	if err := uc.userService.DeactivateUser(int32(id)); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			utils.SendNotFoundError(c, "User")
 			return
@@ -328,7 +328,7 @@ func (uc *UserController) UpgradeUser(c *gin.Context) {
 		return
 	}
 
-	user, err := uc.userService.UpgradeUserToAdmin(uint(id))
+	user, err := uc.userService.UpgradeUserToAdmin(int32(id))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "deactivated") {
 			utils.SendNotFoundError(c, "User")
@@ -367,7 +367,7 @@ func (uc *UserController) VerifyUser(c *gin.Context) {
 		return
 	}
 
-	verification, err := uc.userService.VerifyUser(uint(id))
+	verification, err := uc.userService.VerifyUser(int32(id))
 	if err != nil {
 		utils.SendInternalError(c, err)
 		return

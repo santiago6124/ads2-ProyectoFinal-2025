@@ -65,13 +65,10 @@ func Initialize(ctx context.Context, cfg *config.Config) (*Database, error) {
 }
 
 func initializeMongoDB(ctx context.Context, cfg config.DatabaseConfig) (*mongo.Database, error) {
-	// Build connection string
-	var uri string
-	if cfg.Username != "" && cfg.Password != "" {
-		uri = fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=%s",
-			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Name, cfg.AuthSource)
-	} else {
-		uri = fmt.Sprintf("mongodb://%s:%d/%s", cfg.Host, cfg.Port, cfg.Name)
+	// Use configured URI
+	uri := cfg.URI
+	if uri == "" {
+		uri = "mongodb://localhost:27017"
 	}
 
 	// Set client options
@@ -79,10 +76,10 @@ func initializeMongoDB(ctx context.Context, cfg config.DatabaseConfig) (*mongo.D
 		ApplyURI(uri).
 		SetMaxPoolSize(uint64(cfg.MaxPoolSize)).
 		SetMinPoolSize(uint64(cfg.MinPoolSize)).
-		SetMaxConnIdleTime(cfg.MaxConnIdleTime).
+		SetMaxConnIdleTime(cfg.MaxIdleTime).
 		SetConnectTimeout(cfg.ConnectTimeout).
 		SetSocketTimeout(cfg.SocketTimeout).
-		SetServerSelectionTimeout(cfg.ServerSelectionTimeout)
+		SetServerSelectionTimeout(cfg.SelectionTimeout)
 
 	// Enable SSL if configured
 	if cfg.SSL.Enabled {
@@ -110,7 +107,12 @@ func initializeMongoDB(ctx context.Context, cfg config.DatabaseConfig) (*mongo.D
 		return nil, fmt.Errorf("failed to ping MongoDB: %w", err)
 	}
 
-	return client.Database(cfg.Name), nil
+	dbName := cfg.Database
+	if dbName == "" {
+		dbName = "cryptosim_wallet"
+	}
+
+	return client.Database(dbName), nil
 }
 
 func initializeRedis(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {

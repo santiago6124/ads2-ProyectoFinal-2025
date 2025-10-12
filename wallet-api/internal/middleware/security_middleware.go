@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -255,12 +256,14 @@ func (s *SecurityMiddleware) WebhookSignatureValidation() gin.HandlerFunc {
 
 // RequestTimeout sets timeout for requests
 func (s *SecurityMiddleware) RequestTimeout() gin.HandlerFunc {
-	return gin.TimeoutWithHandler(s.config.RequestTimeout, func(c *gin.Context) {
-		c.JSON(http.StatusRequestTimeout, gin.H{
-			"error":   "Request timeout",
-			"message": "Request took too long to process",
-		})
-	})
+	return func(c *gin.Context) {
+		// Simple timeout implementation using context
+		ctx, cancel := context.WithTimeout(c.Request.Context(), s.config.RequestTimeout)
+		defer cancel()
+
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
 }
 
 // IPWhitelist restricts access to specific IPs for sensitive endpoints

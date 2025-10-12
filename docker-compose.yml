@@ -1,0 +1,572 @@
+version: '3.8'
+
+# ============================================================================
+# CryptoSim - Unified Docker Compose
+# Levanta todos los microservicios con una red compartida
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # MICROSERVICIOS
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # Users API - Gestión de usuarios y autenticación
+  # --------------------------------------------------------------------------
+  users-api:
+    build:
+      context: ./users-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-users-api
+    ports:
+      - "8001:8001"
+    environment:
+      # Database
+      - DB_HOST=users-mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - DB_NAME=users_db
+      # JWT
+      - JWT_SECRET=${JWT_SECRET:-Holamundo-soy-untokensuperseguroajajajajaja}
+      - JWT_ACCESS_TTL=3600
+      - JWT_REFRESH_TTL=604800
+      # Server
+      - SERVER_PORT=8001
+      - SERVER_ENV=development
+      # Redis
+      - REDIS_HOST=shared-redis
+      - REDIS_PORT=6379
+      # Internal API
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-internal-secret-key}
+    depends_on:
+      users-mysql:
+        condition: service_healthy
+      shared-redis:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Orders API - Gestión de órdenes de compra/venta
+  # --------------------------------------------------------------------------
+  orders-api:
+    build:
+      context: ./orders-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-orders-api
+    ports:
+      - "8002:8080"
+    environment:
+      # Server
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - SERVER_DEBUG=false
+      - SERVER_CORS_ENABLED=true
+      # Database
+      - MONGODB_URI=mongodb://orders-mongo:27017
+      - MONGODB_DATABASE=cryptosim_orders
+      - MONGODB_COLLECTION=orders
+      - MONGODB_MAX_POOL_SIZE=100
+      - MONGODB_MIN_POOL_SIZE=5
+      # JWT
+      - JWT_SECRET_KEY=${JWT_SECRET:-super-secret-jwt-key-change-in-production}
+      - JWT_ISSUER=orders-api
+      - JWT_AUDIENCE=cryptosim
+      - JWT_TOKEN_EXPIRY=24h
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=orders
+      - RABBITMQ_QUEUE_PREFIX=orders
+      - RABBITMQ_PREFETCH_COUNT=10
+      - RABBITMQ_WORKER_COUNT=5
+      # External APIs (Service Discovery)
+      - USER_API_BASE_URL=http://users-api:8001
+      - WALLET_API_BASE_URL=http://wallet-api:8080
+      - MARKET_API_BASE_URL=http://market-data-api:8004
+      # Fees
+      - FEE_BASE_PERCENTAGE=0.001
+      - FEE_MAKER=0.0008
+      - FEE_TAKER=0.0012
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    depends_on:
+      orders-mongo:
+        condition: service_healthy
+      shared-rabbitmq:
+        condition: service_healthy
+      users-api:
+        condition: service_healthy
+      wallet-api:
+        condition: service_healthy
+      market-data-api:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    volumes:
+      - ./orders-api/logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # Search API - Búsqueda de criptomonedas con Solr
+  # --------------------------------------------------------------------------
+  search-api:
+    build:
+      context: ./search-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-search-api
+    ports:
+      - "8003:8080"
+    environment:
+      - ENVIRONMENT=development
+      - SERVER_PORT=8080
+      - SOLR_BASE_URL=http://solr:8983/solr
+      - SOLR_COLLECTION=crypto_search
+      - CACHE_MEMCACHED_HOSTS=memcached:11211
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
+      - RABBITMQ_ENABLED=true
+      - LOG_LEVEL=info
+    depends_on:
+      solr:
+        condition: service_healthy
+      memcached:
+        condition: service_started
+      shared-rabbitmq:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # Market Data API - Datos de mercado en tiempo real
+  # --------------------------------------------------------------------------
+  market-data-api:
+    build:
+      context: ./market-data-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-market-data-api
+    ports:
+      - "8004:8004"
+    environment:
+      - SERVER_PORT=8004
+      - REDIS_URL=redis://shared-redis:6379
+      - ENVIRONMENT=development
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
+    depends_on:
+      shared-redis:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Portfolio API - Gestión de portafolios
+  # --------------------------------------------------------------------------
+  portfolio-api:
+    build:
+      context: ./portfolio-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-portfolio-api
+    ports:
+      - "8005:8080"
+    environment:
+      # Server
+      - PORT=8080
+      - HOST=0.0.0.0
+      - GIN_MODE=release
+      # Database
+      - DB_URI=mongodb://portfolio-mongo:27017/portfolio_db
+      - DB_NAME=portfolio_db
+      - DB_MAX_POOL_SIZE=100
+      - DB_MIN_POOL_SIZE=10
+      # Redis
+      - REDIS_HOST=shared-redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - CACHE_PORTFOLIO_TTL=1h
+      - CACHE_PERFORMANCE_TTL=30m
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=portfolio_events
+      - RABBITMQ_QUEUE=portfolio_calculations
+      # External APIs
+      - MARKET_DATA_API_URL=http://market-data-api:8004
+      - ORDERS_API_URL=http://orders-api:8080
+      - USERS_API_URL=http://users-api:8001
+      - API_TIMEOUT=30s
+      # JWT
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - JWT_EXPIRY=24h
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      # Scheduler
+      - SCHEDULER_ENABLED=true
+      - PORTFOLIO_CALC_CRON=0 */15 * * * *
+    depends_on:
+      portfolio-mongo:
+        condition: service_healthy
+      shared-redis:
+        condition: service_healthy
+      shared-rabbitmq:
+        condition: service_healthy
+      market-data-api:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    volumes:
+      - ./portfolio-api/logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Wallet API - Gestión de billeteras virtuales
+  # --------------------------------------------------------------------------
+  wallet-api:
+    build:
+      context: ./wallet-api
+      dockerfile: Dockerfile
+    container_name: cryptosim-wallet-api
+    ports:
+      - "8006:8080"
+    environment:
+      - GO_ENV=production
+      - MONGODB_URI=mongodb://wallet-mongo:27017/cryptosim_wallet
+      - REDIS_HOST=shared-redis
+      - REDIS_PORT=6379
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - API_PORT=8080
+      - LOG_LEVEL=info
+      # External APIs
+      - USERS_API_URL=http://users-api:8001
+      - ORDERS_API_URL=http://orders-api:8080
+    depends_on:
+      wallet-mongo:
+        condition: service_healthy
+      shared-redis:
+        condition: service_healthy
+      shared-rabbitmq:
+        condition: service_healthy
+      users-api:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    volumes:
+      - ./wallet-api/logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================================================
+  # BASES DE DATOS (SEPARADAS POR SERVICIO)
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # MySQL - Users Database
+  # --------------------------------------------------------------------------
+  users-mysql:
+    image: mysql:8.0
+    container_name: cryptosim-users-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=users_db
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-password}
+    volumes:
+      - users-mysql-data:/var/lib/mysql
+      - ./users-api/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # MongoDB - Orders Database
+  # --------------------------------------------------------------------------
+  orders-mongo:
+    image: mongo:7.0
+    container_name: cryptosim-orders-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=cryptosim_orders
+    volumes:
+      - orders-mongo-data:/data/db
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # MongoDB - Portfolio Database
+  # --------------------------------------------------------------------------
+  portfolio-mongo:
+    image: mongo:7.0
+    container_name: cryptosim-portfolio-mongo
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=portfolio_db
+    volumes:
+      - portfolio-mongo-data:/data/db
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # MongoDB - Wallet Database
+  # --------------------------------------------------------------------------
+  wallet-mongo:
+    image: mongo:7.0
+    container_name: cryptosim-wallet-mongo
+    ports:
+      - "27019:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=cryptosim_wallet
+    volumes:
+      - wallet-mongo-data:/data/db
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ==========================================================================
+  # INFRAESTRUCTURA COMPARTIDA
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # Redis - Cache compartido
+  # --------------------------------------------------------------------------
+  shared-redis:
+    image: redis:7-alpine
+    container_name: cryptosim-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - shared-redis-data:/data
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # RabbitMQ - Message broker compartido
+  # --------------------------------------------------------------------------
+  shared-rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: cryptosim-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_VHOST=/
+    volumes:
+      - shared-rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Apache Solr - Search engine
+  # --------------------------------------------------------------------------
+  solr:
+    image: solr:9
+    container_name: cryptosim-solr
+    ports:
+      - "8983:8983"
+    environment:
+      - SOLR_HEAP=1g
+    volumes:
+      - solr-data:/var/solr
+    networks:
+      - cryptosim-network
+    command: >
+      bash -c "
+        solr-precreate crypto_search
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/admin/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Memcached - Distributed cache
+  # --------------------------------------------------------------------------
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: cryptosim-memcached
+    ports:
+      - "11211:11211"
+    command: memcached -m 256 -c 1024 -I 4m
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # MONITORING & TOOLS (Opcional con profiles)
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # Prometheus - Métricas
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cryptosim-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=168h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - prometheus-data:/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # --------------------------------------------------------------------------
+  # Grafana - Dashboards
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cryptosim-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  cryptosim-network:
+    name: cryptosim-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  # Databases
+  users-mysql-data:
+    name: cryptosim-users-mysql-data
+  orders-mongo-data:
+    name: cryptosim-orders-mongo-data
+  portfolio-mongo-data:
+    name: cryptosim-portfolio-mongo-data
+  wallet-mongo-data:
+    name: cryptosim-wallet-mongo-data
+
+  # Infrastructure
+  shared-redis-data:
+    name: cryptosim-shared-redis-data
+  shared-rabbitmq-data:
+    name: cryptosim-shared-rabbitmq-data
+  solr-data:
+    name: cryptosim-solr-data
+
+  # Monitoring
+  prometheus-data:
+    name: cryptosim-prometheus-data
+  grafana-data:
+    name: cryptosim-grafana-data

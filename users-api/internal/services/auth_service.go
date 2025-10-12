@@ -14,7 +14,7 @@ type AuthService interface {
 	Authenticate(email, password string, ipAddress, userAgent string) (*models.AuthResponse, error)
 	RefreshToken(refreshToken string) (*models.TokenPair, error)
 	Logout(refreshToken string) error
-	LogoutAll(userID uint) error
+	LogoutAll(userID int32) error
 	IsRateLimited(email string) (bool, error)
 }
 
@@ -106,7 +106,7 @@ func (s *authService) Logout(refreshToken string) error {
 	return nil
 }
 
-func (s *authService) LogoutAll(userID uint) error {
+func (s *authService) LogoutAll(userID int32) error {
 	err := s.tokenService.RevokeAllUserTokens(userID)
 	if err != nil {
 		return fmt.Errorf("failed to logout from all devices: %w", err)

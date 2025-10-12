@@ -46,17 +46,13 @@ func main() {
 	}).Info("Starting Search API server")
 
 	// Initialize Solr client
-	solrClient, err := solr.NewClient(&solr.Config{
-		BaseURL:           cfg.Solr.BaseURL,
-		Collection:        cfg.Solr.Collection,
-		ConnectionTimeout: time.Duration(cfg.Solr.TimeoutMs) * time.Millisecond,
-		RequestTimeout:    time.Duration(cfg.Solr.TimeoutMs) * time.Millisecond,
-		MaxRetries:        cfg.Solr.MaxRetries,
-		RetryDelay:        time.Second,
-	}, logger)
-	if err != nil {
-		logger.WithError(err).Fatal("Failed to create Solr client")
-	}
+	solrClient := solr.NewClient(&solr.Config{
+		BaseURL:    cfg.Solr.BaseURL,
+		Core:       cfg.Solr.Collection,
+		Timeout:    time.Duration(cfg.Solr.TimeoutMs) * time.Millisecond,
+		MaxRetries: cfg.Solr.MaxRetries,
+		RetryDelay: time.Second,
+	})
 
 	// Test Solr connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -90,7 +86,7 @@ func main() {
 	}
 
 	// Initialize repositories
-	solrRepo := repositories.NewSolrRepository(solrClient, logger)
+	solrRepo := repositories.NewSolrRepository(solrClient)
 	cacheRepo := repositories.NewCacheRepository(cacheManager)
 
 	// Initialize trending service
@@ -122,26 +118,35 @@ func main() {
 	// Initialize RabbitMQ consumer
 	var consumer *messaging.Consumer
 	if cfg.RabbitMQ.Enabled {
-		rabbitConfig := &messaging.Config{
-			URL:             cfg.RabbitMQ.URL,
-			ExchangeName:    cfg.RabbitMQ.ExchangeName,
-			QueueName:       cfg.RabbitMQ.QueueName,
-			RoutingKeys:     cfg.RabbitMQ.RoutingKeys,
-			WorkerPoolSize:  cfg.RabbitMQ.WorkerPoolSize,
-			RetryAttempts:   cfg.RabbitMQ.RetryAttempts,
-			RetryDelay:      time.Duration(cfg.RabbitMQ.RetryDelayMs) * time.Millisecond,
-			DeadLetterQueue: cfg.RabbitMQ.DeadLetterQueue,
+		rabbitConfig := &messaging.ConsumerConfig{
+			URL:           cfg.RabbitMQ.URL,
+			ExchangeName:  cfg.RabbitMQ.ExchangeName,
+			QueueName:     cfg.RabbitMQ.QueueName,
+			RoutingKeys:   cfg.RabbitMQ.RoutingKeys,
+			ConsumerTag:   "search-api-consumer",
+			PrefetchCount: 10,
+			AutoAck:       false,
+			WorkerCount:   cfg.RabbitMQ.WorkerPoolSize,
+			RetryDelay:    time.Duration(cfg.RabbitMQ.RetryDelayMs) * time.Millisecond,
+			MaxRetries:    cfg.RabbitMQ.RetryAttempts,
 		}
 
 		trendingEventHandler := services.NewTrendingEventHandler(trendingService, logger)
-		consumer = messaging.NewConsumer(rabbitConfig, trendingEventHandler, logger)
+		var err error
+		consumer, err = messaging.NewConsumer(rabbitConfig, trendingEventHandler, logger)
+		if err != nil {
+			logger.WithError(err).Error("Failed to create RabbitMQ consumer")
+			consumer = nil
+		}
 
 		// Start RabbitMQ consumer
-		go func() {
-			if err := consumer.Start(ctx); err != nil {
-				logger.WithError(err).Error("Failed to start RabbitMQ consumer")
-			}
-		}()
+		if consumer != nil {
+			go func() {
+				if err := consumer.Start(ctx); err != nil {
+					logger.WithError(err).Error("Failed to start RabbitMQ consumer")
+				}
+			}()
+		}
 	} else {
 		logger.Info("RabbitMQ consumer disabled in configuration")
 	}

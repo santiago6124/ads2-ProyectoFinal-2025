@@ -6,7 +6,7 @@ import (
 )
 
 type UserResponse struct {
-	ID             uint                 `json:"id"`
+	ID             int32                `json:"id"`
 	Username       string               `json:"username"`
 	Email          string               `json:"email"`
 	FirstName      *string              `json:"first_name"`
@@ -20,7 +20,7 @@ type UserResponse struct {
 }
 
 type UserSummaryResponse struct {
-	ID        uint            `json:"id"`
+	ID        int32           `json:"id"`
 	Username  string          `json:"username"`
 	Email     string          `json:"email"`
 	Role      models.UserRole `json:"role"`

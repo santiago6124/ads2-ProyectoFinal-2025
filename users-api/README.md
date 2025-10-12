@@ -2,6 +2,49 @@
 
 A comprehensive Go-based microservice for user management, authentication, and authorization in the CryptoSim cryptocurrency trading simulation platform.
 
+## 🚀 Quick Start (Recommended)
+
+**This service is part of the CryptoSim microservices ecosystem.** The easiest way to run it is using the **unified Docker Compose** at the project root:
+
+```bash
+# From the project root
+cd /ads2-ProyectoFinal-2025
+make up              # Levantar todos los servicios
+# Or:
+make up-users        # Levantar solo Users API + dependencias
+```
+
+**Service URLs:**
+- **Users API**: http://localhost:8001
+- **Health Check**: http://localhost:8001/health
+- **Swagger Docs**: http://localhost:8001/swagger
+
+**View logs:**
+```bash
+make logs-users
+```
+
+**Access shell:**
+```bash
+make shell-users
+```
+
+---
+
+## 🏗️ Architecture & Dependencies
+
+**This service requires:**
+- **MySQL 8.0** (`users-mysql` container)
+- **Redis** (`shared-redis` container)
+
+**Communicates with:**
+- Called by: Orders API, Wallet API, Portfolio API
+- Internal endpoints for service-to-service communication
+
+**Full documentation**: See [main README](../README.md)
+
+---
+
 ## 🚀 Features
 
 - **User Registration & Authentication**: Secure user registration with email validation and JWT-based authentication
@@ -78,16 +121,26 @@ Built following clean architecture principles with:
 
 ### Docker Deployment
 
-1. **Using Docker Compose (Recommended)**
-   ```bash
-   docker-compose up -d
-   ```
+**⚠️ IMPORTANT:** Use the unified Docker Compose at the project root instead:
 
-2. **Manual Docker Build**
-   ```bash
-   make docker-build
-   make docker-run
-   ```
+```bash
+# From project root
+cd /ads2-ProyectoFinal-2025
+make up
+```
+
+For standalone deployment (advanced):
+```bash
+# Build image only
+docker build -t users-api:latest .
+
+# Run with external database
+docker run -d \
+  -p 8001:8001 \
+  -e DB_HOST=host.docker.internal \
+  -e DB_PORT=3306 \
+  users-api:latest
+```
 
 ## 🔧 Configuration
 

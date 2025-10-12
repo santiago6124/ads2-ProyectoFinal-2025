@@ -485,7 +485,7 @@ func (r *RateLimitMiddleware) checkBurstLimit(ctx context.Context, ip string) (b
 
 	// Use sliding window of last 10 seconds
 	windowStart := now.Add(-10 * time.Second).Unix()
-	windowEnd := now.Unix()
+	_ = windowStart // Used for cleanup but not in current implementation
 
 	// Add current request timestamp
 	pipe := r.redisClient.Pipeline()

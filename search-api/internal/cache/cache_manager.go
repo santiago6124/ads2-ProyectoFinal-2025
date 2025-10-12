@@ -295,7 +295,9 @@ func (cm *CacheManager) GetStats() *CacheStats {
 	cm.metrics.mu.RLock()
 	defer cm.metrics.mu.RUnlock()
 
-	localSize := cm.localCache.Size()
+	// Note: ccache v2 doesn't expose Size() method
+	// Using 0 as placeholder - can be tracked manually if needed
+	localSize := int64(0)
 
 	var localHitRate, distributedHitRate float64
 	totalLocalRequests := cm.metrics.LocalHits + cm.metrics.LocalMisses

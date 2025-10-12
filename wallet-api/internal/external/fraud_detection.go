@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"wallet-api/internal/models"
 )
 
@@ -237,14 +239,17 @@ func (m *MockFraudDetectionService) AnalyzeTransaction(ctx context.Context, tran
 	action := "allow"
 
 	// Increase risk for large transactions
-	if transaction.Amount.Value.GreaterThan(models.NewDecimal("10000")) {
+	threshold10k := decimal.NewFromInt(10000)
+	threshold50k := decimal.NewFromInt(50000)
+
+	if transaction.Amount.Value.GreaterThan(threshold10k) {
 		riskScore = 60
 		riskLevel = "medium"
 		action = "review"
 	}
 
 	// High risk for very large transactions
-	if transaction.Amount.Value.GreaterThan(models.NewDecimal("50000")) {
+	if transaction.Amount.Value.GreaterThan(threshold50k) {
 		riskScore = 85
 		riskLevel = "high"
 		action = "block"
@@ -252,7 +257,8 @@ func (m *MockFraudDetectionService) AnalyzeTransaction(ctx context.Context, tran
 
 	// Check for suspicious patterns
 	flags := []string{}
-	if strings.Contains(transaction.Reference, "suspicious") {
+	refStr := fmt.Sprintf("%v", transaction.Reference)
+	if strings.Contains(refStr, "suspicious") {
 		flags = append(flags, "suspicious_reference")
 		riskScore += 30
 	}
