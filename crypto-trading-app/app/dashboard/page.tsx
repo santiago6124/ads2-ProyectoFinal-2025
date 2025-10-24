@@ -1,0 +1,52 @@
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import { DashboardLayout } from "@/components/dashboard-layout"
+import { PortfolioOverview } from "@/components/portfolio-overview"
+import { QuickStats } from "@/components/quick-stats"
+import { TrendingCoins } from "@/components/trending-coins"
+import { RecentActivity } from "@/components/recent-activity"
+
+export default function DashboardPage() {
+  const { user, isLoading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login")
+    }
+  }, [user, isLoading, router])
+
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Welcome back, {user.name}</h1>
+          <p className="text-muted-foreground mt-1">Here's what's happening with your portfolio today.</p>
+        </div>
+
+        <QuickStats />
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <PortfolioOverview />
+            <RecentActivity />
+          </div>
+          <div>
+            <TrendingCoins />
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  )
+}
