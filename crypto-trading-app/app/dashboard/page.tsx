@@ -21,8 +21,8 @@ export default function DashboardPage() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
       </div>
     )
   }
@@ -31,7 +31,12 @@ export default function DashboardPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Welcome back, {user.name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Welcome back, {user?.first_name && user?.last_name 
+              ? `${user.first_name} ${user.last_name}`
+              : user?.username || 'User'
+            }
+          </h1>
           <p className="text-muted-foreground mt-1">Here's what's happening with your portfolio today.</p>
         </div>
 

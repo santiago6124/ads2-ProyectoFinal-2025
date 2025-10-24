@@ -2,39 +2,50 @@
 
 import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react"
 import { Card } from "@/components/ui/card"
-
-const stats = [
-  {
-    name: "Portfolio Value",
-    value: "$24,563.89",
-    change: "+12.5%",
-    trend: "up",
-    icon: DollarSign,
-  },
-  {
-    name: "24h Change",
-    value: "+$1,234.56",
-    change: "+5.3%",
-    trend: "up",
-    icon: TrendingUp,
-  },
-  {
-    name: "Total Profit",
-    value: "$8,945.23",
-    change: "+23.1%",
-    trend: "up",
-    icon: Activity,
-  },
-  {
-    name: "Available Balance",
-    value: "$10,000.00",
-    change: "0%",
-    trend: "neutral",
-    icon: DollarSign,
-  },
-]
+import { useAuth } from "@/lib/auth-context"
 
 export function QuickStats() {
+  const { user } = useAuth()
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+    }).format(amount)
+  }
+
+  const stats = [
+    {
+      name: "Portfolio Value",
+      value: formatCurrency(user?.initial_balance || 0),
+      change: "+12.5%",
+      trend: "up",
+      icon: DollarSign,
+    },
+    {
+      name: "24h Change",
+      value: "+$1,234.56",
+      change: "+5.3%",
+      trend: "up",
+      icon: TrendingUp,
+    },
+    {
+      name: "Total Profit",
+      value: "$8,945.23",
+      change: "+23.1%",
+      trend: "up",
+      icon: Activity,
+    },
+    {
+      name: "Available Balance",
+      value: formatCurrency(user?.initial_balance || 0),
+      change: "0%",
+      trend: "neutral",
+      icon: DollarSign,
+    },
+  ]
+
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat) => (
