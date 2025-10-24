@@ -15,22 +15,26 @@ func main() {
 		port = "8004"
 	}
 
-	// Set Gin to release mode for production
-	gin.SetMode(gin.ReleaseMode)
-	
+	// Set Gin to debug mode for development
+	gin.SetMode(gin.DebugMode)
+
 	router := gin.Default()
 
-	// Add CORS middleware
+	// Add CORS middleware - must be before routes
 	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-		
+		origin := c.Request.Header.Get("Origin")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
-		
+
 		c.Next()
 	})
 
@@ -51,8 +55,8 @@ func main() {
 		api.GET("/history/:symbol", getPriceHistory)
 	}
 
-	log.Printf("Market Data API starting on port %s", port)
-	if err := router.Run(":" + port); err != nil {
+	log.Printf("Market Data API starting on 0.0.0.0:%s", port)
+	if err := router.Run("0.0.0.0:" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }
