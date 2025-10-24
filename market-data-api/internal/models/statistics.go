@@ -263,7 +263,7 @@ func CalculateCorrelation(prices1, prices2 []decimal.Decimal) decimal.Decimal {
 		return decimal.Zero
 	}
 
-	n := decimal.NewFromInt(int64(len(prices1)))
+	_ = decimal.NewFromInt(int64(len(prices1)))
 
 	// Calculate means
 	mean1 := calculateAverage(prices1)

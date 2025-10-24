@@ -1,104 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, TrendingDown, Star } from "lucide-react"
+import { TrendingUp, TrendingDown, Star, Loader2 } from "lucide-react"
 import Link from "next/link"
-
-interface Crypto {
-  id: string
-  symbol: string
-  name: string
-  price: string
-  change24h: number
-  volume24h: string
-  marketCap: string
-  sparkline: number[]
-}
-
-const cryptoData: Crypto[] = [
-  {
-    id: "bitcoin",
-    symbol: "BTC",
-    name: "Bitcoin",
-    price: "$44,823.45",
-    change24h: 5.2,
-    volume24h: "$28.5B",
-    marketCap: "$876.2B",
-    sparkline: [42000, 42500, 43000, 42800, 43500, 44000, 44823],
-  },
-  {
-    id: "ethereum",
-    symbol: "ETH",
-    name: "Ethereum",
-    price: "$2,563.12",
-    change24h: 3.8,
-    volume24h: "$15.2B",
-    marketCap: "$308.1B",
-    sparkline: [2400, 2450, 2500, 2480, 2520, 2550, 2563],
-  },
-  {
-    id: "binancecoin",
-    symbol: "BNB",
-    name: "Binance Coin",
-    price: "$312.45",
-    change24h: 2.1,
-    volume24h: "$1.8B",
-    marketCap: "$48.2B",
-    sparkline: [305, 308, 310, 309, 311, 312, 312],
-  },
-  {
-    id: "solana",
-    symbol: "SOL",
-    name: "Solana",
-    price: "$124.32",
-    change24h: -1.5,
-    volume24h: "$2.4B",
-    marketCap: "$52.8B",
-    sparkline: [128, 127, 126, 125, 124, 123, 124],
-  },
-  {
-    id: "ripple",
-    symbol: "XRP",
-    name: "Ripple",
-    price: "$0.6234",
-    change24h: 4.3,
-    volume24h: "$1.2B",
-    marketCap: "$33.5B",
-    sparkline: [0.59, 0.6, 0.61, 0.62, 0.62, 0.623, 0.623],
-  },
-  {
-    id: "cardano",
-    symbol: "ADA",
-    name: "Cardano",
-    price: "$1.89",
-    change24h: 1.2,
-    volume24h: "$890M",
-    marketCap: "$66.4B",
-    sparkline: [1.85, 1.86, 1.87, 1.88, 1.88, 1.89, 1.89],
-  },
-  {
-    id: "dogecoin",
-    symbol: "DOGE",
-    name: "Dogecoin",
-    price: "$0.0823",
-    change24h: -2.3,
-    volume24h: "$645M",
-    marketCap: "$11.7B",
-    sparkline: [0.085, 0.084, 0.083, 0.082, 0.082, 0.082, 0.082],
-  },
-  {
-    id: "polkadot",
-    symbol: "DOT",
-    name: "Polkadot",
-    price: "$7.45",
-    change24h: 6.8,
-    volume24h: "$456M",
-    marketCap: "$9.8B",
-    sparkline: [6.9, 7.0, 7.1, 7.2, 7.3, 7.4, 7.45],
-  },
-]
+import { marketApiService, PriceData } from "@/lib/market-api"
 
 interface MarketTableProps {
   searchQuery: string
@@ -106,6 +13,30 @@ interface MarketTableProps {
 
 export function MarketTable({ searchQuery }: MarketTableProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [cryptoData, setCryptoData] = useState<PriceData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await marketApiService.getTop100()
+        setCryptoData(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch market data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const filteredData = cryptoData.filter(
     (crypto) =>
@@ -113,103 +44,136 @@ export function MarketTable({ searchQuery }: MarketTableProps) {
       crypto.symbol.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const toggleFavorite = (id: string) => {
+  const toggleFavorite = (symbol: string) => {
     setFavorites((prev) => {
       const newFavorites = new Set(prev)
-      if (newFavorites.has(id)) {
-        newFavorites.delete(id)
+      if (newFavorites.has(symbol)) {
+        newFavorites.delete(symbol)
       } else {
-        newFavorites.add(id)
+        newFavorites.add(symbol)
       }
       return newFavorites
     })
   }
 
+  const formatCurrency = (amount: number) => {
+    if (amount >= 1e12) {
+      return `$${(amount / 1e12).toFixed(2)}T`
+    } else if (amount >= 1e9) {
+      return `$${(amount / 1e9).toFixed(2)}B`
+    } else if (amount >= 1e6) {
+      return `$${(amount / 1e6).toFixed(2)}M`
+    } else if (amount >= 1e3) {
+      return `$${(amount / 1e3).toFixed(2)}K`
+    } else {
+      return `$${amount.toFixed(2)}`
+    }
+  }
+
+  const formatPrice = (price: number) => {
+    if (price >= 1000) {
+      return `$${price.toLocaleString()}`
+    } else if (price >= 1) {
+      return `$${price.toFixed(2)}`
+    } else {
+      return `$${price.toFixed(6)}`
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="p-8 bg-black border border-white/10 shadow-lg">
+        <div className="flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
+          <span className="ml-2 text-white">Loading market data...</span>
+        </div>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="p-8 bg-black border border-white/10 shadow-lg">
+        <div className="text-center text-red-400">
+          <p className="text-lg font-semibold">Error loading market data</p>
+          <p className="text-sm mt-2">{error}</p>
+        </div>
+      </Card>
+    )
+  }
+
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden bg-black border border-white/10 shadow-lg">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="border-b border-border bg-muted/50">
+          <thead className="border-b border-white/10 bg-black">
             <tr>
-              <th className="text-left p-4 text-sm font-semibold text-muted-foreground">#</th>
-              <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Name</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Price</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground">24h %</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden md:table-cell">
+              <th className="text-left p-4 text-sm font-semibold text-white/60">#</th>
+              <th className="text-left p-4 text-sm font-semibold text-white/60">Name</th>
+              <th className="text-right p-4 text-sm font-semibold text-white/60">Price</th>
+              <th className="text-right p-4 text-sm font-semibold text-white/60">24h %</th>
+              <th className="text-right p-4 text-sm font-semibold text-white/60 hidden md:table-cell">
                 Volume (24h)
               </th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden lg:table-cell">
+              <th className="text-right p-4 text-sm font-semibold text-white/60 hidden lg:table-cell">
                 Market Cap
               </th>
-              <th className="text-center p-4 text-sm font-semibold text-muted-foreground hidden xl:table-cell">
+              <th className="text-center p-4 text-sm font-semibold text-white/60 hidden xl:table-cell">
                 Last 7 Days
               </th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Action</th>
+              <th className="text-right p-4 text-sm font-semibold text-white/60">Action</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map((crypto, index) => (
-              <tr key={crypto.id} className="border-b border-border hover:bg-accent/50 transition-colors">
+              <tr key={crypto.symbol} className="border-b border-white/10 hover:bg-white/5 transition-colors">
                 <td className="p-4">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => toggleFavorite(crypto.id)}
-                      className="text-muted-foreground hover:text-yellow-500 transition-colors"
+                      onClick={() => toggleFavorite(crypto.symbol)}
+                      className="text-white/60 hover:text-yellow-400 transition-colors"
                     >
                       <Star
-                        className={`h-4 w-4 ${favorites.has(crypto.id) ? "fill-yellow-500 text-yellow-500" : ""}`}
+                        className={`h-4 w-4 ${favorites.has(crypto.symbol) ? "fill-yellow-400 text-yellow-400" : ""}`}
                       />
                     </button>
-                    <span className="text-sm text-muted-foreground">{index + 1}</span>
+                    <span className="text-sm text-white/60">{index + 1}</span>
                   </div>
                 </td>
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">{crypto.symbol}</span>
+                    <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center border border-white/10">
+                      <span className="text-xs font-bold text-white">{crypto.symbol}</span>
                     </div>
                     <div>
-                      <p className="font-semibold">{crypto.name}</p>
-                      <p className="text-sm text-muted-foreground">{crypto.symbol}</p>
+                      <p className="font-semibold text-white">{crypto.name}</p>
+                      <p className="text-sm text-white/60">{crypto.symbol}</p>
                     </div>
                   </div>
                 </td>
-                <td className="p-4 text-right font-semibold">{crypto.price}</td>
+                <td className="p-4 text-right font-semibold text-white">{formatPrice(crypto.price)}</td>
                 <td className="p-4 text-right">
                   <div
                     className={`inline-flex items-center gap-1 font-semibold ${
-                      crypto.change24h >= 0 ? "text-green-500" : "text-red-500"
+                      crypto.change_24h >= 0 ? "text-green-400" : "text-red-400"
                     }`}
                   >
-                    {crypto.change24h >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    {Math.abs(crypto.change24h).toFixed(2)}%
+                    {crypto.change_24h >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {Math.abs(crypto.change_24h).toFixed(2)}%
                   </div>
                 </td>
-                <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{crypto.volume24h}</td>
-                <td className="p-4 text-right text-muted-foreground hidden lg:table-cell">{crypto.marketCap}</td>
+                <td className="p-4 text-right text-white/60 hidden md:table-cell">{formatCurrency(crypto.volume)}</td>
+                <td className="p-4 text-right text-white/60 hidden lg:table-cell">{formatCurrency(crypto.market_cap)}</td>
                 <td className="p-4 hidden xl:table-cell">
                   <div className="flex items-center justify-center">
-                    <svg width="100" height="40" className="overflow-visible">
-                      <polyline
-                        points={crypto.sparkline
-                          .map((value, i) => {
-                            const x = (i / (crypto.sparkline.length - 1)) * 100
-                            const min = Math.min(...crypto.sparkline)
-                            const max = Math.max(...crypto.sparkline)
-                            const y = 40 - ((value - min) / (max - min)) * 40
-                            return `${x},${y}`
-                          })
-                          .join(" ")}
-                        fill="none"
-                        stroke={crypto.change24h >= 0 ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"}
-                        strokeWidth="2"
-                      />
-                    </svg>
+                    <div className="w-20 h-8 bg-white/10 rounded flex items-center justify-center">
+                      <span className="text-xs text-white/60">Chart</span>
+                    </div>
                   </div>
                 </td>
                 <td className="p-4 text-right">
-                  <Button size="sm" asChild>
-                    <Link href={`/trade?coin=${crypto.id}`}>Trade</Link>
+                  <Button size="sm" asChild className="bg-blue-500 hover:bg-blue-600 text-white border-0">
+                    <Link href={`/trade?coin=${crypto.symbol.toLowerCase()}`}>Trade</Link>
                   </Button>
                 </td>
               </tr>
