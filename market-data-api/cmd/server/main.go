@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -81,9 +83,25 @@ type CryptoInfo struct {
 	Volatility float64
 }
 
+// Global state for consistent price generation
+var (
+	priceCache      = make(map[string]PriceCache)
+	priceCacheMutex sync.RWMutex
+	lastUpdateTime  time.Time
+)
+
+type PriceCache struct {
+	Price      float64
+	Change24h  float64
+	MarketCap  float64
+	Volume     float64
+	UpdateTime time.Time
+}
+
 func main() {
-	// Seed random for price variations
-	rand.Seed(time.Now().UnixNano())
+	// Seed random for price variations (use fixed seed for consistency within a day)
+	today := time.Now().Truncate(24 * time.Hour)
+	rand.Seed(today.UnixNano())
 
 	// Get port from environment or use default
 	port := 8004
@@ -213,8 +231,18 @@ func handleGetPriceBySymbol(c *gin.Context) {
 func handleGetPriceHistory(c *gin.Context) {
 	symbol := strings.ToUpper(c.Param("symbol"))
 
-	// Generate history
-	history := generateHistory(symbol)
+	// Get interval from query params (default to 1h)
+	interval := c.DefaultQuery("interval", "1h")
+
+	// Get limit from query params (default based on interval)
+	limitStr := c.DefaultQuery("limit", "")
+	var limit int
+	if limitStr != "" {
+		fmt.Sscanf(limitStr, "%d", &limit)
+	}
+
+	// Generate history with interval support
+	history := generateHistory(symbol, interval, limit)
 
 	c.JSON(http.StatusOK, history)
 }
@@ -278,16 +306,50 @@ func generatePrice(symbol string) gin.H {
 		}
 	}
 
-	// Add random variation to base price
-	variation := (rand.Float64()*2 - 1) * info.Volatility
+	// Check if we have cached price that's still valid (less than 1 minute old)
+	priceCacheMutex.RLock()
+	cached, exists := priceCache[symbol]
+	priceCacheMutex.RUnlock()
+
+	now := time.Now()
+	if exists && now.Sub(cached.UpdateTime) < time.Minute {
+		// Return cached price
+		return gin.H{
+			"symbol":     symbol,
+			"name":       info.Name,
+			"price":      cached.Price,
+			"change_24h": cached.Change24h,
+			"market_cap": cached.MarketCap,
+			"volume":     cached.Volume,
+			"timestamp":  now.Unix(),
+		}
+	}
+
+	// Generate new price with smaller, more realistic variations
+	// Use time-based seed for consistency within the same minute
+	minuteSeed := now.Truncate(time.Minute).Unix()
+	r := rand.New(rand.NewSource(minuteSeed + int64(len(symbol))))
+
+	variation := (r.Float64()*2 - 1) * info.Volatility * 0.3 // Reduced volatility
 	currentPrice := info.BasePrice * (1 + variation)
 
-	// Random 24h change
-	change24h := randomChange()
+	// Generate consistent 24h change (between -5% and +5%)
+	change24h := (r.Float64()*10 - 5)
 
 	// Calculate market cap and volume based on price
 	marketCap := currentPrice * getCirculatingSupply(symbol)
-	volume := marketCap * (0.05 + rand.Float64()*0.15) // 5-20% of market cap
+	volume := marketCap * (0.08 + r.Float64()*0.12) // 8-20% of market cap
+
+	// Cache the generated price
+	priceCacheMutex.Lock()
+	priceCache[symbol] = PriceCache{
+		Price:      currentPrice,
+		Change24h:  change24h,
+		MarketCap:  marketCap,
+		Volume:     volume,
+		UpdateTime: now,
+	}
+	priceCacheMutex.Unlock()
 
 	return gin.H{
 		"symbol":     symbol,
@@ -296,24 +358,137 @@ func generatePrice(symbol string) gin.H {
 		"change_24h": change24h,
 		"market_cap": marketCap,
 		"volume":     volume,
-		"timestamp":  time.Now().Unix(),
+		"timestamp":  now.Unix(),
 	}
 }
 
-func generateHistory(symbol string) gin.H {
+func generateHistory(symbol string, interval string, limit int) gin.H {
 	info, ok := cryptoData[symbol]
 	if !ok {
 		info = CryptoInfo{Name: symbol, BasePrice: 1000.0, Volatility: 0.03}
 	}
 
 	now := time.Now()
-	history := make([]gin.H, 24)
 
-	for i := 0; i < 24; i++ {
-		timestamp := now.Add(time.Duration(-24+i) * time.Hour)
-		// Add hourly variation
-		variation := (rand.Float64()*2 - 1) * info.Volatility
-		price := info.BasePrice * (1 + variation)
+	// Determine the time duration and number of points based on interval
+	var duration time.Duration
+	var points int
+
+	switch interval {
+	case "1m":
+		duration = time.Minute
+		points = 60 // Last 60 minutes
+	case "5m":
+		duration = 5 * time.Minute
+		points = 60 // Last 5 hours
+	case "15m":
+		duration = 15 * time.Minute
+		points = 96 // Last 24 hours
+	case "1h":
+		duration = time.Hour
+		points = 24 // Last 24 hours
+	case "4h":
+		duration = 4 * time.Hour
+		points = 42 // Last week
+	case "1d":
+		duration = 24 * time.Hour
+		points = 30 // Last month
+	case "1w":
+		duration = 7 * 24 * time.Hour
+		points = 52 // Last year
+	default:
+		duration = time.Hour
+		points = 24
+	}
+
+	// Override with limit if provided
+	if limit > 0 {
+		points = limit
+	}
+
+	history := make([]gin.H, points)
+
+	// Get current cached price as the end point
+	currentPrice := info.BasePrice
+	priceCacheMutex.RLock()
+	if cached, exists := priceCache[symbol]; exists {
+		currentPrice = cached.Price
+	}
+	priceCacheMutex.RUnlock()
+
+	// Create a realistic price history that leads to the current price
+	// Use different seed based on the interval to get different patterns
+	intervalSeed := int64(0)
+	switch interval {
+	case "1m":
+		intervalSeed = 1
+	case "5m":
+		intervalSeed = 5
+	case "15m":
+		intervalSeed = 15
+	case "1h":
+		intervalSeed = 60
+	case "4h":
+		intervalSeed = 240
+	case "1d":
+		intervalSeed = 1440
+	case "1w":
+		intervalSeed = 10080
+	}
+
+	// Use a seed that combines symbol, interval, and a time component
+	// This ensures different patterns for different timeframes
+	daySeed := now.Truncate(24 * time.Hour).Unix()
+	seedValue := daySeed + int64(len(symbol))*1000 + intervalSeed
+	r := rand.New(rand.NewSource(seedValue))
+
+	// Start from a historical price (slightly different from current)
+	// The longer the timeframe, the more it can vary from current price
+	volatilityMultiplier := 1.0
+	switch interval {
+	case "1m", "5m", "15m":
+		volatilityMultiplier = 0.5 // Very small changes for short timeframes
+	case "1h":
+		volatilityMultiplier = 1.0
+	case "4h":
+		volatilityMultiplier = 2.0
+	case "1d":
+		volatilityMultiplier = 3.0
+	case "1w":
+		volatilityMultiplier = 5.0
+	}
+
+	// Start price is different from current price
+	startPriceVariation := (r.Float64()*2 - 1) * info.Volatility * volatilityMultiplier
+	startPrice := currentPrice * (1 + startPriceVariation)
+
+	// Generate prices that gradually trend from start to current
+	for i := 0; i < points; i++ {
+		timestamp := now.Add(time.Duration(-(points-i)) * duration)
+
+		// Progress from 0 to 1 across the timeframe
+		progress := float64(i) / float64(points-1)
+
+		// Interpolate between start and current price with some noise
+		basePrice := startPrice + (currentPrice-startPrice)*progress
+
+		// Add realistic market movements
+		// Use multiple sine waves with different frequencies for complexity
+		wave1 := math.Sin(progress * 2 * math.Pi * r.Float64() * 3)
+		wave2 := math.Sin(progress * 4 * math.Pi * r.Float64() * 2)
+		waveFactor := (wave1*0.6 + wave2*0.4) * info.Volatility * volatilityMultiplier * 0.3
+
+		// Add random noise
+		noiseFactor := (r.Float64()*2 - 1) * info.Volatility * volatilityMultiplier * 0.2
+
+		// Combine all factors
+		variation := waveFactor + noiseFactor
+		price := basePrice * (1 + variation)
+
+		// Ensure price doesn't go negative or too far from reasonable range
+		minPrice := info.BasePrice * 0.5
+		maxPrice := info.BasePrice * 1.5
+		price = math.Max(minPrice, math.Min(maxPrice, price))
 
 		history[i] = gin.H{
 			"timestamp": timestamp.Unix(),

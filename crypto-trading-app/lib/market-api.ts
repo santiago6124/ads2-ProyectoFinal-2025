@@ -136,11 +136,11 @@ class MarketApiService {
 
   // Get trending cryptocurrencies
   async getTrending(): Promise<TrendingCoin[]> {
-    // For now, we'll simulate trending data based on volume and price changes
+    // Get trending coins based on highest 24h change (both positive and negative)
     const allPrices = await this.getAllPrices()
     return allPrices
       .sort((a, b) => Math.abs(b.change_24h) - Math.abs(a.change_24h))
-      .slice(0, 10)
+      .slice(0, 15) // Show top 15 trending
       .map((coin, index) => ({
         id: coin.symbol.toLowerCase(),
         symbol: coin.symbol,

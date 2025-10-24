@@ -24,19 +24,19 @@ function TradeContent() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
       </div>
     )
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8 bg-black min-h-screen p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Trade</h1>
-            <p className="text-muted-foreground mt-1">Buy and sell cryptocurrencies instantly</p>
+            <h1 className="text-4xl font-bold tracking-tight text-white">Trade</h1>
+            <p className="text-white/60 mt-2 text-lg">Buy and sell cryptocurrencies instantly</p>
           </div>
           <CoinSelector selectedCoin={selectedCoin} onSelectCoin={setSelectedCoin} />
         </div>
@@ -60,8 +60,8 @@ export default function TradePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <div className="min-h-screen flex items-center justify-center bg-black">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
         </div>
       }
     >

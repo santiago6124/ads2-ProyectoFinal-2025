@@ -13,8 +13,22 @@ const timeframes = ["1H", "24H", "7D", "30D", "1Y", "ALL"]
 export function MarketChart() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("24H")
   const [btcData, setBtcData] = useState<PriceData | null>(null)
+  const [chartData, setChartData] = useState<Array<{time: string, price: number}>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Map timeframe to API interval
+  const getIntervalFromTimeframe = (tf: string) => {
+    switch(tf) {
+      case "1H": return { interval: "1m", limit: 60 }
+      case "24H": return { interval: "1h", limit: 24 }
+      case "7D": return { interval: "4h", limit: 42 }
+      case "30D": return { interval: "1d", limit: 30 }
+      case "1Y": return { interval: "1w", limit: 52 }
+      case "ALL": return { interval: "1w", limit: 104 }
+      default: return { interval: "1h", limit: 24 }
+    }
+  }
 
   useEffect(() => {
     const fetchBtcData = async () => {
@@ -31,33 +45,49 @@ export function MarketChart() {
     }
 
     fetchBtcData()
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchBtcData, 30000)
+
+    // Refresh every 60 seconds (changed from 30 to reduce updates)
+    const interval = setInterval(fetchBtcData, 60000)
     return () => clearInterval(interval)
   }, [])
 
-  // Generate mock chart data for now (in a real app, this would come from historical data API)
-  const generateChartData = (points: number) => {
-    const data = []
-    const now = Date.now()
-    let basePrice = btcData?.price || 50000
+  // Fetch chart data when timeframe changes
+  useEffect(() => {
+    const fetchChartData = async () => {
+      try {
+        const { interval, limit } = getIntervalFromTimeframe(selectedTimeframe)
+        const history = await marketApiService.getPriceHistory('BTC', interval)
 
-    for (let i = points; i >= 0; i--) {
-      const change = (Math.random() - 0.5) * 2000
-      basePrice += change
-      data.push({
-        time: new Date(now - i * 3600000).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        price: Math.max(basePrice, 40000),
-      })
+        // Format the data for the chart
+        const formatted = history.history.slice(-limit).map((item: any) => {
+          const date = new Date(item.timestamp * 1000)
+          let timeFormat = {}
+
+          // Adjust time format based on timeframe
+          if (selectedTimeframe === "1H") {
+            timeFormat = { hour: "2-digit", minute: "2-digit" }
+          } else if (selectedTimeframe === "24H") {
+            timeFormat = { hour: "2-digit", minute: "2-digit" }
+          } else if (selectedTimeframe === "7D" || selectedTimeframe === "30D") {
+            timeFormat = { month: "short", day: "numeric" }
+          } else {
+            timeFormat = { month: "short", year: "2-digit" }
+          }
+
+          return {
+            time: date.toLocaleString("en-US", timeFormat as any),
+            price: item.price,
+          }
+        })
+
+        setChartData(formatted)
+      } catch (err) {
+        console.error('Failed to fetch chart data:', err)
+      }
     }
-    return data
-  }
 
-  const chartData = generateChartData(24)
+    fetchChartData()
+  }, [selectedTimeframe])
 
   const formatPrice = (price: number) => {
     if (price >= 1000) {
@@ -65,6 +95,22 @@ export function MarketChart() {
     } else {
       return `$${price.toFixed(2)}`
     }
+  }
+
+  // Calculate dynamic Y-axis domain based on chart data
+  const getYAxisDomain = () => {
+    if (chartData.length === 0) return [0, 100000]
+
+    const prices = chartData.map(d => d.price)
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
+
+    // Add padding (5% on each side) for better visualization
+    const padding = (maxPrice - minPrice) * 0.05
+    const domainMin = Math.max(0, minPrice - padding)
+    const domainMax = maxPrice + padding
+
+    return [domainMin, domainMax]
   }
 
   if (loading) {
@@ -154,7 +200,14 @@ export function MarketChart() {
               fontSize={12}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+              domain={getYAxisDomain()}
+              tickFormatter={(value) => {
+                if (value >= 1000) {
+                  return `$${(value / 1000).toFixed(1)}k`
+                } else {
+                  return `$${value.toFixed(2)}`
+                }
+              }}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Area

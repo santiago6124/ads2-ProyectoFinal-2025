@@ -25,9 +25,9 @@ export function TrendingCoins() {
     }
 
     fetchTrending()
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchTrending, 30000)
+
+    // Refresh every 60 seconds (reduced from 30 to minimize constant updates)
+    const interval = setInterval(fetchTrending, 60000)
     return () => clearInterval(interval)
   }, [])
 
