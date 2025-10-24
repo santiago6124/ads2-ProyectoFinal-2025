@@ -81,28 +81,35 @@ export function CryptoPrice({ symbol, showChange = true }: CryptoPriceProps) {
   }
 
   return (
-    <Card className="p-4">
+    <Card className="p-6 bg-linear-to-br from-slate-900 to-slate-800 border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-lg">{symbol}</h3>
-          <p className="text-2xl font-bold text-slate-900">
+          <h3 className="font-bold text-lg text-white">{symbol}</h3>
+          <p className="text-3xl font-bold text-white">
             {formatPrice(priceData.price)}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             Updated: {formatTimestamp(priceData.timestamp)}
           </p>
         </div>
         {showChange && (
-          <div className="flex items-center space-x-1">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            <span className="text-sm text-green-600">+2.5%</span>
+          <div className="flex items-center space-x-2">
+            <div className="h-12 w-12 rounded-full bg-linear-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
+              <TrendingUp className="h-6 w-6 text-white" />
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-bold text-green-400">+2.5%</span>
+              <p className="text-xs text-slate-400">24h</p>
+            </div>
           </div>
         )}
       </div>
       {priceData.source && (
-        <p className="text-xs text-slate-400 mt-2">
-          Source: {priceData.source}
-        </p>
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <p className="text-xs text-slate-500">
+            Source: {priceData.source}
+          </p>
+        </div>
       )}
     </Card>
   )

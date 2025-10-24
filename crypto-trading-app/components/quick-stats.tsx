@@ -47,17 +47,17 @@ export function QuickStats() {
   ]
 
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map((stat) => (
-        <Card key={stat.name} className="p-6">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {stats.map((stat, index) => (
+        <Card key={stat.name} className="p-6 bg-linear-to-br from-slate-900 to-slate-800 border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
           <div className="flex items-center justify-between mb-4">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <stat.icon className="h-5 w-5 text-primary" />
+            <div className="h-12 w-12 rounded-xl bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <stat.icon className="h-6 w-6 text-white" />
             </div>
             {stat.trend !== "neutral" && (
               <div
-                className={`flex items-center gap-1 text-sm font-medium ${
-                  stat.trend === "up" ? "text-green-500" : "text-red-500"
+                className={`flex items-center gap-1 text-sm font-bold px-2 py-1 rounded-full ${
+                  stat.trend === "up" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                 }`}
               >
                 {stat.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
@@ -66,8 +66,8 @@ export function QuickStats() {
             )}
           </div>
           <div>
-            <p className="text-sm text-muted-foreground mb-1">{stat.name}</p>
-            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-sm text-slate-400 mb-2 font-medium">{stat.name}</p>
+            <p className="text-2xl font-bold text-white">{stat.value}</p>
           </div>
         </Card>
       ))}

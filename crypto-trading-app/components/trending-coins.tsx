@@ -14,32 +14,32 @@ const trendingCoins = [
 
 export function TrendingCoins() {
   return (
-    <Card className="p-6">
+    <Card className="p-6 bg-linear-to-br from-slate-900 to-slate-800 border-slate-700 shadow-lg">
       <div className="mb-6">
-        <h2 className="text-xl font-bold">Trending</h2>
-        <p className="text-sm text-muted-foreground mt-1">Top movers in 24h</p>
+        <h2 className="text-2xl font-bold text-white">Trending</h2>
+        <p className="text-sm text-slate-400 mt-1">Top movers in 24h</p>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {trendingCoins.map((coin) => (
           <div
             key={coin.symbol}
-            className="flex items-center justify-between p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+            className="flex items-center justify-between p-4 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 transition-all duration-300 cursor-pointer border border-slate-700 hover:border-slate-600"
           >
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary">{coin.symbol}</span>
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <span className="text-sm font-bold text-white">{coin.symbol}</span>
               </div>
               <div>
-                <p className="font-semibold text-sm">{coin.name}</p>
-                <p className="text-xs text-muted-foreground">{coin.symbol}</p>
+                <p className="font-bold text-sm text-white">{coin.name}</p>
+                <p className="text-xs text-slate-400">{coin.symbol}</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="font-semibold text-sm">{coin.price}</p>
+              <p className="font-bold text-sm text-white">{coin.price}</p>
               <div
-                className={`flex items-center justify-end gap-1 text-xs font-medium ${
-                  coin.trend === "up" ? "text-green-500" : "text-red-500"
+                className={`flex items-center justify-end gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+                  coin.trend === "up" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                 }`}
               >
                 {coin.trend === "up" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}

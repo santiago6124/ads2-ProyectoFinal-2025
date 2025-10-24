@@ -22,7 +22,7 @@ export default function DashboardPage() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-50 to-blue-50">
         <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
       </div>
     )
@@ -30,26 +30,26 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+      <div className="space-y-8 bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen p-6">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight bg-linear-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent">
             Welcome back, {user?.first_name && user?.last_name 
               ? `${user.first_name} ${user.last_name}`
               : user?.username || 'User'
             }
           </h1>
-          <p className="text-muted-foreground mt-1">Here's what's happening with your portfolio today.</p>
+          <p className="text-slate-400 mt-2 text-lg">Here's what's happening with your portfolio today.</p>
         </div>
 
         <QuickStats />
 
         <div>
-          <h2 className="text-2xl font-bold mb-4">Market Prices</h2>
+          <h2 className="text-3xl font-bold mb-6 text-white">Market Prices</h2>
           <CryptoPricesGrid />
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
             <PortfolioOverview />
             <RecentActivity />
           </div>
