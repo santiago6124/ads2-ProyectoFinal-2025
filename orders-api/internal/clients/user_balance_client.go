@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"orders-api/internal/models"
+
+	"github.com/shopspring/decimal"
 )
 
 // UserBalanceClient maneja el balance del usuario directamente desde Users API
@@ -62,7 +63,7 @@ func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount
 
 	// Convertir balance a decimal
 	availableBalance := decimal.NewFromFloat(user.InitialBalance)
-	
+
 	// Verificar si tiene suficiente balance
 	hasSufficient := availableBalance.GreaterThanOrEqual(amount)
 
@@ -101,7 +102,7 @@ func (c *UserBalanceClient) LockFunds(ctx context.Context, userID int, amount de
 	// En un sistema real, aquí se actualizaría el balance del usuario
 	// Por ahora, solo logueamos la operación
 	fmt.Printf("LOCK FUNDS: User %d, Amount %s USD\n", userID, amount.String())
-	
+
 	return nil
 }
 
@@ -142,12 +143,12 @@ func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, 
 
 	// En un sistema real, aquí se actualizaría el balance en la base de datos
 	// Por ahora, solo logueamos la operación
-	fmt.Printf("TRANSACTION: User %d, Type %s, Amount %s USD, New Balance %s USD\n", 
+	fmt.Printf("TRANSACTION: User %d, Type %s, Amount %s USD, New Balance %s USD\n",
 		userID, transactionType, amount.String(), newBalance.String())
 
 	// Generar ID de transacción simulado
 	transactionID := fmt.Sprintf("tx_%d_%d", userID, time.Now().Unix())
-	
+
 	return transactionID, nil
 }
 
