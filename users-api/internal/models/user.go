@@ -20,7 +20,7 @@ type User struct {
 	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
 	LastLogin      *time.Time     `json:"last_login"`
 	IsActive       bool           `json:"is_active" gorm:"default:true"`
-	Preferences    *UserPrefs     `json:"preferences" gorm:"type:json"`
+	Preferences    string         `json:"preferences" gorm:"type:json"`
 }
 
 type UserRole string
@@ -30,37 +30,16 @@ const (
 	RoleAdmin  UserRole = "admin"
 )
 
-type UserPrefs struct {
-	Theme         string `json:"theme"`
-	Notifications bool   `json:"notifications"`
-	Language      string `json:"language"`
-}
-
-func (up *UserPrefs) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-
-	switch v := value.(type) {
-	case []byte:
-		return json.Unmarshal(v, up)
-	case string:
-		return json.Unmarshal([]byte(v), up)
-	}
-	return nil
-}
-
-func (up UserPrefs) Value() (interface{}, error) {
-	return json.Marshal(up)
-}
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {
-	if u.Preferences == nil {
-		u.Preferences = &UserPrefs{
-			Theme:         "light",
-			Notifications: true,
-			Language:      "en",
+	if u.Preferences == "" {
+		defaultPrefs := map[string]interface{}{
+			"theme":         "light",
+			"notifications": true,
+			"language":      "en",
 		}
+		prefsJSON, _ := json.Marshal(defaultPrefs)
+		u.Preferences = string(prefsJSON)
 	}
 	return nil
 }
@@ -84,6 +63,34 @@ func (u *User) GetFullName() string {
 		return *u.LastName
 	}
 	return u.Username
+}
+
+func (u *User) GetPreferences() (map[string]interface{}, error) {
+	if u.Preferences == "" {
+		return map[string]interface{}{
+			"theme":         "light",
+			"notifications": true,
+			"language":      "en",
+		}, nil
+	}
+	
+	var prefs map[string]interface{}
+	err := json.Unmarshal([]byte(u.Preferences), &prefs)
+	return prefs, err
+}
+
+func (u *User) SetPreferences(prefs map[string]interface{}) error {
+	if prefs == nil {
+		u.Preferences = ""
+		return nil
+	}
+	
+	prefsJSON, err := json.Marshal(prefs)
+	if err != nil {
+		return err
+	}
+	u.Preferences = string(prefsJSON)
+	return nil
 }
 
 type RefreshToken struct {

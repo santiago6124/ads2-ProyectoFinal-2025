@@ -1,22 +1,23 @@
 package dto
 
 import (
+	"encoding/json"
 	"time"
 	"users-api/internal/models"
 )
 
 type UserResponse struct {
-	ID             int32                `json:"id"`
-	Username       string               `json:"username"`
-	Email          string               `json:"email"`
-	FirstName      *string              `json:"first_name"`
-	LastName       *string              `json:"last_name"`
-	Role           models.UserRole      `json:"role"`
-	InitialBalance float64              `json:"initial_balance"`
-	CreatedAt      time.Time            `json:"created_at"`
-	LastLogin      *time.Time           `json:"last_login,omitempty"`
-	IsActive       bool                 `json:"is_active"`
-	Preferences    *models.UserPrefs    `json:"preferences,omitempty"`
+	ID             int32           `json:"id"`
+	Username       string          `json:"username"`
+	Email          string          `json:"email"`
+	FirstName      *string         `json:"first_name"`
+	LastName       *string         `json:"last_name"`
+	Role           models.UserRole `json:"role"`
+	InitialBalance float64         `json:"initial_balance"`
+	CreatedAt      time.Time       `json:"created_at"`
+	LastLogin      *time.Time      `json:"last_login,omitempty"`
+	IsActive       bool            `json:"is_active"`
+	Preferences    string          `json:"preferences,omitempty"`
 }
 
 type UserSummaryResponse struct {
@@ -53,6 +54,9 @@ type RefreshResponse struct {
 }
 
 func ToUserResponse(user *models.User) UserResponse {
+	prefs, _ := user.GetPreferences()
+	prefsJSON, _ := json.Marshal(prefs)
+
 	return UserResponse{
 		ID:             user.ID,
 		Username:       user.Username,
@@ -64,7 +68,7 @@ func ToUserResponse(user *models.User) UserResponse {
 		CreatedAt:      user.CreatedAt,
 		LastLogin:      user.LastLogin,
 		IsActive:       user.IsActive,
-		Preferences:    user.Preferences,
+		Preferences:    string(prefsJSON),
 	}
 }
 

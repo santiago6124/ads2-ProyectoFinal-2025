@@ -139,7 +139,7 @@ func (s *userService) UpdateUser(id int32, req *models.UpdateUserRequest) (*mode
 		}
 	}
 
-	if req.Preferences != nil {
+	if req.Preferences != "" {
 		user.Preferences = req.Preferences
 	}
 
