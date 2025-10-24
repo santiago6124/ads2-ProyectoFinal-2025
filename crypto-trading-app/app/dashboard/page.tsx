@@ -8,6 +8,7 @@ import { PortfolioOverview } from "@/components/portfolio-overview"
 import { QuickStats } from "@/components/quick-stats"
 import { TrendingCoins } from "@/components/trending-coins"
 import { RecentActivity } from "@/components/recent-activity"
+import { CryptoPricesGrid } from "@/components/crypto-prices"
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth()
@@ -41,6 +42,11 @@ export default function DashboardPage() {
         </div>
 
         <QuickStats />
+
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Market Prices</h2>
+          <CryptoPricesGrid />
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">

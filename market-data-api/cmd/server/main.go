@@ -20,6 +20,20 @@ func main() {
 	
 	router := gin.Default()
 
+	// Add CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+		
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		
+		c.Next()
+	})
+
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -54,7 +68,7 @@ func getPriceBySymbol(c *gin.Context) {
 	symbol := c.Param("symbol")
 	c.JSON(http.StatusOK, gin.H{
 		"symbol": symbol,
-		"price":  "50000.00",
+		"price":  50000.00,
 		"timestamp": time.Now().Unix(),
 	})
 }
@@ -64,8 +78,8 @@ func getPriceHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"symbol": symbol,
 		"history": []gin.H{
-			{"timestamp": time.Now().Add(-1 * time.Hour).Unix(), "price": "49500.00"},
-			{"timestamp": time.Now().Unix(), "price": "50000.00"},
+			{"timestamp": time.Now().Add(-1 * time.Hour).Unix(), "price": 49500.00},
+			{"timestamp": time.Now().Unix(), "price": 50000.00},
 		},
 	})
 }
