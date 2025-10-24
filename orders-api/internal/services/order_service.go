@@ -15,7 +15,7 @@ import (
 )
 
 type OrderService interface {
-	CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int, metadata *models.OrderMetadata) (*models.Order, error)
+	CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int) (*models.Order, error)
 	GetOrder(ctx context.Context, orderID string, userID int) (*models.Order, error)
 	UpdateOrder(ctx context.Context, orderID string, req *dto.UpdateOrderRequest, userID int) (*models.Order, error)
 	CancelOrder(ctx context.Context, orderID string, userID int, reason string) error
@@ -63,7 +63,7 @@ type EventPublisher interface {
 	PublishOrderFailed(ctx context.Context, order *models.Order, reason string) error
 }
 
-func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int, metadata *models.OrderMetadata) (*models.Order, error) {
+func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int) (*models.Order, error) {
 	if err := req.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
@@ -82,10 +82,6 @@ func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequ
 			cryptoInfo.MinQuantity.String(), cryptoInfo.MaxQuantity.String())
 	}
 
-	if !s.marketService.IsMarketOpen(ctx) && req.OrderType == models.OrderKindMarket {
-		return nil, fmt.Errorf("market orders are not allowed when market is closed")
-	}
-
 	var orderPrice decimal.Decimal
 	if req.OrderType == models.OrderKindLimit {
 		if req.LimitPrice == nil {
@@ -102,38 +98,28 @@ func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequ
 
 	totalAmount := req.Quantity.Mul(orderPrice)
 
-	feeCalculation, err := s.feeCalculator.CalculateForAmount(ctx, totalAmount, req.OrderType)
+	feeCalculation, err := s.feeCalculator.CalculateForAmount(ctx, totalAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate fees: %w", err)
 	}
 
 	order := &models.Order{
-		ID:           primitive.NewObjectID(),
-		OrderNumber:  models.NewOrderNumber(),
-		UserID:       userID,
-		Type:         req.Type,
-		Status:       models.OrderStatusPending,
-		CryptoSymbol: req.CryptoSymbol,
-		CryptoName:   cryptoInfo.Name,
-		Quantity:     req.Quantity,
-		OrderKind:    req.OrderType,
-		LimitPrice:   req.LimitPrice,
-		OrderPrice:   orderPrice,
-		TotalAmount:  totalAmount,
-		Fee:          feeCalculation.TotalFee,
+		ID:            primitive.NewObjectID(),
+		OrderNumber:   models.NewOrderNumber(),
+		UserID:        userID,
+		Type:          req.Type,
+		Status:        models.OrderStatusPending,
+		CryptoSymbol:  req.CryptoSymbol,
+		CryptoName:    cryptoInfo.Name,
+		Quantity:      req.Quantity,
+		OrderKind:     req.OrderType,
+		LimitPrice:    req.LimitPrice,
+		OrderPrice:    orderPrice,
+		TotalAmount:   totalAmount,
+		Fee:           feeCalculation.TotalFee,
 		FeePercentage: feeCalculation.FeePercentage,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-		Validation: &models.OrderValidation{
-			UserVerified:   true,
-			BalanceChecked: false,
-			MarketHours:    s.marketService.IsMarketOpen(ctx),
-			RiskAssessment: "pending",
-		},
-		Metadata: metadata,
-		Audit: &models.OrderAudit{
-			CreatedBy: userID,
-		},
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	if err := s.orderRepo.Create(ctx, order); err != nil {
@@ -182,7 +168,6 @@ func (s *orderService) handleOrderExecutionSuccess(ctx context.Context, order *m
 		Slippage:              result.MarketPrice.Slippage,
 		SlippagePercentage:    result.MarketPrice.SlippagePerc,
 		ExecutionTimeMs:       result.ExecutionTime.Milliseconds(),
-		Retries:               0,
 		ExecutionID:           result.ExecutionID,
 	}
 

@@ -30,15 +30,6 @@ const (
 	OrderKindLimit  OrderKind = "limit"
 )
 
-type TimeInForce string
-
-const (
-	TimeInForceGTC TimeInForce = "GTC" // Good Till Cancelled
-	TimeInForceGTD TimeInForce = "GTD" // Good Till Date
-	TimeInForceIOC TimeInForce = "IOC" // Immediate Or Cancel
-	TimeInForceFOK TimeInForce = "FOK" // Fill Or Kill
-)
-
 type OrderFilter struct {
 	Status       []OrderStatus `json:"status,omitempty"`
 	CryptoSymbol string        `json:"crypto_symbol,omitempty"`
@@ -77,14 +68,6 @@ type Order struct {
 	UpdatedAt        time.Time         `bson:"updated_at" json:"updated_at"`
 	CancelledAt      *time.Time        `bson:"cancelled_at,omitempty" json:"cancelled_at,omitempty"`
 	ExecutionDetails *ExecutionDetails `bson:"execution_details,omitempty" json:"execution_details,omitempty"`
-	StopPrice        *decimal.Decimal  `bson:"stop_price,omitempty" json:"stop_price,omitempty"`
-	FilledQuantity   decimal.Decimal   `bson:"filled_quantity" json:"filled_quantity"`
-	AveragePrice     *decimal.Decimal  `bson:"average_price,omitempty" json:"average_price,omitempty"`
-	TimeInForce      TimeInForce       `bson:"time_in_force" json:"time_in_force"`
-	ExpiresAt        *time.Time        `bson:"expires_at,omitempty" json:"expires_at,omitempty"`
-	Validation       *OrderValidation  `bson:"validation,omitempty" json:"validation,omitempty"`
-	Metadata         *OrderMetadata    `bson:"metadata,omitempty" json:"metadata,omitempty"`
-	Audit            *OrderAudit       `bson:"audit,omitempty" json:"audit,omitempty"`
 }
 
 type ExecutionDetails struct {
@@ -92,39 +75,7 @@ type ExecutionDetails struct {
 	Slippage              decimal.Decimal `bson:"slippage" json:"slippage"`
 	SlippagePercentage    decimal.Decimal `bson:"slippage_percentage" json:"slippage_percentage"`
 	ExecutionTimeMs       int64          `bson:"execution_time_ms" json:"execution_time_ms"`
-	Retries               int            `bson:"retries" json:"retries"`
 	ExecutionID           string         `bson:"execution_id" json:"execution_id"`
-}
-
-type OrderValidation struct {
-	UserVerified     bool   `bson:"user_verified" json:"user_verified"`
-	BalanceChecked   bool   `bson:"balance_checked" json:"balance_checked"`
-	MarketHours      bool   `bson:"market_hours" json:"market_hours"`
-	RiskAssessment   string `bson:"risk_assessment" json:"risk_assessment"`
-	ValidationErrors []string `bson:"validation_errors,omitempty" json:"validation_errors,omitempty"`
-}
-
-type OrderMetadata struct {
-	IPAddress   string `bson:"ip_address" json:"ip_address"`
-	UserAgent   string `bson:"user_agent" json:"user_agent"`
-	Platform    string `bson:"platform" json:"platform"`
-	APIVersion  string `bson:"api_version" json:"api_version"`
-	SessionID   string `bson:"session_id" json:"session_id"`
-}
-
-type OrderAudit struct {
-	CreatedBy     int                  `bson:"created_by" json:"created_by"`
-	ModifiedBy    *int                 `bson:"modified_by,omitempty" json:"modified_by,omitempty"`
-	Modifications []OrderModification  `bson:"modifications,omitempty" json:"modifications,omitempty"`
-}
-
-type OrderModification struct {
-	Field        string      `bson:"field" json:"field"`
-	OldValue     interface{} `bson:"old_value" json:"old_value"`
-	NewValue     interface{} `bson:"new_value" json:"new_value"`
-	ModifiedBy   int         `bson:"modified_by" json:"modified_by"`
-	ModifiedAt   time.Time   `bson:"modified_at" json:"modified_at"`
-	Reason       string      `bson:"reason,omitempty" json:"reason,omitempty"`
 }
 
 func (o *Order) IsEditable() bool {
