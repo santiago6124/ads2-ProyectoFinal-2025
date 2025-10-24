@@ -25,40 +25,36 @@ func NewOrderHandler(orderService services.OrderService) *OrderHandler {
 
 type CreateOrderRequest struct {
 	Type         string `json:"type" binding:"required,oneof=buy sell"`
-	OrderKind    string `json:"order_kind" binding:"required,oneof=market limit stop"`
+	OrderKind    string `json:"order_kind" binding:"required,oneof=market limit"`
 	CryptoSymbol string `json:"crypto_symbol" binding:"required"`
 	Quantity     string `json:"quantity" binding:"required"`
 	OrderPrice   string `json:"order_price,omitempty"`
-	StopPrice    string `json:"stop_price,omitempty"`
-	TimeInForce  string `json:"time_in_force,omitempty"`
-	ExpiresAt    string `json:"expires_at,omitempty"`
 }
 
 type UpdateOrderRequest struct {
-	OrderPrice  string `json:"order_price,omitempty"`
-	StopPrice   string `json:"stop_price,omitempty"`
-	Quantity    string `json:"quantity,omitempty"`
-	TimeInForce string `json:"time_in_force,omitempty"`
-	ExpiresAt   string `json:"expires_at,omitempty"`
+	OrderPrice string `json:"order_price,omitempty"`
+	Quantity   string `json:"quantity,omitempty"`
 }
 
 type OrderResponse struct {
-	ID             string                 `json:"id"`
-	UserID         int                    `json:"user_id"`
-	Type           string                 `json:"type"`
-	OrderKind      string                 `json:"order_kind"`
-	Status         string                 `json:"status"`
-	CryptoSymbol   string                 `json:"crypto_symbol"`
-	Quantity       string                 `json:"quantity"`
-	OrderPrice     string                 `json:"order_price"`
-	StopPrice      string                 `json:"stop_price,omitempty"`
-	FilledQuantity string                 `json:"filled_quantity"`
-	AveragePrice   string                 `json:"average_price"`
-	TimeInForce    string                 `json:"time_in_force"`
-	ExpiresAt      *time.Time             `json:"expires_at,omitempty"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	ID             string     `json:"id"`
+	OrderNumber    string     `json:"order_number"`
+	UserID         int        `json:"user_id"`
+	Type           string     `json:"type"`
+	OrderKind      string     `json:"order_kind"`
+	Status         string     `json:"status"`
+	CryptoSymbol   string     `json:"crypto_symbol"`
+	CryptoName     string     `json:"crypto_name"`
+	Quantity       string     `json:"quantity"`
+	OrderPrice     string     `json:"order_price"`
+	ExecutionPrice string     `json:"execution_price,omitempty"`
+	TotalAmount    string     `json:"total_amount"`
+	Fee            string     `json:"fee"`
+	FeePercentage  string     `json:"fee_percentage"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExecutedAt     *time.Time `json:"executed_at,omitempty"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	CancelledAt    *time.Time `json:"cancelled_at,omitempty"`
 }
 
 type OrderListResponse struct {
@@ -130,10 +126,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		LimitPrice:   &orderPrice,
 	}
 
-	createdOrder, err := h.orderService.CreateOrder(ctx, dtoReq, userID.(int), &models.OrderMetadata{
-		UserAgent: c.GetHeader("User-Agent"),
-		IPAddress: c.ClientIP(),
-	})
+	createdOrder, err := h.orderService.CreateOrder(ctx, dtoReq, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -414,31 +407,27 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 
 func (h *OrderHandler) convertToOrderResponse(order *models.Order) *OrderResponse {
 	response := &OrderResponse{
-		ID:             order.ID.Hex(),
-		UserID:         order.UserID,
-		Type:           string(order.Type),
-		OrderKind:      string(order.OrderKind),
-		Status:         string(order.Status),
-		CryptoSymbol:   order.CryptoSymbol,
-		Quantity:       order.Quantity.String(),
-		OrderPrice:     order.OrderPrice.String(),
-		FilledQuantity: order.FilledQuantity.String(),
-		AveragePrice:   order.AveragePrice.String(),
-		TimeInForce:    string(order.TimeInForce),
-		CreatedAt:      order.CreatedAt,
-		UpdatedAt:      order.UpdatedAt,
-		ExpiresAt:      order.ExpiresAt,
+		ID:            order.ID.Hex(),
+		OrderNumber:   order.OrderNumber,
+		UserID:        order.UserID,
+		Type:          string(order.Type),
+		OrderKind:     string(order.OrderKind),
+		Status:        string(order.Status),
+		CryptoSymbol:  order.CryptoSymbol,
+		CryptoName:    order.CryptoName,
+		Quantity:      order.Quantity.String(),
+		OrderPrice:    order.OrderPrice.String(),
+		TotalAmount:   order.TotalAmount.String(),
+		Fee:           order.Fee.String(),
+		FeePercentage: order.FeePercentage.String(),
+		CreatedAt:     order.CreatedAt,
+		UpdatedAt:     order.UpdatedAt,
+		ExecutedAt:    order.ExecutedAt,
+		CancelledAt:   order.CancelledAt,
 	}
 
-	if !order.StopPrice.IsZero() {
-		response.StopPrice = order.StopPrice.String()
-	}
-
-	if order.Metadata.UserAgent != "" || order.Metadata.IPAddress != "" {
-		response.Metadata = map[string]interface{}{
-			"user_agent": order.Metadata.UserAgent,
-			"ip_address": order.Metadata.IPAddress,
-		}
+	if order.ExecutionPrice != nil {
+		response.ExecutionPrice = order.ExecutionPrice.String()
 	}
 
 	return response
