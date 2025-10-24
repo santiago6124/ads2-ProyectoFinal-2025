@@ -156,7 +156,7 @@ export default function MarketsPage() {
                 </thead>
                 <tbody>
                   {cryptoData.map((crypto, index) => (
-                    <tr key={crypto.symbol} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                    <tr key={`${crypto.symbol}-${crypto.name}-${index}`} className="border-b border-white/10 hover:bg-white/5 transition-colors">
                       <td className="p-4">
                         <span className="text-sm text-white/60">{index + 1}</span>
                       </td>

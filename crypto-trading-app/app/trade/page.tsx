@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Loader2, TrendingUp, TrendingDown } from "lucide-react"
 import { marketApiService, PriceData } from "@/lib/market-api"
+import { ordersApiService, OrderRequest } from "@/lib/orders-api"
 import { useToast } from "@/hooks/use-toast"
 
 function TradeContent() {
@@ -21,6 +22,8 @@ function TradeContent() {
   const [loading, setLoading] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [placing, setPlacing] = useState(false)
+  const [quantity, setQuantity] = useState("")
+  const [orderType, setOrderType] = useState<"buy" | "sell">("buy")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -65,25 +68,59 @@ function TradeContent() {
   }
 
   const handleBuy = async () => {
-    if (!selectedCrypto) return
+    if (!selectedCrypto || !quantity || !user) return
+
+    const qty = parseFloat(quantity)
+    if (isNaN(qty) || qty <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Please enter a valid quantity greater than 0",
+        variant: "destructive"
+      })
+      return
+    }
 
     try {
       setPlacing(true)
       
-      // Simulate buy order
-      const orderId = `buy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Calculate total cost
+      const totalCost = qty * selectedCrypto.price
+      
+      // Create order payload
+      const orderData: OrderRequest = {
+        user_id: user.id,
+        symbol: selectedCrypto.symbol,
+        order_type: "buy",
+        quantity: qty,
+        price: selectedCrypto.price,
+        total_cost: totalCost
+      }
       
       console.log('=== BUY ORDER PLACED ===')
-      console.log('Order ID:', orderId)
-      console.log('Crypto:', selectedCrypto.symbol)
-      console.log('Price:', selectedCrypto.price)
-      console.log('User ID:', user?.id)
+      console.log('Order Data:', orderData)
       console.log('========================')
 
-      toast({
-        title: "Buy Order Placed",
-        description: `Successfully placed buy order for ${selectedCrypto.symbol}`,
-      })
+      // Create order via Orders API
+      try {
+        const orderResponse = await ordersApiService.createOrder(orderData)
+        console.log('Order created successfully:', orderResponse)
+        
+        toast({
+          title: "Buy Order Placed",
+          description: `Buy order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+        })
+      } catch (apiError) {
+        console.error('API Error:', apiError)
+        toast({
+          title: "Order Failed",
+          description: apiError instanceof Error ? apiError.message : "Failed to place buy order",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Reset form
+      setQuantity("")
     } catch (error) {
       toast({
         title: "Order Failed",
@@ -96,25 +133,59 @@ function TradeContent() {
   }
 
   const handleSell = async () => {
-    if (!selectedCrypto) return
+    if (!selectedCrypto || !quantity || !user) return
+
+    const qty = parseFloat(quantity)
+    if (isNaN(qty) || qty <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Please enter a valid quantity greater than 0",
+        variant: "destructive"
+      })
+      return
+    }
 
     try {
       setPlacing(true)
       
-      // Simulate sell order
-      const orderId = `sell_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Calculate total value
+      const totalValue = qty * selectedCrypto.price
+      
+      // Create order payload
+      const orderData: OrderRequest = {
+        user_id: user.id,
+        symbol: selectedCrypto.symbol,
+        order_type: "sell",
+        quantity: qty,
+        price: selectedCrypto.price,
+        total_value: totalValue
+      }
       
       console.log('=== SELL ORDER PLACED ===')
-      console.log('Order ID:', orderId)
-      console.log('Crypto:', selectedCrypto.symbol)
-      console.log('Price:', selectedCrypto.price)
-      console.log('User ID:', user?.id)
+      console.log('Order Data:', orderData)
       console.log('========================')
 
-      toast({
-        title: "Sell Order Placed",
-        description: `Successfully placed sell order for ${selectedCrypto.symbol}`,
-      })
+      // Create order via Orders API
+      try {
+        const orderResponse = await ordersApiService.createOrder(orderData)
+        console.log('Order created successfully:', orderResponse)
+        
+        toast({
+          title: "Sell Order Placed",
+          description: `Sell order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+        })
+      } catch (apiError) {
+        console.error('API Error:', apiError)
+        toast({
+          title: "Order Failed",
+          description: apiError instanceof Error ? apiError.message : "Failed to place sell order",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Reset form
+      setQuantity("")
     } catch (error) {
       toast({
         title: "Order Failed",
@@ -194,9 +265,9 @@ function TradeContent() {
                     crypto.symbol.toLowerCase().includes(searchQuery.toLowerCase())
                   )
                   .slice(0, 10)
-                  .map((crypto) => (
+                  .map((crypto, index) => (
                     <div
-                      key={crypto.symbol}
+                      key={`${crypto.symbol}-${crypto.name}-${index}`}
                       className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-white/10 last:border-b-0"
                       onClick={() => {
                         setSelectedCrypto(crypto)
@@ -281,13 +352,40 @@ function TradeContent() {
                 </div>
               </div>
 
+              {/* Quantity Input */}
+              <div className="space-y-4">
+                <div className="text-center">
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Quantity ({selectedCrypto.symbol})
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Enter quantity"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="w-64 mx-auto bg-black border-white/10 text-white placeholder:text-white/60 text-center text-lg"
+                    min="0"
+                    step="0.000001"
+                  />
+                </div>
+                
+                {quantity && !isNaN(parseFloat(quantity)) && parseFloat(quantity) > 0 && (
+                  <div className="text-center space-y-2">
+                    <p className="text-white/60 text-sm">Total Cost</p>
+                    <p className="text-2xl font-bold text-white">
+                      {formatPrice(parseFloat(quantity) * selectedCrypto.price)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
               <div className="flex gap-4 justify-center">
                 <Button
                   size="lg"
                   className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg font-semibold"
                   onClick={handleBuy}
-                  disabled={placing}
+                  disabled={placing || !quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0}
                 >
                   {placing ? (
                     <>
@@ -302,7 +400,7 @@ function TradeContent() {
                   size="lg"
                   className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-lg font-semibold"
                   onClick={handleSell}
-                  disabled={placing}
+                  disabled={placing || !quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0}
                 >
                   {placing ? (
                     <>
