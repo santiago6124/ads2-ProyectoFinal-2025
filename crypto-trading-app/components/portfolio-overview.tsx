@@ -13,13 +13,13 @@ const holdings = [
 
 export function PortfolioOverview() {
   return (
-    <Card className="p-6 bg-linear-to-br from-slate-900 to-slate-800 border-slate-700 shadow-lg">
+    <Card className="p-6 bg-black border border-white/10 shadow-lg">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white">Your Holdings</h2>
-          <p className="text-sm text-slate-400 mt-1">Current cryptocurrency positions</p>
+          <p className="text-sm text-white/60 mt-1">Current cryptocurrency positions</p>
         </div>
-        <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+        <Button variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
           View All
         </Button>
       </div>
@@ -28,15 +28,15 @@ export function PortfolioOverview() {
         {holdings.map((holding) => (
           <div
             key={holding.symbol}
-            className="flex items-center justify-between p-4 rounded-xl bg-slate-800/50 border border-slate-700 hover:bg-slate-700/50 transition-all duration-300"
+            className="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all duration-300"
           >
             <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-xl bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <div className="h-14 w-14 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg border border-white/10">
                 <span className="text-sm font-bold text-white">{holding.symbol}</span>
               </div>
               <div>
                 <p className="font-bold text-white">{holding.name}</p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-white/60">
                   {holding.amount} {holding.symbol}
                 </p>
               </div>
@@ -44,8 +44,8 @@ export function PortfolioOverview() {
             <div className="text-right">
               <p className="font-bold text-white">{holding.value}</p>
               <div
-                className={`flex items-center justify-end gap-1 text-sm font-bold px-2 py-1 rounded-full ${
-                  holding.trend === "up" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                className={`flex items-center justify-end gap-1 text-sm font-bold px-2 py-1 rounded-full border ${
+                  holding.trend === "up" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"
                 }`}
               >
                 {holding.trend === "up" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}

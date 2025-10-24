@@ -30,12 +30,12 @@ type CoinGeckoResponse []CoinGeckoPrice
 
 // Symbol mapping for CoinGecko
 var symbolToID = map[string]string{
-	"BTC": "bitcoin",
-	"ETH": "ethereum", 
-	"ADA": "cardano",
-	"SOL": "solana",
+	"BTC":   "bitcoin",
+	"ETH":   "ethereum",
+	"ADA":   "cardano",
+	"SOL":   "solana",
 	"MATIC": "matic-network",
-	"AVAX": "avalanche-2",
+	"AVAX":  "avalanche-2",
 }
 
 // Simple cache structure
@@ -45,6 +45,7 @@ type CacheEntry struct {
 }
 
 var priceCache = make(map[string]CacheEntry)
+
 const cacheExpiry = 5 * time.Minute // Cache for 5 minutes
 
 func main() {
@@ -103,14 +104,14 @@ func getPrices(c *gin.Context) {
 	// Get symbols from query parameter or use default
 	symbolsParam := c.Query("symbols")
 	var symbols []string
-	
+
 	if symbolsParam != "" {
 		symbols = strings.Split(symbolsParam, ",")
 	} else {
 		// Default symbols
 		symbols = []string{"BTC", "ETH", "ADA"}
 	}
-	
+
 	// Fetch real data from CoinGecko
 	data, err := fetchCoinGeckoData(symbols)
 	if err != nil {
@@ -120,21 +121,21 @@ func getPrices(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// Convert to our response format
 	var response []gin.H
 	for _, coin := range data {
 		response = append(response, gin.H{
-			"symbol": strings.ToUpper(coin.Symbol),
-			"name":   coin.Name,
-			"price":  coin.CurrentPrice,
+			"symbol":     strings.ToUpper(coin.Symbol),
+			"name":       coin.Name,
+			"price":      coin.CurrentPrice,
 			"change_24h": coin.PriceChange24hPct,
 			"market_cap": coin.MarketCap,
-			"volume": coin.TotalVolume,
-			"timestamp": time.Now().Unix(),
+			"volume":     coin.TotalVolume,
+			"timestamp":  time.Now().Unix(),
 		})
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": response,
 	})
@@ -143,7 +144,7 @@ func getPrices(c *gin.Context) {
 func getPriceBySymbol(c *gin.Context) {
 	symbol := c.Param("symbol")
 	log.Printf("Fetching price for symbol: %s", symbol)
-	
+
 	// Fetch real data from CoinGecko
 	data, err := fetchCoinGeckoData([]string{symbol})
 	if err != nil {
@@ -153,9 +154,9 @@ func getPriceBySymbol(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	log.Printf("CoinGecko data received: %+v", data)
-	
+
 	// Find the specific coin
 	coin, err := findPriceBySymbol(data, symbol)
 	if err != nil {
@@ -165,17 +166,17 @@ func getPriceBySymbol(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	log.Printf("Found coin: %+v", coin)
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"symbol": strings.ToUpper(coin.Symbol),
-		"name":   coin.Name,
-		"price":  coin.CurrentPrice,
+		"symbol":     strings.ToUpper(coin.Symbol),
+		"name":       coin.Name,
+		"price":      coin.CurrentPrice,
 		"change_24h": coin.PriceChange24hPct,
 		"market_cap": coin.MarketCap,
-		"volume": coin.TotalVolume,
-		"timestamp": time.Now().Unix(),
+		"volume":     coin.TotalVolume,
+		"timestamp":  time.Now().Unix(),
 	})
 }
 
@@ -194,13 +195,13 @@ func getPriceHistory(c *gin.Context) {
 func fetchCoinGeckoData(symbols []string) (CoinGeckoResponse, error) {
 	// Create cache key
 	cacheKey := strings.Join(symbols, ",")
-	
+
 	// Check cache first
 	if cachedData, found := getCachedData(cacheKey); found {
 		log.Printf("Using cached data for symbols: %s", cacheKey)
 		return cachedData, nil
 	}
-	
+
 	// Build the URL with the required coin IDs
 	var ids []string
 	for _, symbol := range symbols {
@@ -208,47 +209,47 @@ func fetchCoinGeckoData(symbols []string) (CoinGeckoResponse, error) {
 			ids = append(ids, id)
 		}
 	}
-	
+
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("no valid symbols provided")
 	}
-	
+
 	// Create the URL
-	url := fmt.Sprintf("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=%s&order=market_cap_desc&per_page=100&page=1&sparkline=false", 
+	url := fmt.Sprintf("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=%s&order=market_cap_desc&per_page=100&page=1&sparkline=false",
 		fmt.Sprintf("%s", ids[0]))
 	for i := 1; i < len(ids); i++ {
 		url += fmt.Sprintf(",%s", ids[i])
 	}
-	
+
 	log.Printf("Fetching from CoinGecko: %s", url)
-	
+
 	// Make the HTTP request
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("CoinGecko API returned status: %d", resp.StatusCode)
 	}
-	
+
 	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var data CoinGeckoResponse
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache the data
 	setCachedData(cacheKey, data)
 	log.Printf("Cached data for symbols: %s", cacheKey)
-	
+
 	return data, nil
 }
 
@@ -268,12 +269,12 @@ func getCachedData(cacheKey string) (CoinGeckoResponse, bool) {
 	if !exists {
 		return nil, false
 	}
-	
+
 	if time.Since(entry.Timestamp) > cacheExpiry {
 		delete(priceCache, cacheKey)
 		return nil, false
 	}
-	
+
 	return entry.Data, true
 }
 

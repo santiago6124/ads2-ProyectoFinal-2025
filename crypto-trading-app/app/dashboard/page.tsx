@@ -30,15 +30,15 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8 bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen p-6">
+      <div className="space-y-8 bg-black min-h-screen p-6">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight bg-linear-to-r from-blue-400 via-purple-500 to-cyan-400 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold tracking-tight text-white">
             Welcome back, {user?.first_name && user?.last_name 
               ? `${user.first_name} ${user.last_name}`
               : user?.username || 'User'
             }
           </h1>
-          <p className="text-slate-400 mt-2 text-lg">Here's what's happening with your portfolio today.</p>
+          <p className="text-white/60 mt-2 text-lg">Here's what's happening with your portfolio today.</p>
         </div>
 
         <QuickStats />

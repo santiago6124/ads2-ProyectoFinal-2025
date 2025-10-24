@@ -43,14 +43,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-black">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 border-r border-slate-200 bg-white fixed left-0 top-0 h-screen">
-        <div className="flex items-center gap-2 h-16 px-6 border-b border-slate-200">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 border-r border-white/10 bg-black fixed left-0 top-0 h-screen">
+        <div className="flex items-center gap-2 h-16 px-6 border-b border-white/10">
+          <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center border border-white/10">
             <TrendingUp className="h-5 w-5 text-white" />
           </div>
-          <span className="text-xl font-bold text-slate-900">CryptoTrade</span>
+          <span className="text-xl font-bold text-white">CryptoTrade</span>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -63,8 +63,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+                    ? "bg-blue-500 text-white"
+                    : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
               >
                 <item.icon className="h-5 w-5" />
@@ -74,10 +74,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-white/10">
           <Link href="/settings" className="block">
-            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/10">
+              <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10">
                 <span className="text-sm font-semibold text-white">
                   {user?.first_name && user?.last_name 
                     ? `${user.first_name[0]}${user.last_name[0]}`
@@ -86,17 +86,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-slate-900">
+                <p className="text-sm font-medium truncate text-white">
                   {user?.first_name && user?.last_name 
                     ? `${user.first_name} ${user.last_name}`
                     : user?.username || 'User'
                   }
                 </p>
-                <p className="text-xs text-slate-600 truncate">{user?.email}</p>
+                <p className="text-xs text-white/60 truncate">{user?.email}</p>
               </div>
             </div>
           </Link>
-          <Button variant="ghost" className="w-full justify-start text-slate-700 hover:text-slate-900 hover:bg-slate-100" onClick={handleLogout}>
+          <Button variant="ghost" className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-2" />
             Logout
           </Button>
@@ -106,21 +106,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:ml-64">
         {/* Mobile Header */}
-        <header className="lg:hidden flex items-center justify-between h-16 px-4 border-b border-border bg-white">
+        <header className="lg:hidden flex items-center justify-between h-16 px-4 border-b border-white/10 bg-black">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center border border-white/10">
               <TrendingUp className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-slate-900">CryptoTrade</span>
+            <span className="text-xl font-bold text-white">CryptoTrade</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-slate-700 hover:text-slate-900">
+          <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white/70 hover:text-white">
             {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </Button>
         </header>
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-b border-border bg-white p-4">
+          <div className="lg:hidden border-b border-white/10 bg-black p-4">
             <nav className="space-y-1 mb-4">
               {navigation.map((item) => {
                 const isActive = pathname === item.href
@@ -132,8 +132,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-blue-600 text-white"
-                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+                        ? "bg-blue-500 text-white"
+                        : "text-white/70 hover:bg-white/10 hover:text-white",
                     )}
                   >
                     <item.icon className="h-5 w-5" />
@@ -142,7 +142,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 )
               })}
             </nav>
-            <Button variant="outline" className="w-full justify-start bg-transparent border-slate-300 text-slate-700 hover:bg-slate-50" onClick={handleLogout}>
+            <Button variant="outline" className="w-full justify-start bg-transparent border-white/20 text-white hover:bg-white/10" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               Logout
             </Button>
@@ -150,7 +150,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-black">
           <div className="container mx-auto p-6 lg:p-8">{children}</div>
         </main>
       </div>
