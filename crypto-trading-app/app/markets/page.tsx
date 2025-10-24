@@ -81,6 +81,22 @@ export default function MarketsPage() {
     }
   }
 
+  const getCryptoIcon = (symbol: string) => {
+    const iconMap: { [key: string]: string } = {
+      'BTC': 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
+      'ETH': 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
+      'BNB': 'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png',
+      'SOL': 'https://assets.coingecko.com/coins/images/4128/large/solana.png',
+      'XRP': 'https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png',
+      'ADA': 'https://assets.coingecko.com/coins/images/975/large/cardano.png',
+      'DOGE': 'https://assets.coingecko.com/coins/images/5/large/dogecoin.png',
+      'AVAX': 'https://assets.coingecko.com/coins/images/12559/large/Avalanche_Circle_RedWhite_Trans.png',
+      'DOT': 'https://assets.coingecko.com/coins/images/12171/large/polkadot.png',
+      'MATIC': 'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png'
+    }
+    return iconMap[symbol.toUpperCase()] || `https://assets.coingecko.com/coins/images/1/large/bitcoin.png`
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-8 bg-black min-h-screen p-6">
@@ -146,8 +162,21 @@ export default function MarketsPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10">
-                            <span className="text-sm font-bold text-white">{crypto.symbol}</span>
+                          <div className="h-10 w-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10 overflow-hidden">
+                            <img 
+                              src={getCryptoIcon(crypto.symbol)}
+                              alt={crypto.symbol}
+                              className="h-8 w-8 rounded-full"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `<span class="text-sm font-bold text-white">${crypto.symbol}</span>`;
+                                  parent.className = "h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10";
+                                }
+                              }}
+                            />
                           </div>
                           <div>
                             <p className="font-semibold text-white">{crypto.name}</p>
