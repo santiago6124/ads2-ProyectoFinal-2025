@@ -151,7 +151,7 @@ services:
       - cryptosim-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -180,7 +180,7 @@ services:
       - cryptosim-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8004/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8004/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -245,7 +245,7 @@ services:
       - ./portfolio-api/logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -288,7 +288,7 @@ services:
       - ./wallet-api/logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -305,7 +305,7 @@ services:
     image: mysql:8.0
     container_name: cryptosim-users-mysql
     ports:
-      - "3306:3306"
+      - "3307:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
       - MYSQL_DATABASE=users_db
@@ -466,7 +466,7 @@ services:
       "
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/admin/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/crypto_search/admin/ping"]
       interval: 30s
       timeout: 10s
       retries: 3
