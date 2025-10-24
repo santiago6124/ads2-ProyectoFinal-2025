@@ -12,13 +12,6 @@ type FeeCalculation struct {
 	MinimumFee    decimal.Decimal `json:"minimum_fee"`
 }
 
-// FeeResult represents the result of a fee calculation
-type FeeResult struct {
-	Fee           decimal.Decimal `json:"fee"`
-	FeePercentage decimal.Decimal `json:"fee_percentage"`
-	TotalAmount   decimal.Decimal `json:"total_amount"`
-}
-
 // NewFeeCalculation creates a new fee calculation with default 0.1% fee
 func NewFeeCalculation(orderValue decimal.Decimal) *FeeCalculation {
 	feePercentage := decimal.NewFromFloat(0.001) // 0.1%
@@ -45,8 +38,10 @@ func Calculate(orderValue decimal.Decimal) *FeeResult {
 	calc := NewFeeCalculation(orderValue)
 
 	return &FeeResult{
-		Fee:           calc.TotalFee,
+		BaseFee:       calc.TotalFee,
+		PercentageFee: calc.TotalFee,
+		TotalFee:      calc.TotalFee,
 		FeePercentage: calc.FeePercentage,
-		TotalAmount:   orderValue.Add(calc.TotalFee),
+		FeeType:       "taker",
 	}
 }

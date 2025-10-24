@@ -71,14 +71,14 @@ services:
       - SERVER_DEBUG=false
       - SERVER_CORS_ENABLED=true
       # Database
-      - MONGODB_URI=mongodb://orders-mongo:27017
+      - MONGODB_URI=mongodb://orders-mongo:27017/cryptosim_orders
       - MONGODB_DATABASE=cryptosim_orders
       - MONGODB_COLLECTION=orders
       - MONGODB_MAX_POOL_SIZE=100
       - MONGODB_MIN_POOL_SIZE=5
       # JWT
-      - JWT_SECRET_KEY=${JWT_SECRET:-super-secret-jwt-key-change-in-production}
-      - JWT_ISSUER=orders-api
+      - JWT_SECRET_KEY=${JWT_SECRET:-Holamundo-soy-untokensuperseguroajajajajaja}
+      - JWT_ISSUER=users-api
       - JWT_AUDIENCE=cryptosim
       - JWT_TOKEN_EXPIRY=24h
       # RabbitMQ
@@ -288,8 +288,6 @@ services:
     ports:
       - "27017:27017"
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
       - MONGO_INITDB_DATABASE=cryptosim_orders
     volumes:
       - orders-mongo-data:/data/db

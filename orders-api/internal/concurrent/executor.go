@@ -12,18 +12,18 @@ import (
 )
 
 type ExecutionService struct {
-	userClient    UserClient
-	walletClient  WalletClient
-	marketClient  MarketClient
-	feeCalculator FeeCalculator
-	config        *ExecutionConfig
+	userClient        UserClient
+	userBalanceClient UserBalanceClient
+	marketClient      MarketClient
+	feeCalculator     FeeCalculator
+	config            *ExecutionConfig
 }
 
 type UserClient interface {
 	VerifyUser(ctx context.Context, userID int) (*models.ValidationResult, error)
 }
 
-type WalletClient interface {
+type UserBalanceClient interface {
 	CheckBalance(ctx context.Context, userID int, amount decimal.Decimal) (*models.BalanceResult, error)
 	LockFunds(ctx context.Context, userID int, amount decimal.Decimal) error
 	ReleaseFunds(ctx context.Context, userID int, amount decimal.Decimal) error
@@ -48,13 +48,13 @@ type ExecutionConfig struct {
 	MaxExecutionTime time.Duration `json:"max_execution_time"`
 }
 
-func NewExecutionService(userClient UserClient, walletClient WalletClient, marketClient MarketClient, feeCalculator FeeCalculator, config *ExecutionConfig) *ExecutionService {
+func NewExecutionService(userClient UserClient, userBalanceClient UserBalanceClient, marketClient MarketClient, feeCalculator FeeCalculator, config *ExecutionConfig) *ExecutionService {
 	return &ExecutionService{
-		userClient:    userClient,
-		walletClient:  walletClient,
-		marketClient:  marketClient,
-		feeCalculator: feeCalculator,
-		config:        config,
+		userClient:        userClient,
+		userBalanceClient: userBalanceClient,
+		marketClient:      marketClient,
+		feeCalculator:     feeCalculator,
+		config:            config,
 	}
 }
 
@@ -108,7 +108,7 @@ func (s *ExecutionService) ExecuteOrderConcurrent(ctx context.Context, order *mo
 				}()
 
 				estimatedAmount := order.Quantity.Mul(order.OrderPrice)
-				balance, err := s.walletClient.CheckBalance(executionCtx, order.UserID, estimatedAmount)
+				balance, err := s.userBalanceClient.CheckBalance(executionCtx, order.UserID, estimatedAmount)
 				if err != nil {
 					step.Error = err.Error()
 					return nil, err

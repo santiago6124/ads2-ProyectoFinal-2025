@@ -30,6 +30,14 @@ const (
 	OrderKindLimit  OrderKind = "limit"
 )
 
+type TimeInForce string
+
+const (
+	TimeInForceGTC TimeInForce = "GTC" // Good Till Cancelled
+	TimeInForceIOC TimeInForce = "IOC" // Immediate or Cancel
+	TimeInForceFOK TimeInForce = "FOK" // Fill or Kill
+)
+
 type OrderFilter struct {
 	Status       []OrderStatus `json:"status,omitempty"`
 	CryptoSymbol string        `json:"crypto_symbol,omitempty"`
@@ -68,6 +76,9 @@ type Order struct {
 	UpdatedAt        time.Time         `bson:"updated_at" json:"updated_at"`
 	CancelledAt      *time.Time        `bson:"cancelled_at,omitempty" json:"cancelled_at,omitempty"`
 	ExecutionDetails *ExecutionDetails `bson:"execution_details,omitempty" json:"execution_details,omitempty"`
+	Metadata         map[string]interface{} `bson:"metadata,omitempty" json:"metadata,omitempty"`
+	Validation       *OrderValidation  `bson:"validation,omitempty" json:"validation,omitempty"`
+	Audit            *OrderAudit       `bson:"audit,omitempty" json:"audit,omitempty"`
 }
 
 type ExecutionDetails struct {
@@ -76,6 +87,30 @@ type ExecutionDetails struct {
 	SlippagePercentage    decimal.Decimal `bson:"slippage_percentage" json:"slippage_percentage"`
 	ExecutionTimeMs       int64          `bson:"execution_time_ms" json:"execution_time_ms"`
 	ExecutionID           string         `bson:"execution_id" json:"execution_id"`
+}
+
+type OrderValidation struct {
+	IsValid           bool     `json:"is_valid"`
+	ErrorMessage      string   `json:"error_message,omitempty"`
+	ValidatedAt       time.Time `json:"validated_at"`
+	ValidationErrors  []string `json:"validation_errors,omitempty"`
+}
+
+type OrderModification struct {
+	Field      string      `json:"field"`
+	OldValue   interface{} `json:"old_value"`
+	NewValue   interface{} `json:"new_value"`
+	ModifiedAt time.Time   `json:"modified_at"`
+	ModifiedBy string      `json:"modified_by"`
+	Reason     string      `json:"reason"`
+}
+
+type OrderAudit struct {
+	CreatedBy    string              `json:"created_by"`
+	CreatedAt    time.Time           `json:"created_at"`
+	ModifiedBy   string              `json:"modified_by"`
+	ModifiedAt   time.Time           `json:"modified_at"`
+	Modifications []OrderModification `json:"modifications,omitempty"`
 }
 
 func (o *Order) IsEditable() bool {

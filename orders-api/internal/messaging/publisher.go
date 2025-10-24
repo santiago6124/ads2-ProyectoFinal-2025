@@ -131,8 +131,8 @@ func (p *Publisher) PublishOrderCreated(ctx context.Context, order *models.Order
 		Metadata: map[string]interface{}{
 			"order_kind": string(order.OrderKind),
 			"created_at": order.CreatedAt,
-			"user_agent": order.Metadata.UserAgent,
-			"ip_address": order.Metadata.IPAddress,
+			"user_agent": order.Metadata["user_agent"],
+			"ip_address": order.Metadata["ip_address"],
 		},
 	}
 

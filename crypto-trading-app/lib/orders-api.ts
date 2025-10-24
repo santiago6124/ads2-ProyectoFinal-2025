@@ -1,13 +1,11 @@
 // Orders API service for creating and managing trading orders
 
 export interface OrderRequest {
-  user_id: number
-  symbol: string
-  order_type: "buy" | "sell"
-  quantity: number
-  price: number
-  total_cost?: number
-  total_value?: number
+  type: "buy" | "sell"
+  crypto_symbol: string
+  quantity: string
+  order_kind: "market" | "limit"  // Changed from order_type to order_kind
+  order_price?: string  // Added order_price field
 }
 
 export interface OrderResponse {
@@ -33,18 +31,25 @@ class OrdersApiService {
 
   async createOrder(orderData: OrderRequest): Promise<OrderResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/orders`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming JWT token is stored
+          'Authorization': `Bearer ${localStorage.getItem('crypto_access_token')}` // Using correct token key
         },
         body: JSON.stringify(orderData)
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to create order')
+        let errorMessage = 'Failed to create order'
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch (parseError) {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
 
       return await response.json()
@@ -56,9 +61,9 @@ class OrdersApiService {
 
   async getOrders(userId: number): Promise<OrderResponse[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/orders/user/${userId}`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/users/${userId}/orders`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('crypto_access_token')}`
         }
       })
 
@@ -75,9 +80,9 @@ class OrdersApiService {
 
   async getOrder(orderId: string): Promise<OrderResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/orders/${orderId}`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/orders/${orderId}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('crypto_access_token')}`
         }
       })
 
@@ -94,10 +99,10 @@ class OrdersApiService {
 
   async cancelOrder(orderId: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/orders/${orderId}`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/orders/${orderId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('crypto_access_token')}`
         }
       })
 

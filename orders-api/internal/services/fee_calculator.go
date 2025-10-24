@@ -8,6 +8,16 @@ import (
 	"orders-api/internal/models"
 )
 
+// FeeConfig represents configuration for fee calculation
+type FeeConfig struct {
+	BaseFeePercentage decimal.Decimal `json:"base_fee_percentage"`
+	MakerFee          decimal.Decimal `json:"maker_fee"`
+	TakerFee          decimal.Decimal `json:"taker_fee"`
+	MinimumFee        decimal.Decimal `json:"minimum_fee"`
+	MaximumFee        decimal.Decimal `json:"maximum_fee"`
+	VIPDiscounts      map[string]decimal.Decimal `json:"vip_discounts"`
+}
+
 // FeeCalculator interface defines fee calculation methods
 type FeeCalculator interface {
 	Calculate(ctx context.Context, order *models.Order) (*models.FeeResult, error)
@@ -20,11 +30,21 @@ type feeCalculator struct {
 	minimumFee    decimal.Decimal
 }
 
-// NewFeeCalculator creates a new fee calculator with fixed 0.1% fee
-func NewFeeCalculator() FeeCalculator {
+// NewFeeCalculator creates a new fee calculator with configuration
+func NewFeeCalculator(config *FeeConfig) FeeCalculator {
+	if config == nil {
+		// Default configuration
+		config = &FeeConfig{
+			BaseFeePercentage: decimal.NewFromFloat(0.001), // 0.1%
+			MakerFee:          decimal.NewFromFloat(0.0005), // 0.05%
+			TakerFee:          decimal.NewFromFloat(0.001),  // 0.1%
+			MinimumFee:        decimal.NewFromFloat(0.01),   // $0.01
+		}
+	}
+	
 	return &feeCalculator{
-		feePercentage: decimal.NewFromFloat(0.001), // 0.1%
-		minimumFee:    decimal.NewFromFloat(0.01),  // $0.01 minimum
+		feePercentage: config.TakerFee,
+		minimumFee:    config.MinimumFee,
 	}
 }
 
@@ -50,9 +70,11 @@ func (fc *feeCalculator) Calculate(ctx context.Context, order *models.Order) (*m
 	}
 
 	return &models.FeeResult{
-		Fee:           fee,
+		BaseFee:       fee,
+		PercentageFee: fee,
+		TotalFee:      fee,
 		FeePercentage: fc.feePercentage,
-		TotalAmount:   orderValue.Add(fee),
+		FeeType:       "taker",
 	}, nil
 }
 

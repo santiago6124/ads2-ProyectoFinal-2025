@@ -36,11 +36,6 @@ type orderService struct {
 	publisher     EventPublisher
 }
 
-type FeeCalculator interface {
-	Calculate(ctx context.Context, order *models.Order) (*models.FeeResult, error)
-	CalculateForAmount(ctx context.Context, amount decimal.Decimal, orderType models.OrderKind) (*models.FeeCalculation, error)
-}
-
 type MarketService interface {
 	GetCurrentPrice(ctx context.Context, symbol string) (decimal.Decimal, error)
 	ValidateSymbol(ctx context.Context, symbol string) (*CryptoInfo, error)
@@ -238,7 +233,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, orderID string, req *dto
 			Field:      "quantity",
 			OldValue:   order.Quantity,
 			NewValue:   *req.Quantity,
-			ModifiedBy: userID,
+			ModifiedBy: fmt.Sprintf("%d", userID),
 			ModifiedAt: time.Now(),
 		})
 		order.Quantity = *req.Quantity
@@ -249,7 +244,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, orderID string, req *dto
 			Field:      "limit_price",
 			OldValue:   order.LimitPrice,
 			NewValue:   *req.LimitPrice,
-			ModifiedBy: userID,
+			ModifiedBy: fmt.Sprintf("%d", userID),
 			ModifiedAt: time.Now(),
 		})
 		order.LimitPrice = req.LimitPrice
@@ -264,9 +259,9 @@ func (s *orderService) UpdateOrder(ctx context.Context, orderID string, req *dto
 			order.Audit = &models.OrderAudit{}
 		}
 		order.Audit.Modifications = append(order.Audit.Modifications, modifications...)
-		order.Audit.ModifiedBy = &userID
+		order.Audit.ModifiedBy = fmt.Sprintf("%d", userID)
 
-		feeCalculation, err := s.feeCalculator.CalculateForAmount(ctx, order.TotalAmount, order.OrderKind)
+		feeCalculation, err := s.feeCalculator.CalculateForAmount(ctx, order.TotalAmount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recalculate fees: %w", err)
 		}
@@ -307,7 +302,7 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID string, userID i
 		Field:      "status",
 		OldValue:   models.OrderStatusPending,
 		NewValue:   models.OrderStatusCancelled,
-		ModifiedBy: userID,
+		ModifiedBy: fmt.Sprintf("%d", userID),
 		ModifiedAt: now,
 		Reason:     reason,
 	})

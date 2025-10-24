@@ -88,12 +88,10 @@ function TradeContent() {
       
       // Create order payload
       const orderData: OrderRequest = {
-        user_id: user.id,
-        symbol: selectedCrypto.symbol,
-        order_type: "buy",
-        quantity: qty,
-        price: selectedCrypto.price,
-        total_cost: totalCost
+        type: "buy",
+        crypto_symbol: selectedCrypto.symbol,
+        quantity: qty.toString(),
+        order_kind: "market"  // Changed from order_type to order_kind
       }
       
       console.log('=== BUY ORDER PLACED ===')
@@ -153,12 +151,10 @@ function TradeContent() {
       
       // Create order payload
       const orderData: OrderRequest = {
-        user_id: user.id,
-        symbol: selectedCrypto.symbol,
-        order_type: "sell",
-        quantity: qty,
-        price: selectedCrypto.price,
-        total_value: totalValue
+        type: "sell",
+        crypto_symbol: selectedCrypto.symbol,
+        quantity: qty.toString(),
+        order_kind: "market"  // Changed from order_type to order_kind
       }
       
       console.log('=== SELL ORDER PLACED ===')

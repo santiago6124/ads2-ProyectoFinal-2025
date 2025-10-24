@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 	"orders-api/internal/dto"
 	"orders-api/internal/models"
 	"orders-api/internal/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type OrderHandler struct {
@@ -67,18 +68,16 @@ type OrderListResponse struct {
 }
 
 type ExecutionResponse struct {
-	OrderID         string                 `json:"order_id"`
-	Success         bool                   `json:"success"`
-	Error           string                 `json:"error,omitempty"`
-	ExecutionTime   time.Duration          `json:"execution_time"`
-	UserValidation  map[string]interface{} `json:"user_validation,omitempty"`
-	BalanceCheck    map[string]interface{} `json:"balance_check,omitempty"`
-	MarketPrice     map[string]interface{} `json:"market_price,omitempty"`
-	FeeCalculation  map[string]interface{} `json:"fee_calculation,omitempty"`
-	Steps           []map[string]interface{} `json:"steps,omitempty"`
+	OrderID        string                   `json:"order_id"`
+	Success        bool                     `json:"success"`
+	Error          string                   `json:"error,omitempty"`
+	ExecutionTime  time.Duration            `json:"execution_time"`
+	UserValidation map[string]interface{}   `json:"user_validation,omitempty"`
+	BalanceCheck   map[string]interface{}   `json:"balance_check,omitempty"`
+	MarketPrice    map[string]interface{}   `json:"market_price,omitempty"`
+	FeeCalculation map[string]interface{}   `json:"fee_calculation,omitempty"`
+	Steps          []map[string]interface{} `json:"steps,omitempty"`
 }
-
-
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	userID, exists := c.Get("user_id")
@@ -112,8 +111,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 			return
 		}
 	}
-
-
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
@@ -191,12 +188,12 @@ func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 	if status != "" {
 		statusPtr = (*models.OrderStatus)(&status)
 	}
-	
+
 	var symbolPtr *string
 	if symbol != "" {
 		symbolPtr = &symbol
 	}
-	
+
 	var typePtr *models.OrderType
 	if orderType != "" {
 		typePtr = (*models.OrderType)(&orderType)
@@ -282,15 +279,6 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 		updates["order_price"] = orderPrice
 	}
 
-	if req.StopPrice != "" {
-		stopPrice, err := decimal.NewFromString(req.StopPrice)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stop price format"})
-			return
-		}
-		updates["stop_price"] = stopPrice
-	}
-
 	if req.Quantity != "" {
 		quantity, err := decimal.NewFromString(req.Quantity)
 		if err != nil {
@@ -304,22 +292,9 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 		updates["quantity"] = quantity
 	}
 
-	if req.TimeInForce != "" {
-		updates["time_in_force"] = models.TimeInForce(req.TimeInForce)
-	}
-
-	if req.ExpiresAt != "" {
-		expiresAt, err := time.Parse(time.RFC3339, req.ExpiresAt)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid expires_at format, use RFC3339"})
-			return
-		}
-		updates["expires_at"] = &expiresAt
-	}
-
 	dtoReq := &dto.UpdateOrderRequest{}
 	// Convert updates map to DTO fields as needed
-	
+
 	updatedOrder, err := h.orderService.UpdateOrder(ctx, orderID, dtoReq, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -484,12 +459,12 @@ func (h *OrderHandler) convertToExecutionResponse(result *models.ExecutionResult
 		steps := make([]map[string]interface{}, len(result.ProcessingSteps))
 		for i, step := range result.ProcessingSteps {
 			steps[i] = map[string]interface{}{
-				"step":        step.Step,
-				"status":      step.Status,
-				"start_time":  step.StartTime,
-				"end_time":    step.EndTime,
-				"duration":    step.Duration,
-				"error":       step.Error,
+				"step":       step.Step,
+				"status":     step.Status,
+				"start_time": step.StartTime,
+				"end_time":   step.EndTime,
+				"duration":   step.Duration,
+				"error":      step.Error,
 			}
 		}
 		response.Steps = steps

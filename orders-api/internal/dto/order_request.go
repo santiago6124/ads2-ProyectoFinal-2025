@@ -1,8 +1,17 @@
 package dto
 
 import (
-	"github.com/shopspring/decimal"
 	"orders-api/internal/models"
+
+	"github.com/shopspring/decimal"
+)
+
+type TimeInForce string
+
+const (
+	TimeInForceGTC TimeInForce = "GTC" // Good Till Cancelled
+	TimeInForceIOC TimeInForce = "IOC" // Immediate or Cancel
+	TimeInForceFOK TimeInForce = "FOK" // Fill or Kill
 )
 
 type CreateOrderRequest struct {
@@ -14,19 +23,22 @@ type CreateOrderRequest struct {
 }
 
 type UpdateOrderRequest struct {
-	Quantity   *decimal.Decimal `json:"quantity,omitempty"`
-	LimitPrice *decimal.Decimal `json:"limit_price,omitempty"`
+	Quantity    *decimal.Decimal `json:"quantity,omitempty"`
+	LimitPrice  *decimal.Decimal `json:"limit_price,omitempty"`
+	StopPrice   *decimal.Decimal `json:"stop_price,omitempty"`
+	TimeInForce *TimeInForce     `json:"time_in_force,omitempty"`
+	ExpiresAt   *string          `json:"expires_at,omitempty"`
 }
 
 type OrderFilterRequest struct {
-	Status     *models.OrderStatus `json:"status,omitempty"`
-	CryptoSymbol *string           `json:"crypto,omitempty"`
-	Type       *models.OrderType   `json:"type,omitempty"`
-	From       *string             `json:"from,omitempty"`     // YYYY-MM-DD
-	To         *string             `json:"to,omitempty"`       // YYYY-MM-DD
-	Page       int                 `json:"page,omitempty"`
-	Limit      int                 `json:"limit,omitempty"`
-	Sort       *string             `json:"sort,omitempty"`     // created_at, -created_at
+	Status       *models.OrderStatus `json:"status,omitempty"`
+	CryptoSymbol *string             `json:"crypto,omitempty"`
+	Type         *models.OrderType   `json:"type,omitempty"`
+	From         *string             `json:"from,omitempty"` // YYYY-MM-DD
+	To           *string             `json:"to,omitempty"`   // YYYY-MM-DD
+	Page         int                 `json:"page,omitempty"`
+	Limit        int                 `json:"limit,omitempty"`
+	Sort         *string             `json:"sort,omitempty"` // created_at, -created_at
 }
 
 type AdminOrderFilterRequest struct {
@@ -116,9 +128,9 @@ func (r *OrderFilterRequest) IsValidSort() bool {
 }
 
 type ExecuteOrderRequest struct {
-	ForceExecution bool `json:"force_execution,omitempty"`
+	ForceExecution bool             `json:"force_execution,omitempty"`
 	OverridePrice  *decimal.Decimal `json:"override_price,omitempty"`
-	Reason         string `json:"reason,omitempty"`
+	Reason         string           `json:"reason,omitempty"`
 }
 
 type BulkCancelRequest struct {

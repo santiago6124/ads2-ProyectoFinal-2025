@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"users-api/internal/models"
 	"users-api/internal/repositories"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type TokenService interface {
@@ -61,6 +62,7 @@ func (s *tokenService) generateAccessToken(user *models.User) (string, error) {
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    s.jwtConfig.Issuer,
+			Audience:  []string{"cryptosim"}, // Add audience for Orders API compatibility
 			Subject:   fmt.Sprintf("%d", user.ID),
 		},
 	}
