@@ -13,12 +13,12 @@ import (
 )
 
 type HealthHandler struct {
-	orderRepo     repositories.OrderRepository
-	userClient    *clients.UserClient
-	walletClient  *clients.WalletClient
-	marketClient  *clients.MarketClient
-	publisher     *messaging.Publisher
-	consumer      *messaging.Consumer
+	orderRepo         repositories.OrderRepository
+	userClient        *clients.UserClient
+	userBalanceClient *clients.UserBalanceClient
+	marketClient      *clients.MarketClient
+	publisher         *messaging.Publisher
+	consumer          *messaging.Consumer
 }
 
 type HealthResponse struct {
@@ -52,18 +52,18 @@ var startTime = time.Now()
 func NewHealthHandler(
 	orderRepo repositories.OrderRepository,
 	userClient *clients.UserClient,
-	walletClient *clients.WalletClient,
+	userBalanceClient *clients.UserBalanceClient,
 	marketClient *clients.MarketClient,
 	publisher *messaging.Publisher,
 	consumer *messaging.Consumer,
 ) *HealthHandler {
 	return &HealthHandler{
-		orderRepo:    orderRepo,
-		userClient:   userClient,
-		walletClient: walletClient,
-		marketClient: marketClient,
-		publisher:    publisher,
-		consumer:     consumer,
+		orderRepo:         orderRepo,
+		userClient:        userClient,
+		userBalanceClient: userBalanceClient,
+		marketClient:      marketClient,
+		publisher:         publisher,
+		consumer:          consumer,
 	}
 }
 
@@ -79,8 +79,8 @@ func (h *HealthHandler) Health(c *gin.Context) {
 	// Check User API
 	services["user_api"] = h.checkUserAPI(ctx)
 
-	// Check Wallet API
-	services["wallet_api"] = h.checkWalletAPI(ctx)
+	// Check User Balance Client
+	services["user_balance_client"] = h.checkUserBalanceClient(ctx)
 
 	// Check Market Data API
 	services["market_api"] = h.checkMarketAPI(ctx)
@@ -126,7 +126,7 @@ func (h *HealthHandler) Readiness(c *gin.Context) {
 	// Check critical services for readiness
 	services["mongodb"] = h.checkMongoDB(ctx)
 	services["user_api"] = h.checkUserAPI(ctx)
-	services["wallet_api"] = h.checkWalletAPI(ctx)
+	services["user_balance_client"] = h.checkUserBalanceClient(ctx)
 	services["market_api"] = h.checkMarketAPI(ctx)
 
 	ready := true
@@ -211,10 +211,10 @@ func (h *HealthHandler) checkUserAPI(ctx context.Context) ServiceHealth {
 	}
 }
 
-func (h *HealthHandler) checkWalletAPI(ctx context.Context) ServiceHealth {
+func (h *HealthHandler) checkUserBalanceClient(ctx context.Context) ServiceHealth {
 	start := time.Now()
 
-	err := h.walletClient.HealthCheck(ctx)
+	err := h.userBalanceClient.HealthCheck(ctx)
 	responseTime := time.Since(start)
 
 	if err != nil {
@@ -231,7 +231,7 @@ func (h *HealthHandler) checkWalletAPI(ctx context.Context) ServiceHealth {
 		ResponseTime: responseTime,
 		LastCheck:    time.Now(),
 		Details: map[string]interface{}{
-			"service": "wallet-api",
+			"service": "user-balance-client",
 		},
 	}
 }

@@ -87,7 +87,6 @@ type MessagingConfig struct {
 
 type ClientsConfig struct {
 	UserAPI   *ClientConfig `json:"user_api"`
-	WalletAPI *ClientConfig `json:"wallet_api"`
 	MarketAPI *ClientConfig `json:"market_api"`
 }
 
@@ -231,11 +230,6 @@ func loadClientsConfig() *ClientsConfig {
 			APIKey:  getEnv("USER_API_KEY", "user-api-key"),
 			Timeout: getEnvAsDuration("USER_API_TIMEOUT", 10*time.Second),
 		},
-		WalletAPI: &ClientConfig{
-			BaseURL: getEnv("WALLET_API_BASE_URL", "http://localhost:8082"),
-			APIKey:  getEnv("WALLET_API_KEY", "wallet-api-key"),
-			Timeout: getEnvAsDuration("WALLET_API_TIMEOUT", 15*time.Second),
-		},
 		MarketAPI: &ClientConfig{
 			BaseURL: getEnv("MARKET_API_BASE_URL", "http://localhost:8083"),
 			APIKey:  getEnv("MARKET_API_KEY", "market-api-key"),
@@ -293,11 +287,11 @@ func (c *Config) ToUserClientConfig() *clients.UserClientConfig {
 	}
 }
 
-func (c *Config) ToWalletClientConfig() *clients.WalletClientConfig {
-	return &clients.WalletClientConfig{
-		BaseURL: c.Clients.WalletAPI.BaseURL,
-		APIKey:  c.Clients.WalletAPI.APIKey,
-		Timeout: c.Clients.WalletAPI.Timeout,
+func (c *Config) ToUserBalanceClientConfig() *clients.UserBalanceConfig {
+	return &clients.UserBalanceConfig{
+		BaseURL: c.Clients.UserAPI.BaseURL,
+		APIKey:  c.Clients.UserAPI.APIKey,
+		Timeout: c.Clients.UserAPI.Timeout,
 	}
 }
 

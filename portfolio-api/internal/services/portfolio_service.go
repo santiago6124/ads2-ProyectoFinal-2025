@@ -10,6 +10,7 @@ import (
 
 	"portfolio-api/internal/analytics"
 	"portfolio-api/internal/calculator"
+	"portfolio-api/internal/clients"
 	"portfolio-api/internal/models"
 	"portfolio-api/internal/repositories"
 	"portfolio-api/pkg/cache"
@@ -19,6 +20,7 @@ type PortfolioService struct {
 	portfolioRepo   repositories.PortfolioRepository
 	snapshotRepo    repositories.SnapshotRepository
 	cache           *cache.RedisClient
+	userClient      *clients.UserClient
 	pnlCalculator   *calculator.PnLCalculator
 	riskCalculator  *calculator.RiskCalculator
 	roiCalculator   *calculator.ROICalculator
@@ -30,6 +32,7 @@ func NewPortfolioService(
 	portfolioRepo repositories.PortfolioRepository,
 	snapshotRepo repositories.SnapshotRepository,
 	cache *cache.RedisClient,
+	userClient *clients.UserClient,
 	pnlCalculator *calculator.PnLCalculator,
 	riskCalculator *calculator.RiskCalculator,
 	roiCalculator *calculator.ROICalculator,
@@ -40,6 +43,7 @@ func NewPortfolioService(
 		portfolioRepo:  portfolioRepo,
 		snapshotRepo:   snapshotRepo,
 		cache:          cache,
+		userClient:     userClient,
 		pnlCalculator:  pnlCalculator,
 		riskCalculator: riskCalculator,
 		roiCalculator:  roiCalculator,
@@ -54,6 +58,11 @@ func (ps *PortfolioService) GetPortfolio(ctx context.Context, userID int64) (*mo
 	var portfolio models.Portfolio
 	err := ps.cache.GetPortfolio(ctx, userID, &portfolio)
 	if err == nil {
+		// Update cash balance from user API
+		userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
+		if err == nil {
+			portfolio.TotalCash = userBalance
+		}
 		return &portfolio, nil
 	}
 
@@ -63,8 +72,16 @@ func (ps *PortfolioService) GetPortfolio(ctx context.Context, userID int64) (*mo
 		return nil, fmt.Errorf("failed to get portfolio: %w", err)
 	}
 
-	// Cache the result
+	// Get current user balance
+	userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user balance: %w", err)
+	}
+
+	// Update portfolio with current cash balance
 	if portfolioPtr != nil {
+		portfolioPtr.TotalCash = userBalance
+		// Cache the updated result
 		_ = ps.cache.SetPortfolio(ctx, userID, portfolioPtr)
 		return portfolioPtr, nil
 	}
@@ -80,8 +97,15 @@ func (ps *PortfolioService) CreatePortfolio(ctx context.Context, userID int64) (
 		return nil, fmt.Errorf("portfolio already exists for user %d", userID)
 	}
 
-	// Create new portfolio
+	// Get user balance
+	userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user balance: %w", err)
+	}
+
+	// Create new portfolio with user's cash balance
 	portfolio := models.NewPortfolio(userID)
+	portfolio.TotalCash = userBalance
 
 	err = ps.portfolioRepo.Create(ctx, portfolio)
 	if err != nil {

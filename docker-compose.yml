@@ -89,7 +89,6 @@ services:
       - RABBITMQ_WORKER_COUNT=5
       # External APIs (Service Discovery)
       - USER_API_BASE_URL=http://users-api:8001
-      - WALLET_API_BASE_URL=http://wallet-api:8080
       - MARKET_API_BASE_URL=http://market-data-api:8004
       # Fees
       - FEE_BASE_PERCENTAGE=0.001
@@ -104,8 +103,6 @@ services:
       shared-rabbitmq:
         condition: service_healthy
       users-api:
-        condition: service_healthy
-      wallet-api:
         condition: service_healthy
       market-data-api:
         condition: service_healthy
@@ -251,49 +248,6 @@ services:
       retries: 3
       start_period: 60s
 
-  # --------------------------------------------------------------------------
-  # Wallet API - Gestión de billeteras virtuales
-  # --------------------------------------------------------------------------
-  wallet-api:
-    build:
-      context: ./wallet-api
-      dockerfile: Dockerfile
-    container_name: cryptosim-wallet-api
-    ports:
-      - "8006:8080"
-    environment:
-      - GO_ENV=production
-      - MONGODB_URI=mongodb://wallet-mongo:27017/cryptosim_wallet
-      - REDIS_HOST=shared-redis
-      - REDIS_PORT=6379
-      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
-      - API_PORT=8080
-      - LOG_LEVEL=info
-      # External APIs
-      - USERS_API_URL=http://users-api:8001
-      - ORDERS_API_URL=http://orders-api:8080
-    depends_on:
-      wallet-mongo:
-        condition: service_healthy
-      shared-redis:
-        condition: service_healthy
-      shared-rabbitmq:
-        condition: service_healthy
-      users-api:
-        condition: service_healthy
-    networks:
-      - cryptosim-network
-    volumes:
-      - ./wallet-api/logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   # ==========================================================================
   # BASES DE DATOS (SEPARADAS POR SERVICIO)
   # ==========================================================================
@@ -363,30 +317,6 @@ services:
       - MONGO_INITDB_DATABASE=portfolio_db
     volumes:
       - portfolio-mongo-data:/data/db
-    networks:
-      - cryptosim-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-
-  # --------------------------------------------------------------------------
-  # MongoDB - Wallet Database
-  # --------------------------------------------------------------------------
-  wallet-mongo:
-    image: mongo:7.0
-    container_name: cryptosim-wallet-mongo
-    ports:
-      - "27019:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
-      - MONGO_INITDB_DATABASE=cryptosim_wallet
-    volumes:
-      - wallet-mongo-data:/data/db
     networks:
       - cryptosim-network
     restart: unless-stopped
@@ -554,8 +484,6 @@ volumes:
     name: cryptosim-orders-mongo-data
   portfolio-mongo-data:
     name: cryptosim-portfolio-mongo-data
-  wallet-mongo-data:
-    name: cryptosim-wallet-mongo-data
 
   # Infrastructure
   shared-redis-data:

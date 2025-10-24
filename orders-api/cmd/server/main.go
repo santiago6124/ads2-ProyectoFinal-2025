@@ -65,11 +65,11 @@ func main() {
 	// Initialize external service clients
 	logger.Info("Initializing external service clients...")
 	userClient := clients.NewUserClient(cfg.ToUserClientConfig())
-	walletClient := clients.NewWalletClient(cfg.ToWalletClientConfig())
+	userBalanceClient := clients.NewUserBalanceClient(cfg.ToUserBalanceClientConfig())
 	marketClient := clients.NewMarketClient(cfg.ToMarketClientConfig())
 
 	// Test client connections
-	if err := testClientConnections(ctx, userClient, walletClient, marketClient, logger); err != nil {
+	if err := testClientConnections(ctx, userClient, userBalanceClient, marketClient, logger); err != nil {
 		logger.Warnf("Some client connections failed: %v", err)
 	}
 
@@ -102,7 +102,7 @@ func main() {
 
 	executionService := concurrent.NewExecutionService(
 		userClient,
-		walletClient,
+		userBalanceClient,
 		marketClient,
 		feeCalculator,
 		cfg.ToExecutionConfig(),
@@ -159,7 +159,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(
 		orderRepo,
 		userClient,
-		walletClient,
+		userBalanceClient,
 		marketClient,
 		publisher,
 		consumer,
@@ -260,7 +260,7 @@ func setupLogger(config *LoggingConfig) *logrus.Logger {
 	return logger
 }
 
-func testClientConnections(ctx context.Context, userClient *clients.UserClient, walletClient *clients.WalletClient, marketClient *clients.MarketClient, logger *logrus.Logger) error {
+func testClientConnections(ctx context.Context, userClient *clients.UserClient, userBalanceClient *clients.UserBalanceClient, marketClient *clients.MarketClient, logger *logrus.Logger) error {
 	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -271,12 +271,12 @@ func testClientConnections(ctx context.Context, userClient *clients.UserClient, 
 	}
 	logger.Info("User API connection successful")
 
-	// Test Wallet API
-	if err := walletClient.HealthCheck(testCtx); err != nil {
-		logger.Warnf("Wallet API health check failed: %v", err)
-		return fmt.Errorf("wallet API connection failed: %w", err)
+	// Test User Balance Client (uses User API)
+	if err := userBalanceClient.HealthCheck(testCtx); err != nil {
+		logger.Warnf("User Balance Client health check failed: %v", err)
+		return fmt.Errorf("user balance client connection failed: %w", err)
 	}
-	logger.Info("Wallet API connection successful")
+	logger.Info("User Balance Client connection successful")
 
 	// Test Market API
 	if err := marketClient.HealthCheck(testCtx); err != nil {

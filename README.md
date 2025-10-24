@@ -25,7 +25,7 @@ CryptoSim permite a los usuarios aprender y practicar estrategias de trading de 
 ### ✨ Características principales
 
 - 🔐 **Autenticación JWT** - Sistema seguro de usuarios
-- 💰 **Billetera Virtual** - Gestión de saldo y transacciones
+- 💰 **Balance Integrado** - Gestión de saldo directamente en Users API
 - 📊 **Trading en Tiempo Real** - Órdenes de compra/venta con datos reales
 - 📈 **Gestión de Portafolio** - Seguimiento de inversiones y rendimiento
 - 🔍 **Búsqueda Avanzada** - Motor de búsqueda con Apache Solr
@@ -33,6 +33,8 @@ CryptoSim permite a los usuarios aprender y practicar estrategias de trading de 
 - 🏆 **Sistema de Rankings** - Leaderboards y estadísticas
 - 📧 **Notificaciones** - Alertas en tiempo real
 - 📝 **Auditoría** - Registro completo de operaciones
+
+> **Nota**: Este proyecto utiliza una arquitectura simplificada para fines educativos. El balance USD se gestiona directamente en Users API en lugar de usar un microservicio separado de Wallet.
 
 ## 🏗️ Arquitectura
 
@@ -43,19 +45,19 @@ CryptoSim permite a los usuarios aprender y practicar estrategias de trading de 
                        │
 ┌──────────────────────▼──────────────────────────────────┐
 │                   API Gateway                            │
-└──┬────┬────┬────┬────┬────┬───────────────────────────┘
-   │    │    │    │    │    │
-   ▼    ▼    ▼    ▼    ▼    ▼
-┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
-│Users │ │Orders│ │Search│ │Market│ │Port- │ │Wallet│
-│ API  │ │ API  │ │ API  │ │Data  │ │folio │ │ API  │
-│      │ │      │ │      │ │ API  │ │ API  │ │      │
-└──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘
-   │        │        │        │        │        │
-   ▼        ▼        ▼        ▼        ▼        ▼
-┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
-│MySQL │ │MongoDB│ │Solr  │ │Redis │ │MongoDB│ │MongoDB│
-└──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘
+└──┬────┬────┬────┬────┬─────────────────────────────────┘
+   │    │    │    │    │
+   ▼    ▼    ▼    ▼    ▼
+┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
+│Users │ │Orders│ │Search│ │Market│ │Port- │
+│ API  │ │ API  │ │ API  │ │Data  │ │folio │
+│      │ │      │ │      │ │ API  │ │ API  │
+└──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘
+   │        │        │        │        │
+   ▼        ▼        ▼        ▼        ▼
+┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
+│MySQL │ │MongoDB│ │Solr  │ │Redis │ │MongoDB│
+└──────┘ └──────┘ └──────┘ └──────┘ └──────┘
 
         ┌─────────────────────────────┐
         │    Shared Infrastructure    │
@@ -72,7 +74,6 @@ CryptoSim permite a los usuarios aprender y practicar estrategias de trading de 
 | **Search API** | 8003 | Solr | Búsqueda de criptomonedas |
 | **Market Data API** | 8004 | Redis | Precios en tiempo real |
 | **Portfolio API** | 8005 | MongoDB | Gestión de portafolios |
-| **Wallet API** | 8006 | MongoDB | Billeteras virtuales |
 
 ## 🛠️ Tecnologías
 
@@ -153,7 +154,6 @@ Los servicios estarán disponibles en:
 - **Search API**: http://localhost:8003
 - **Market Data API**: http://localhost:8004
 - **Portfolio API**: http://localhost:8005
-- **Wallet API**: http://localhost:8006
 - **RabbitMQ Management**: http://localhost:15672 (guest/guest)
 
 ## 📚 Servicios
@@ -194,7 +194,8 @@ DELETE /api/orders/:id          - Cancelar orden
 - Ejecución concurrente con goroutines
 - Cálculo de fees y slippage
 - Integración con RabbitMQ
-- Comunicación con Wallet y Market Data APIs
+- Comunicación con Users y Market Data APIs
+- Gestión directa de balance desde Users API
 
 ### Search API (Puerto 8003)
 
@@ -250,25 +251,7 @@ POST   /api/portfolio/:userId/snapshot     - Crear snapshot
 - Métricas de rendimiento
 - Scheduler para actualizaciones periódicas
 - Consumer de RabbitMQ para eventos de órdenes
-
-### Wallet API (Puerto 8006)
-
-Gestión de billeteras virtuales y transacciones.
-
-**Endpoints principales:**
-```
-GET    /api/wallet/:userId             - Obtener wallet
-GET    /api/wallet/:userId/balance     - Saldo
-POST   /api/wallet/:userId/deposit     - Depositar (admin)
-POST   /api/wallet/:userId/withdraw    - Retirar
-GET    /api/wallet/:userId/transactions - Historial
-```
-
-**Características:**
-- Transacciones ACID
-- Lock de fondos para órdenes
-- Historial completo de transacciones
-- Integración con Orders API
+- Integración con Users API para balance USD
 
 ## 🎮 Comandos Útiles
 
@@ -291,7 +274,6 @@ make logs-orders     # Logs del Orders API
 make logs-search     # Logs del Search API
 make logs-market     # Logs del Market Data API
 make logs-portfolio  # Logs del Portfolio API
-make logs-wallet     # Logs del Wallet API
 ```
 
 ### Monitoreo
@@ -346,7 +328,6 @@ make shell-redis     # Redis CLI
 ├── search-api/         # Microservicio de búsqueda
 ├── market-data-api/    # Microservicio de datos de mercado
 ├── portfolio-api/      # Microservicio de portafolios
-├── wallet-api/         # Microservicio de billeteras
 ├── docker-compose.yml  # Orquestación unificada
 ├── .env.example        # Variables de entorno
 ├── Makefile            # Comandos útiles
