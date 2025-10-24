@@ -7,8 +7,8 @@ export interface User {
   id: number
   username: string
   email: string
-  first_name?: string
-  last_name?: string
+  first_name: string | null
+  last_name: string | null
   role: 'normal' | 'admin'
   initial_balance: number
   created_at: string
@@ -123,26 +123,28 @@ class ApiService {
 
   // User methods
   async getUserProfile(userId: number, accessToken: string): Promise<User> {
-    return this.request<User>(`/api/users/${userId}`, {
+    const response = await this.request<{ success: boolean; message: string; data: User }>(`/api/users/${userId}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     })
+    return response.data
   }
 
   async updateUserProfile(
     userId: number,
-    userData: Partial<User>,
+    userData: { first_name?: string; last_name?: string; preferences?: string },
     accessToken: string
   ): Promise<User> {
-    return this.request<User>(`/api/users/${userId}`, {
+    const response = await this.request<{ success: boolean; message: string; data: User }>(`/api/users/${userId}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(userData),
     })
+    return response.data
   }
 
   async changePassword(

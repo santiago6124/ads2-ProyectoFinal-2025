@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>
   signup: (username: string, email: string, password: string, firstName?: string, lastName?: string) => Promise<boolean>
   logout: () => void
+  updateUser: (updatedUser: User) => void
   isLoading: boolean
   error: string | null
 }
@@ -123,12 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser)
+    localStorage.setItem("crypto_user", JSON.stringify(updatedUser))
+  }
+
   return (
     <AuthContext.Provider value={{ 
       user, 
       login, 
       signup, 
       logout, 
+      updateUser,
       isLoading, 
       error 
     }}>

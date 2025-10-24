@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
@@ -8,18 +8,66 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { User, Bell, Shield } from "lucide-react"
+import { User } from "lucide-react"
+import { apiService } from "@/lib/api"
 
 export default function SettingsPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, updateUser } = useAuth()
   const router = useRouter()
+  const [isSaving, setIsSaving] = useState(false)
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: ''
+  })
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login")
     }
+    if (user) {
+      setFormData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || ''
+      })
+    }
   }, [user, isLoading, router])
+
+  const handleSaveChanges = async () => {
+    if (!user) return
+    
+    setIsSaving(true)
+    try {
+      const accessToken = localStorage.getItem('crypto_access_token')
+      if (!accessToken) {
+        throw new Error('No access token found')
+      }
+
+      const updateData = {
+        first_name: formData.first_name || undefined,
+        last_name: formData.last_name || undefined,
+        preferences: user.preferences // Mantener las preferencias actuales
+      }
+
+      const updatedUser = await apiService.updateUserProfile(user.id, updateData, accessToken)
+      
+      // Actualizar el usuario en el contexto
+      updateUser(updatedUser)
+      
+      alert('Changes saved successfully!')
+    } catch (error) {
+      console.error('Error saving changes:', error)
+      alert('Error saving changes. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
 
   if (isLoading || !user) {
     return (
@@ -50,84 +98,40 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue={user.name} />
+                <Label htmlFor="firstName">First Name</Label>
+                <Input 
+                  id="firstName" 
+                  value={formData.first_name}
+                  onChange={(e) => handleInputChange('first_name', e.target.value)}
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue={user.email} />
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input 
+                  id="lastName" 
+                  value={formData.last_name}
+                  onChange={(e) => handleInputChange('last_name', e.target.value)}
+                />
               </div>
             </div>
-            <Button>Save Changes</Button>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input id="username" defaultValue={user.username} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" defaultValue={user.email} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <Input id="role" defaultValue={user.role} disabled />
+            </div>
+            <Button onClick={handleSaveChanges} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Bell className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold">Notifications</h2>
-              <p className="text-sm text-muted-foreground">Configure your notification preferences</p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Price Alerts</p>
-                <p className="text-sm text-muted-foreground">Get notified when prices change</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Trade Confirmations</p>
-                <p className="text-sm text-muted-foreground">Receive trade execution notifications</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Market Updates</p>
-                <p className="text-sm text-muted-foreground">Daily market summary emails</p>
-              </div>
-              <Switch />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Shield className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold">Security</h2>
-              <p className="text-sm text-muted-foreground">Manage your account security</p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Two-Factor Authentication</p>
-                <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
-              </div>
-              <Button variant="outline" size="sm">
-                Enable
-              </Button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Change Password</p>
-                <p className="text-sm text-muted-foreground">Update your account password</p>
-              </div>
-              <Button variant="outline" size="sm">
-                Change
-              </Button>
-            </div>
-          </div>
-        </Card>
       </div>
     </DashboardLayout>
   )
