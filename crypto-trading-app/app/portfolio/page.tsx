@@ -5,10 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PortfolioStats } from "@/components/portfolio-stats"
-import { PortfolioChart } from "@/components/portfolio-chart"
 import { AssetAllocation } from "@/components/asset-allocation"
-import { TransactionHistory } from "@/components/transaction-history"
-import { WalletActions } from "@/components/wallet-actions"
 
 export default function PortfolioPage() {
   const { user, isLoading } = useAuth()
@@ -31,26 +28,14 @@ export default function PortfolioPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
-            <p className="text-muted-foreground mt-1">Track your assets and performance</p>
-          </div>
-          <WalletActions />
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
+          <p className="text-muted-foreground mt-1">Track your assets and performance</p>
         </div>
 
         <PortfolioStats />
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <PortfolioChart />
-          </div>
-          <div>
-            <AssetAllocation />
-          </div>
-        </div>
-
-        <TransactionHistory />
+        <AssetAllocation />
       </div>
     </DashboardLayout>
   )

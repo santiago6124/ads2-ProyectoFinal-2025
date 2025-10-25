@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { apiService } from "@/lib/api"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,7 @@ import { ordersApiService, OrderRequest } from "@/lib/orders-api"
 import { useToast } from "@/hooks/use-toast"
 
 function TradeContent() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, updateUser } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
@@ -108,6 +109,19 @@ function TradeContent() {
           title: "Buy Order Placed",
           description: `Buy order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
         })
+
+        // Refresh user data to get updated balance
+        if (user) {
+          const accessToken = localStorage.getItem('crypto_access_token')
+          if (accessToken) {
+            try {
+              const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+              updateUser(updatedUser)
+            } catch (error) {
+              console.error('Error refreshing user data:', error)
+            }
+          }
+        }
       } catch (apiError) {
         console.error('API Error:', apiError)
         toast({
@@ -172,6 +186,19 @@ function TradeContent() {
           title: "Sell Order Placed",
           description: `Sell order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
         })
+
+        // Refresh user data to get updated balance
+        if (user) {
+          const accessToken = localStorage.getItem('crypto_access_token')
+          if (accessToken) {
+            try {
+              const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+              updateUser(updatedUser)
+            } catch (error) {
+              console.error('Error refreshing user data:', error)
+            }
+          }
+        }
       } catch (apiError) {
         console.error('API Error:', apiError)
         toast({

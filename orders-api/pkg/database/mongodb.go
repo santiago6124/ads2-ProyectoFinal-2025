@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"time"
 
+	"github.com/shopspring/decimal"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 type Database struct {
@@ -30,7 +34,19 @@ func NewConnection() (*Database, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	clientOptions := options.Client().ApplyURI(mongoURI)
+	// Create custom BSON registry with decimal.Decimal codec
+	rb := bsoncodec.NewRegistryBuilder()
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	
+	// Register decimal.Decimal encoder/decoder
+	decimalType := reflect.TypeOf(decimal.Decimal{})
+	rb.RegisterTypeEncoder(decimalType, decimalEncoder{})
+	rb.RegisterTypeDecoder(decimalType, decimalDecoder{})
+	
+	reg := rb.Build()
+
+	clientOptions := options.Client().ApplyURI(mongoURI).SetRegistry(reg)
 	clientOptions.SetMaxPoolSize(100)
 	clientOptions.SetMinPoolSize(10)
 	clientOptions.SetMaxConnIdleTime(30 * time.Second)
@@ -229,4 +245,30 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// decimalEncoder encodes decimal.Decimal to BSON double
+type decimalEncoder struct{}
+
+func (decimalEncoder) EncodeValue(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != reflect.TypeOf(decimal.Decimal{}) {
+		return bsoncodec.ValueEncoderError{Name: "decimalEncoder", Types: []reflect.Type{reflect.TypeOf(decimal.Decimal{})}, Received: val}
+	}
+	d := val.Interface().(decimal.Decimal)
+	return vw.WriteDouble(d.InexactFloat64())
+}
+
+// decimalDecoder decodes BSON double to decimal.Decimal
+type decimalDecoder struct{}
+
+func (decimalDecoder) DecodeValue(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != reflect.TypeOf(decimal.Decimal{}) {
+		return bsoncodec.ValueDecoderError{Name: "decimalDecoder", Types: []reflect.Type{reflect.TypeOf(decimal.Decimal{})}, Received: val}
+	}
+	double, err := vr.ReadDouble()
+	if err != nil {
+		return err
+	}
+	val.Set(reflect.ValueOf(decimal.NewFromFloat(double)))
+	return nil
 }

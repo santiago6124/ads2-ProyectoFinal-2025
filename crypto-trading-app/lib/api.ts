@@ -2,6 +2,7 @@
 import { config } from './config'
 
 const API_BASE_URL = config.apiUrl
+const ORDERS_API_URL = config.ordersApiUrl
 
 export interface User {
   id: number
@@ -163,6 +164,45 @@ class ApiService {
         new_password: newPassword,
       }),
     })
+  }
+
+  // Portfolio methods
+  async getPortfolio(userId: number, accessToken: string): Promise<any> {
+    return this.request(`/api/portfolio/${userId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  }
+
+  async getHoldings(userId: number, accessToken: string): Promise<any> {
+    return this.request(`/api/portfolio/${userId}/holdings`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  }
+
+  async getOrders(userId: number, accessToken: string): Promise<any> {
+    // Use orders-api URL for orders endpoints
+    const url = `${ORDERS_API_URL}/api/v1/orders`
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new ApiError(response.status, errorData.error || 'Request failed')
+    }
+
+    return await response.json()
   }
 }
 

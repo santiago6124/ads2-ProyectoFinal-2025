@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -202,8 +203,18 @@ func (r *orderRepository) executeQuery(ctx context.Context, mongoFilter bson.M, 
 	defer cursor.Close(ctx)
 
 	var orders []models.Order
-	if err := cursor.All(ctx, &orders); err != nil {
-		return nil, 0, fmt.Errorf("failed to decode orders: %w", err)
+	for cursor.Next(ctx) {
+		var order models.Order
+		if err := cursor.Decode(&order); err != nil {
+			// Log error but continue processing other orders
+			log.Printf("Warning: Failed to decode order: %v", err)
+			continue
+		}
+		orders = append(orders, order)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, 0, fmt.Errorf("cursor error: %w", err)
 	}
 
 	return orders, total, nil

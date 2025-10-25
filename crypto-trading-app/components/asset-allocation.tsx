@@ -1,24 +1,143 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
+import { useAuth } from "@/lib/auth-context"
+import { apiService } from "@/lib/api"
 
-const assets = [
-  { name: "Bitcoin", value: 45, amount: "$15,653.75", color: "hsl(var(--chart-1))" },
-  { name: "Ethereum", value: 25, amount: "$8,640.97", color: "hsl(var(--chart-2))" },
-  { name: "Solana", value: 15, amount: "$5,184.58", color: "hsl(var(--chart-3))" },
-  { name: "Others", value: 10, amount: "$3,456.39", color: "hsl(var(--chart-4))" },
-  { name: "Cash", value: 5, amount: "$1,628.20", color: "hsl(var(--chart-5))" },
+const COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
 ]
 
 export function AssetAllocation() {
+  const { user } = useAuth()
+  const [assets, setAssets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (!user?.id) return
+
+      try {
+        const accessToken = localStorage.getItem('crypto_access_token')
+        if (!accessToken) return
+
+        // Get orders to calculate holdings
+        const ordersResponse = await apiService.getOrders(user.id, accessToken)
+        
+        const orders = ordersResponse.orders || []
+        
+        if (orders && orders.length > 0) {
+          const holdingsMap = new Map<string, { quantity: number; totalValue: number }>()
+          
+          // Calculate holdings from executed buy orders
+          orders.forEach((order: any) => {
+            if (order.status === 'executed' && order.type === 'buy') {
+              const quantity = parseFloat(order.quantity)
+              const price = parseFloat(order.order_price)
+              
+              // Skip orders with invalid data (0 quantity or price)
+              if (quantity > 0 && price > 0) {
+                const totalValue = quantity * price
+                
+                const existing = holdingsMap.get(order.crypto_symbol) || { quantity: 0, totalValue: 0 }
+                holdingsMap.set(order.crypto_symbol, {
+                  quantity: existing.quantity + quantity,
+                  totalValue: existing.totalValue + totalValue
+                })
+              }
+            }
+          })
+
+          // Convert to array and calculate percentages
+          const holdingsArray = Array.from(holdingsMap.entries()).map(([symbol, data], index) => ({
+            name: symbol,
+            quantity: data.quantity,
+            value: data.totalValue,
+            percentage: 0, // Will be calculated below
+            color: COLORS[index % COLORS.length]
+          }))
+
+          // Calculate total portfolio value
+          const totalValue = holdingsArray.reduce((sum, asset) => sum + asset.value, 0) + user.initial_balance
+          
+          // Calculate percentages
+          holdingsArray.forEach(asset => {
+            asset.percentage = totalValue > 0 ? (asset.value / totalValue) * 100 : 0
+          })
+
+          // Add cash allocation
+          const cashPercentage = totalValue > 0 ? (user.initial_balance / totalValue) * 100 : 100
+          if (cashPercentage > 0.01) { // Only show if > 0.01%
+            holdingsArray.push({
+              name: 'Cash',
+              quantity: user.initial_balance,
+              value: user.initial_balance,
+              percentage: cashPercentage,
+              color: COLORS[holdingsArray.length % COLORS.length]
+            })
+          }
+
+          setAssets(holdingsArray.sort((a, b) => b.value - a.value))
+        } else {
+          // No holdings, show only cash
+          setAssets([{
+            name: 'Cash',
+            quantity: user.initial_balance,
+            value: user.initial_balance,
+            percentage: 100,
+            color: COLORS[0]
+          }])
+        }
+      } catch (error) {
+        console.error('Error fetching holdings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchHoldings()
+  }, [user])
+
+  if (loading) {
+    return (
+      <Card className="p-6">
+        <div className="h-[400px] animate-pulse bg-muted rounded" />
+      </Card>
+    )
+  }
+
+  if (assets.length === 0) {
+    return (
+      <Card className="p-6">
+        <h2 className="text-xl font-bold mb-6">Asset Allocation</h2>
+        <div className="text-center py-12 text-muted-foreground">
+          No holdings yet. Start trading to see your allocation here.
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <Card className="p-6">
       <h2 className="text-xl font-bold mb-6">Asset Allocation</h2>
 
       <ResponsiveContainer width="100%" height={250}>
         <PieChart>
-          <Pie data={assets} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+          <Pie 
+            data={assets} 
+            cx="50%" 
+            cy="50%" 
+            innerRadius={60} 
+            outerRadius={90} 
+            paddingAngle={2} 
+            dataKey="percentage"
+          >
             {assets.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
@@ -26,12 +145,18 @@ export function AssetAllocation() {
           <Tooltip
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
+                const data = payload[0].payload
                 return (
                   <div className="rounded-lg border bg-background p-3 shadow-sm">
-                    <div className="font-semibold">{payload[0].name}</div>
+                    <div className="font-semibold">{data.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      {payload[0].value}% - {assets.find((a) => a.name === payload[0].name)?.amount}
+                      {data.percentage.toFixed(2)}% - ${data.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
+                    {data.name !== 'Cash' && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Qty: {data.quantity.toFixed(4)}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -47,10 +172,15 @@ export function AssetAllocation() {
             <div className="flex items-center gap-3">
               <div className="h-3 w-3 rounded-full" style={{ backgroundColor: asset.color }} />
               <span className="text-sm font-medium">{asset.name}</span>
+              {asset.name !== 'Cash' && (
+                <span className="text-xs text-muted-foreground">
+                  {asset.quantity.toFixed(4)} {asset.name}
+                </span>
+              )}
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold">{asset.amount}</p>
-              <p className="text-xs text-muted-foreground">{asset.value}%</p>
+              <p className="text-sm font-semibold">${asset.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-xs text-muted-foreground">{asset.percentage.toFixed(2)}%</p>
             </div>
           </div>
         ))}
