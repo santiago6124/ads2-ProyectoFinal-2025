@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"portfolio-api/internal/config"
+	"portfolio-api/internal/controllers"
 )
 
 func main() {
@@ -37,20 +38,21 @@ func main() {
 		})
 	})
 
-	// API placeholder
+	// Initialize portfolio controller
+	// Note: This is a simplified implementation - in production, you would initialize
+	// all dependencies (database, services, etc.)
+	controller := controllers.NewPortfolioController(logger, nil) // nil for now
+	
+	// API routes
 	api := router.Group("/api")
 	{
-		api.GET("/portfolio/:userId", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "Portfolio API - Implementation in progress",
-				"userId":  c.Param("userId"),
-			})
-		})
+		portfolio := api.Group("/portfolio")
+		controller.RegisterRoutes(portfolio)
 	}
 
 	port := cfg.Server.Port
 	if port == 0 {
-		port = 8083
+		port = 8080 // Use 8080 to match docker-compose.yml mapping
 	}
 
 	server := &http.Server{

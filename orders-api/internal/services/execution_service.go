@@ -14,6 +14,7 @@ type ExecutionService struct {
 	userClient        UserClient
 	userBalanceClient UserBalanceClient
 	marketClient      MarketClient
+	portfolioClient   PortfolioClient
 }
 
 // UserClient interface para validar usuarios
@@ -32,6 +33,11 @@ type MarketClient interface {
 	GetCurrentPrice(ctx context.Context, symbol string) (*models.PriceResult, error)
 }
 
+// PortfolioClient interface para actualizar holdings
+type PortfolioClient interface {
+	UpdateHoldings(ctx context.Context, userID int64, symbol string, quantity, price decimal.Decimal, orderType string) error
+}
+
 // NewExecutionService crea una nueva instancia del servicio de ejecución
 func NewExecutionService(
 	userClient UserClient,
@@ -43,7 +49,13 @@ func NewExecutionService(
 		userClient:        userClient,
 		userBalanceClient: userBalanceClient,
 		marketClient:      marketClient,
+		portfolioClient:   nil, // Will be set later
 	}
+}
+
+// SetPortfolioClient sets the portfolio client
+func (s *ExecutionService) SetPortfolioClient(pc PortfolioClient) {
+	s.portfolioClient = pc
 }
 
 // ExecuteOrder ejecuta una orden de manera síncrona y simplificada
@@ -95,6 +107,15 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, requiredAmount, "buy", order.ID.Hex(), fmt.Sprintf("Buy %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to process transaction: %w", err)
+		}
+
+		// Actualizar holdings en el portfolio
+		if s.portfolioClient != nil {
+			err = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceResult.MarketPrice, "buy")
+			if err != nil {
+				// Log error but don't fail the order execution
+				fmt.Printf("⚠️ Failed to update portfolio holdings: %v\n", err)
+			}
 		}
 	}
 

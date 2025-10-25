@@ -89,6 +89,13 @@ func main() {
 	// Initialize simplified services
 	logger.Info("⚙️ Initializing business services (simplified)...")
 
+	// Initialize portfolio client (optional - won't fail if not available)
+	portfolioClient := clients.NewPortfolioClient(&clients.PortfolioClientConfig{
+		BaseURL: os.Getenv("PORTFOLIO_API_BASE_URL"),
+		APIKey:  os.Getenv("PORTFOLIO_API_KEY"),
+		Timeout: 10 * time.Second,
+	})
+
 	// Create execution service (simplified - no concurrency)
 	executionService := services.NewExecutionService(
 		userClient,
@@ -96,6 +103,9 @@ func main() {
 		marketClient,
 		nil, // No necesitamos fee calculator separado
 	)
+	
+	// Set portfolio client in execution service
+	executionService.SetPortfolioClient(portfolioClient)
 
 	// Create market service adapter
 	marketService := &marketServiceAdapter{marketClient: marketClient}

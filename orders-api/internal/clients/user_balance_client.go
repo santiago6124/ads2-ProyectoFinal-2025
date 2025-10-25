@@ -67,7 +67,7 @@ func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	
+
 	fmt.Printf("💰 CheckBalance: User %d, InitialBalance: %f\n", userID, user.InitialBalance)
 
 	// Convertir balance a decimal
@@ -162,13 +162,13 @@ func (c *UserBalanceClient) UpdateBalance(ctx context.Context, userID int, newBa
 // ProcessTransaction procesa una transacción actualizando el balance del usuario
 func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, amount decimal.Decimal, transactionType, orderID, description string) (string, error) {
 	fmt.Printf("💰 ProcessTransaction called: User %d, Type %s, Amount %s\n", userID, transactionType, amount.String())
-	
+
 	// Obtener token del contexto
 	userToken := ""
 	if token := ctx.Value("user_token"); token != nil {
 		userToken = token.(string)
 	}
-	
+
 	// Obtener usuario actual
 	user, err := c.GetUser(ctx, userID, userToken)
 	if err != nil {
@@ -196,9 +196,9 @@ func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, 
 	}
 
 	// Actualizar el balance en la base de datos
-	fmt.Printf("🔄 Processing transaction: User %d, Type %s, Amount %s, Current Balance %s, New Balance %s\n", 
+	fmt.Printf("🔄 Processing transaction: User %d, Type %s, Amount %s, Current Balance %s, New Balance %s\n",
 		userID, transactionType, amount.String(), currentBalance.String(), newBalance.String())
-	
+
 	if err := c.UpdateBalance(ctx, userID, newBalance); err != nil {
 		fmt.Printf("❌ Failed to update balance: %v\n", err)
 		return "", fmt.Errorf("failed to update balance: %w", err)
@@ -240,7 +240,7 @@ func (c *UserBalanceClient) GetUser(ctx context.Context, userID int, userToken s
 	// Read response body to debug
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	fmt.Printf("📊 GetUser raw response: %s\n", string(bodyBytes))
-	
+
 	var apiResponse APIResponse
 	if err := json.Unmarshal(bodyBytes, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
