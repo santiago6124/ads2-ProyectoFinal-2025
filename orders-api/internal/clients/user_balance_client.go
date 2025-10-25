@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"orders-api/internal/models"
@@ -23,6 +25,11 @@ type UserBalanceConfig struct {
 	BaseURL string
 	APIKey  string
 	Timeout time.Duration
+}
+
+type APIResponse struct {
+	Success bool                `json:"success"`
+	Data    UserBalanceResponse `json:"data"`
 }
 
 type UserBalanceResponse struct {
@@ -60,6 +67,8 @@ func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
+	
+	fmt.Printf("💰 CheckBalance: User %d, InitialBalance: %f\n", userID, user.InitialBalance)
 
 	// Convertir balance a decimal
 	availableBalance := decimal.NewFromFloat(user.InitialBalance)
@@ -111,10 +120,57 @@ func (c *UserBalanceClient) ReleaseFunds(ctx context.Context, userID int, amount
 	return nil
 }
 
+// UpdateBalance actualiza el balance del usuario en la base de datos
+func (c *UserBalanceClient) UpdateBalance(ctx context.Context, userID int, newBalance decimal.Decimal) error {
+	url := fmt.Sprintf("%s/api/users/%d/balance", c.baseURL, userID)
+
+	payload := map[string]float64{
+		"amount": newBalance.InexactFloat64(),
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Service", "orders-api")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		fmt.Printf("❌ UpdateBalance response status %d: %s\n", resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("failed to update balance: status %d", resp.StatusCode)
+	}
+
+	fmt.Printf("✅ Balance updated: User %d, New Balance %s USD\n", userID, newBalance.String())
+	return nil
+}
+
 // ProcessTransaction procesa una transacción actualizando el balance del usuario
 func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, amount decimal.Decimal, transactionType, orderID, description string) (string, error) {
+	fmt.Printf("💰 ProcessTransaction called: User %d, Type %s, Amount %s\n", userID, transactionType, amount.String())
+	
+	// Obtener token del contexto
+	userToken := ""
+	if token := ctx.Value("user_token"); token != nil {
+		userToken = token.(string)
+	}
+	
 	// Obtener usuario actual
-	user, err := c.GetUser(ctx, userID, "")
+	user, err := c.GetUser(ctx, userID, userToken)
 	if err != nil {
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}
@@ -139,10 +195,14 @@ func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, 
 		return "", fmt.Errorf("insufficient balance: would result in negative balance")
 	}
 
-	// En un sistema real, aquí se actualizaría el balance en la base de datos
-	// Por ahora, solo logueamos la operación
-	fmt.Printf("TRANSACTION: User %d, Type %s, Amount %s USD, New Balance %s USD\n",
-		userID, transactionType, amount.String(), newBalance.String())
+	// Actualizar el balance en la base de datos
+	fmt.Printf("🔄 Processing transaction: User %d, Type %s, Amount %s, Current Balance %s, New Balance %s\n", 
+		userID, transactionType, amount.String(), currentBalance.String(), newBalance.String())
+	
+	if err := c.UpdateBalance(ctx, userID, newBalance); err != nil {
+		fmt.Printf("❌ Failed to update balance: %v\n", err)
+		return "", fmt.Errorf("failed to update balance: %w", err)
+	}
 
 	// Generar ID de transacción simulado
 	transactionID := fmt.Sprintf("tx_%d_%d", userID, time.Now().Unix())
@@ -177,10 +237,17 @@ func (c *UserBalanceClient) GetUser(ctx context.Context, userID int, userToken s
 		return nil, fmt.Errorf("user API returned status %d", resp.StatusCode)
 	}
 
-	var user UserBalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+	// Read response body to debug
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	fmt.Printf("📊 GetUser raw response: %s\n", string(bodyBytes))
+	
+	var apiResponse APIResponse
+	if err := json.Unmarshal(bodyBytes, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
+
+	user := apiResponse.Data
+	fmt.Printf("📊 GetUser response: User %d, InitialBalance: %f\n", userID, user.InitialBalance)
 
 	return &user, nil
 }

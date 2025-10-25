@@ -15,6 +15,7 @@ type UserRepository interface {
 	GetByEmail(email string) (*models.User, error)
 	GetByUsername(username string) (*models.User, error)
 	Update(user *models.User) error
+	UpdateBalance(id int32, newBalance float64) error
 	Delete(id int32) error
 	List(offset, limit int, search string, role string, isActive *bool) ([]models.User, int64, error)
 	UpdateLastLogin(id int32) error
@@ -77,6 +78,17 @@ func (r *userRepository) GetByUsername(username string) (*models.User, error) {
 func (r *userRepository) Update(user *models.User) error {
 	if err := r.db.Save(user).Error; err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepository) UpdateBalance(id int32, newBalance float64) error {
+	result := r.db.Model(&models.User{}).Where("id = ?", id).Update("initial_balance", newBalance)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update balance: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("user not found")
 	}
 	return nil
 }

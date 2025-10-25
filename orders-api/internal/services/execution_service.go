@@ -24,6 +24,7 @@ type UserClient interface {
 // UserBalanceClient interface para verificar saldos
 type UserBalanceClient interface {
 	CheckBalance(ctx context.Context, userID int, amount decimal.Decimal, userToken string) (*models.BalanceResult, error)
+	ProcessTransaction(ctx context.Context, userID int, amount decimal.Decimal, transactionType, orderID, description string) (string, error)
 }
 
 // MarketClient interface para obtener precios
@@ -88,6 +89,12 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		if !balanceResult.HasSufficient {
 			return nil, fmt.Errorf("insufficient balance: required %s, available %s",
 				requiredAmount.String(), balanceResult.Available.String())
+		}
+
+		// Actualizar el balance del usuario
+		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, requiredAmount, "buy", order.ID.Hex(), fmt.Sprintf("Buy %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to process transaction: %w", err)
 		}
 	}
 

@@ -2,6 +2,7 @@ package models
 
 import (
 	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -68,6 +69,10 @@ type UpdateUserRequest struct {
 	FirstName   *string `json:"first_name" binding:"omitempty,max=50"`
 	LastName    *string `json:"last_name" binding:"omitempty,max=50"`
 	Preferences string  `json:"preferences"`
+}
+
+type UpdateBalanceRequest struct {
+	Amount float64 `json:"amount" binding:"required"`
 }
 
 type UserVerificationResponse struct {

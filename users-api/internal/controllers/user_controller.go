@@ -193,6 +193,46 @@ func (uc *UserController) ChangePassword(c *gin.Context) {
 	utils.SendSuccessResponse(c, http.StatusOK, "Password updated successfully", nil)
 }
 
+// UpdateBalance godoc
+// @Summary Update user balance (Internal use)
+// @Description Update user's balance (for other microservices)
+// @Tags internal
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body models.UpdateBalanceRequest true "Balance update data"
+// @Param X-Internal-Service header string true "Service name"
+// @Param X-API-Key header string true "Internal API key"
+// @Success 200 {object} dto.APIResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/users/{id}/balance [put]
+func (uc *UserController) UpdateBalance(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		utils.SendValidationError(c, err)
+		return
+	}
+
+	var req models.UpdateBalanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendValidationError(c, err)
+		return
+	}
+
+	if err := uc.userService.UpdateBalance(int32(id), req.Amount); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			utils.SendNotFoundError(c, "User")
+			return
+		}
+		utils.SendInternalError(c, err)
+		return
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Balance updated successfully", nil)
+}
+
 // DeleteUser godoc
 // @Summary Deactivate user account
 // @Description Deactivate user account (soft delete)

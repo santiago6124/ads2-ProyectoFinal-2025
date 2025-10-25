@@ -93,6 +93,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   }
                 </p>
                 <p className="text-xs text-white/60 truncate">{user?.email}</p>
+                <p className="text-xs text-green-400 font-semibold mt-1">
+                  ${user?.initial_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                </p>
               </div>
             </div>
           </Link>

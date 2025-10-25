@@ -1,8 +1,9 @@
 package models
 
 import (
-	"time"
 	"encoding/json"
+	"time"
+
 	"gorm.io/gorm"
 )
 
@@ -29,7 +30,6 @@ const (
 	RoleNormal UserRole = "normal"
 	RoleAdmin  UserRole = "admin"
 )
-
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.Preferences == "" {
@@ -73,7 +73,7 @@ func (u *User) GetPreferences() (map[string]interface{}, error) {
 			"language":      "en",
 		}, nil
 	}
-	
+
 	var prefs map[string]interface{}
 	err := json.Unmarshal([]byte(u.Preferences), &prefs)
 	return prefs, err
@@ -84,7 +84,7 @@ func (u *User) SetPreferences(prefs map[string]interface{}) error {
 		u.Preferences = ""
 		return nil
 	}
-	
+
 	prefsJSON, err := json.Marshal(prefs)
 	if err != nil {
 		return err

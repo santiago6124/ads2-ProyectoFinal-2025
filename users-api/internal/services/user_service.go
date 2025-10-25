@@ -15,6 +15,7 @@ type UserService interface {
 	GetUserByEmail(email string) (*models.User, error)
 	UpdateUser(id int32, req *models.UpdateUserRequest) (*models.User, error)
 	ChangePassword(id int32, req *models.ChangePasswordRequest) error
+	UpdateBalance(id int32, newBalance float64) error
 	DeactivateUser(id int32) error
 	ListUsers(page, limit int, search, role string, isActive *bool) ([]models.User, int64, error)
 	UpgradeUserToAdmin(id int32) (*models.User, error)
@@ -179,6 +180,13 @@ func (s *userService) ChangePassword(id int32, req *models.ChangePasswordRequest
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
+	return nil
+}
+
+func (s *userService) UpdateBalance(id int32, newBalance float64) error {
+	if err := s.userRepo.UpdateBalance(id, newBalance); err != nil {
+		return fmt.Errorf("failed to update balance: %w", err)
+	}
 	return nil
 }
 

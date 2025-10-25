@@ -117,6 +117,7 @@ func setupRouter(
 			internal.Use(middleware.InternalServiceMiddleware())
 			{
 				internal.GET("/:id/verify", userController.VerifyUser)
+				internal.PUT("/:id/balance", userController.UpdateBalance)
 			}
 		}
 	}

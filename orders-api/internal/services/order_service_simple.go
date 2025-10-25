@@ -16,10 +16,10 @@ import (
 
 // OrderServiceSimple servicio simplificado de órdenes (sin concurrencia compleja)
 type OrderServiceSimple struct {
-	orderRepo       repositories.OrderRepository
+	orderRepo        repositories.OrderRepository
 	executionService *ExecutionService
-	marketService   MarketService
-	publisher       EventPublisher
+	marketService    MarketService
+	publisher        EventPublisher
 }
 
 // MarketService interface para servicios de mercado
@@ -30,10 +30,10 @@ type MarketService interface {
 
 // CryptoInfo información de una criptomoneda
 type CryptoInfo struct {
-	Symbol      string          `json:"symbol"`
-	Name        string          `json:"name"`
+	Symbol       string          `json:"symbol"`
+	Name         string          `json:"name"`
 	CurrentPrice decimal.Decimal `json:"current_price"`
-	IsActive    bool            `json:"is_active"`
+	IsActive     bool            `json:"is_active"`
 }
 
 // EventPublisher interface para publicar eventos
@@ -52,10 +52,10 @@ func NewOrderServiceSimple(
 	publisher EventPublisher,
 ) *OrderServiceSimple {
 	return &OrderServiceSimple{
-		orderRepo:       orderRepo,
+		orderRepo:        orderRepo,
 		executionService: executionService,
-		marketService:   marketService,
-		publisher:       publisher,
+		marketService:    marketService,
+		publisher:        publisher,
 	}
 }
 
@@ -150,14 +150,10 @@ func (s *OrderServiceSimple) CreateOrder(ctx context.Context, req *dto.CreateOrd
 		if userToken := ctx.Value("user_token"); userToken != nil {
 			execCtx = context.WithValue(execCtx, "user_token", userToken)
 		}
-		
+
 		if err := s.executeOrderSync(execCtx, order); err != nil {
-			// Reload the order to get the updated status and error message
-			updatedOrder, reloadErr := s.orderRepo.GetByID(ctx, order.ID.Hex())
-			if reloadErr == nil && updatedOrder.Status == models.OrderStatusFailed {
-				return nil, fmt.Errorf("order execution failed: %s", updatedOrder.ErrorMessage)
-			}
-			return nil, fmt.Errorf("order execution failed: %w", err)
+			log.Printf("Warning: failed to execute market order: %v", err)
+			// La orden queda en pending, el usuario puede ver el error
 		}
 	}
 

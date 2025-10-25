@@ -89,6 +89,7 @@ services:
       - RABBITMQ_WORKER_COUNT=5
       # External APIs (Service Discovery)
       - USER_API_BASE_URL=http://users-api:8001
+      - USER_API_KEY=internal-secret-key
       - MARKET_API_BASE_URL=http://market-data-api:8004
       # Fees
       - FEE_BASE_PERCENTAGE=0.001
