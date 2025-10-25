@@ -18,7 +18,7 @@ type HealthHandler struct {
 	userBalanceClient *clients.UserBalanceClient
 	marketClient      *clients.MarketClient
 	publisher         *messaging.Publisher
-	consumer          *messaging.Consumer
+	// consumer eliminado en sistema simplificado
 }
 
 type HealthResponse struct {
@@ -55,7 +55,7 @@ func NewHealthHandler(
 	userBalanceClient *clients.UserBalanceClient,
 	marketClient *clients.MarketClient,
 	publisher *messaging.Publisher,
-	consumer *messaging.Consumer,
+	consumer interface{}, // No se usa en sistema simplificado
 ) *HealthHandler {
 	return &HealthHandler{
 		orderRepo:         orderRepo,
@@ -63,7 +63,6 @@ func NewHealthHandler(
 		userBalanceClient: userBalanceClient,
 		marketClient:      marketClient,
 		publisher:         publisher,
-		consumer:          consumer,
 	}
 }
 
@@ -286,30 +285,16 @@ func (h *HealthHandler) checkRabbitMQPublisher() ServiceHealth {
 	}
 }
 
+// checkRabbitMQConsumer comentado - no hay consumer en sistema simplificado
 func (h *HealthHandler) checkRabbitMQConsumer() ServiceHealth {
-	start := time.Now()
-
-	err := h.consumer.HealthCheck()
-	responseTime := time.Since(start)
-
-	status := "healthy"
-	var errorMsg string
-
-	if err != nil {
-		status = "unhealthy"
-		errorMsg = err.Error()
-	}
-
 	return ServiceHealth{
-		Status:       status,
-		ResponseTime: responseTime,
-		Error:        errorMsg,
+		Status:       "not_applicable",
+		ResponseTime: 0,
+		Error:        "",
 		LastCheck:    time.Now(),
 		Details: map[string]interface{}{
-			"component":     "rabbitmq-consumer",
-			"handlers":      h.consumer.GetHandlerCount(),
-			"queues":        h.consumer.GetQueueCount(),
-			"consuming":     h.consumer.IsConsuming(),
+			"component": "rabbitmq-consumer",
+			"note":      "Consumer not used in simplified system",
 		},
 	}
 }

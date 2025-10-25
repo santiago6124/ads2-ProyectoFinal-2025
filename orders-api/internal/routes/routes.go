@@ -145,9 +145,10 @@ func (r *Router) setupAPIRoutes(v1 *gin.RouterGroup) {
 		orders.POST("", r.orderHandler.CreateOrder)
 		orders.GET("", r.orderHandler.ListUserOrders)
 		orders.GET("/:id", r.orderHandler.GetOrder)
-		orders.PUT("/:id", r.orderHandler.UpdateOrder)
-		orders.DELETE("/:id", r.orderHandler.CancelOrder)
-		orders.POST("/:id/execute", r.orderHandler.ExecuteOrder)
+		// UpdateOrder, CancelOrder y ExecuteOrder comentados - no en sistema simplificado
+		// orders.PUT("/:id", r.orderHandler.UpdateOrder)
+		// orders.DELETE("/:id", r.orderHandler.CancelOrder)
+		// orders.POST("/:id/execute", r.orderHandler.ExecuteOrder)
 	}
 
 	// User-specific order endpoints
@@ -169,8 +170,9 @@ func (r *Router) setupAPIRoutes(v1 *gin.RouterGroup) {
 		{
 			adminOrders.GET("", r.orderHandler.ListUserOrders)
 			adminOrders.GET("/:id", r.orderHandler.GetOrder)
-			adminOrders.PUT("/:id", r.orderHandler.UpdateOrder)
-			adminOrders.DELETE("/:id", r.orderHandler.CancelOrder)
+			// UpdateOrder y CancelOrder comentados - no en sistema simplificado
+			// adminOrders.PUT("/:id", r.orderHandler.UpdateOrder)
+			// adminOrders.DELETE("/:id", r.orderHandler.CancelOrder)
 		}
 	}
 }

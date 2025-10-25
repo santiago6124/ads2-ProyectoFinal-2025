@@ -103,24 +103,16 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	var orderPrice decimal.Decimal
-	if req.OrderPrice != "" {
-		orderPrice, err = decimal.NewFromString(req.OrderPrice)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order price format"})
-			return
-		}
-	}
-
+	// La validación de orderPrice se hace en el DTO
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
 	dtoReq := &dto.CreateOrderRequest{
 		Type:         models.OrderType(req.Type),
 		CryptoSymbol: req.CryptoSymbol,
-		Quantity:     quantity,
-		OrderType:    models.OrderKind(req.OrderKind),
-		LimitPrice:   &orderPrice,
+		Quantity:     req.Quantity,
+		OrderKind:    models.OrderKind(req.OrderKind),
+		LimitPrice:   req.OrderPrice,
 	}
 
 	createdOrder, err := h.orderService.CreateOrder(ctx, dtoReq, userID.(int))
@@ -235,6 +227,8 @@ func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// UpdateOrder comentado - no está en OrderServiceSimple (sistema simplificado)
+/*
 func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	if orderID == "" {
@@ -342,7 +336,10 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Order cancelled successfully"})
 }
+*/
 
+// ExecuteOrder comentado - no está en OrderServiceSimple (sistema simplificado)
+/*
 func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	if orderID == "" {
@@ -379,35 +376,33 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	response := h.convertToExecutionResponse(executionResult)
 	c.JSON(http.StatusOK, response)
 }
+*/
 
 func (h *OrderHandler) convertToOrderResponse(order *models.Order) *OrderResponse {
 	response := &OrderResponse{
-		ID:            order.ID.Hex(),
-		OrderNumber:   order.OrderNumber,
-		UserID:        order.UserID,
-		Type:          string(order.Type),
-		OrderKind:     string(order.OrderKind),
-		Status:        string(order.Status),
-		CryptoSymbol:  order.CryptoSymbol,
-		CryptoName:    order.CryptoName,
-		Quantity:      order.Quantity.String(),
-		OrderPrice:    order.OrderPrice.String(),
-		TotalAmount:   order.TotalAmount.String(),
-		Fee:           order.Fee.String(),
-		FeePercentage: order.FeePercentage.String(),
-		CreatedAt:     order.CreatedAt,
-		UpdatedAt:     order.UpdatedAt,
-		ExecutedAt:    order.ExecutedAt,
-		CancelledAt:   order.CancelledAt,
-	}
-
-	if order.ExecutionPrice != nil {
-		response.ExecutionPrice = order.ExecutionPrice.String()
+		ID:           order.ID.Hex(),
+		OrderNumber:  order.OrderNumber,
+		UserID:       order.UserID,
+		Type:         string(order.Type),
+		OrderKind:    string(order.OrderKind),
+		Status:       string(order.Status),
+		CryptoSymbol: order.CryptoSymbol,
+		CryptoName:   order.CryptoName,
+		Quantity:     order.Quantity.String(),
+		OrderPrice:   order.Price.String(), // Simplificado: solo Price
+		TotalAmount:  order.TotalAmount.String(),
+		Fee:          order.Fee.String(),
+		FeePercentage: "0.1", // Siempre 0.1% en sistema simplificado
+		CreatedAt:    order.CreatedAt,
+		UpdatedAt:    order.UpdatedAt,
+		ExecutedAt:   order.ExecutedAt,
+		// CancelledAt eliminado en modelo simplificado
 	}
 
 	return response
 }
 
+// convertToExecutionResponse simplificado para modelo básico
 func (h *OrderHandler) convertToExecutionResponse(result *models.ExecutionResult) *ExecutionResponse {
 	response := &ExecutionResponse{
 		OrderID:       result.OrderID,
@@ -416,59 +411,7 @@ func (h *OrderHandler) convertToExecutionResponse(result *models.ExecutionResult
 		ExecutionTime: result.ExecutionTime,
 	}
 
-	if result.UserValidation != nil {
-		response.UserValidation = map[string]interface{}{
-			"is_valid": result.UserValidation.IsValid,
-			"user_id":  result.UserValidation.UserID,
-			"message":  result.UserValidation.Message,
-		}
-	}
-
-	if result.BalanceCheck != nil {
-		response.BalanceCheck = map[string]interface{}{
-			"has_sufficient": result.BalanceCheck.HasSufficient,
-			"available":      result.BalanceCheck.Available.String(),
-			"required":       result.BalanceCheck.Required.String(),
-			"currency":       result.BalanceCheck.Currency,
-			"message":        result.BalanceCheck.Message,
-		}
-	}
-
-	if result.MarketPrice != nil {
-		response.MarketPrice = map[string]interface{}{
-			"symbol":          result.MarketPrice.Symbol,
-			"market_price":    result.MarketPrice.MarketPrice.String(),
-			"execution_price": result.MarketPrice.ExecutionPrice.String(),
-			"slippage":        result.MarketPrice.Slippage.String(),
-			"slippage_perc":   result.MarketPrice.SlippagePerc.String(),
-			"volume_24h":      result.MarketPrice.Volume24h,
-		}
-	}
-
-	if result.FeeCalculation != nil {
-		response.FeeCalculation = map[string]interface{}{
-			"base_fee":       result.FeeCalculation.BaseFee.String(),
-			"percentage_fee": result.FeeCalculation.PercentageFee.String(),
-			"total_fee":      result.FeeCalculation.TotalFee.String(),
-			"fee_percentage": result.FeeCalculation.FeePercentage.String(),
-			"fee_type":       result.FeeCalculation.FeeType,
-		}
-	}
-
-	if len(result.ProcessingSteps) > 0 {
-		steps := make([]map[string]interface{}, len(result.ProcessingSteps))
-		for i, step := range result.ProcessingSteps {
-			steps[i] = map[string]interface{}{
-				"step":       step.Step,
-				"status":     step.Status,
-				"start_time": step.StartTime,
-				"end_time":   step.EndTime,
-				"duration":   step.Duration,
-				"error":      step.Error,
-			}
-		}
-		response.Steps = steps
-	}
-
+	// Modelo simplificado no tiene estos detalles
+	// Solo retorna información básica
 	return response
 }

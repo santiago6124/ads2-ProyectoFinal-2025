@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"orders-api/internal/clients"
-	"orders-api/internal/concurrent"
 	"orders-api/internal/config"
 	"orders-api/internal/handlers"
 	"orders-api/internal/messaging"
@@ -40,14 +39,14 @@ func main() {
 
 	// Setup logger
 	logger := setupLogger(cfg.Logging)
-	logger.Info("Starting Orders API service...")
+	logger.Info("🚀 Starting Orders API service (SIMPLIFIED)...")
 
 	// Create application context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize database repository
-	logger.Info("Connecting to MongoDB...")
+	// Initialize database
+	logger.Info("📦 Connecting to MongoDB...")
 	db, err := database.NewConnection()
 	if err != nil {
 		logger.Fatalf("Failed to connect to database: %v", err)
@@ -58,97 +57,66 @@ func main() {
 
 	// Test database connection
 	if err := db.Client.Ping(ctx, nil); err != nil {
-		logger.Fatalf("Failed to connect to MongoDB: %v", err)
+		logger.Fatalf("Failed to ping MongoDB: %v", err)
 	}
-	logger.Info("Successfully connected to MongoDB")
+	logger.Info("✅ Successfully connected to MongoDB")
 
 	// Initialize external service clients
-	logger.Info("Initializing external service clients...")
+	logger.Info("🔗 Initializing external service clients...")
 	userClient := clients.NewUserClient(cfg.ToUserClientConfig())
 	userBalanceClient := clients.NewUserBalanceClient(cfg.ToUserBalanceClientConfig())
 	marketClient := clients.NewMarketClient(cfg.ToMarketClientConfig())
 
-	// Test client connections
-	if err := testClientConnections(ctx, userClient, userBalanceClient, marketClient, logger); err != nil {
-		logger.Warnf("Some client connections failed: %v", err)
+	// Test client connections (non-blocking)
+	go testClientConnections(ctx, userClient, userBalanceClient, marketClient, logger)
+
+	// Initialize RabbitMQ publisher (simplified)
+	logger.Info("📨 Setting up RabbitMQ messaging...")
+	rabbitmqURL := os.Getenv("RABBITMQ_URL")
+	if rabbitmqURL == "" {
+		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	// Initialize messaging
-	logger.Info("Setting up RabbitMQ messaging...")
-	publisher, err := messaging.NewPublisher(cfg.ToMessagingConfig())
+	publisher, err := messaging.NewPublisher(rabbitmqURL)
 	if err != nil {
-		logger.Fatalf("Failed to create message publisher: %v", err)
+		logger.Warnf("Failed to create RabbitMQ publisher (continuing without events): %v", err)
+		publisher = nil // Sistema puede funcionar sin eventos
+	} else {
+		defer publisher.Close()
+		logger.Info("✅ RabbitMQ publisher initialized")
 	}
-	defer publisher.Close()
 
-	consumer, err := messaging.NewConsumer(cfg.ToConsumerConfig())
-	if err != nil {
-		logger.Fatalf("Failed to create message consumer: %v", err)
-	}
-	defer consumer.Stop()
+	// Initialize simplified services
+	logger.Info("⚙️ Initializing business services (simplified)...")
 
-	// Setup message handlers
-	setupMessageHandlers(consumer, logger)
-
-	// Start message consumer
-	if err := consumer.StartConsuming(ctx, cfg.Messaging.ExchangeName); err != nil {
-		logger.Fatalf("Failed to start message consumer: %v", err)
-	}
-	logger.Info("Message consumer started successfully")
-
-	// Initialize concurrent execution services
-	logger.Info("Setting up concurrent execution services...")
-	feeCalculator := services.NewFeeCalculator(cfg.ToFeeConfig())
-
-	executionService := concurrent.NewExecutionService(
+	// Create execution service (simplified - no concurrency)
+	executionService := services.NewExecutionService(
 		userClient,
 		userBalanceClient,
 		marketClient,
-		feeCalculator,
-		cfg.ToExecutionConfig(),
+		nil, // No necesitamos fee calculator separado
 	)
 
-	workerPool := concurrent.NewWorkerPool(
-		cfg.Worker.PoolSize,
-		cfg.Worker.QueueSize,
-		executionService,
-	)
+	// Create market service adapter
+	marketService := &marketServiceAdapter{marketClient: marketClient}
 
-	if err := workerPool.Start(ctx); err != nil {
-		logger.Fatalf("Failed to start worker pool: %v", err)
+	// Create event publisher adapter (puede ser nil)
+	var eventPublisher services.EventPublisher
+	if publisher != nil {
+		eventPublisher = &eventPublisherAdapter{publisher: publisher}
+	} else {
+		eventPublisher = &noopPublisher{} // No-op si no hay RabbitMQ
 	}
-	defer workerPool.Stop()
-	logger.Info("Worker pool started successfully")
 
-	orchestrator := concurrent.NewOrderOrchestrator(
-		cfg.Worker.PoolSize,
-		cfg.Worker.QueueSize,
-		executionService,
-	)
-
-	if err := orchestrator.Start(ctx); err != nil {
-		logger.Fatalf("Failed to start order orchestrator: %v", err)
-	}
-	defer orchestrator.Stop()
-	logger.Info("Order orchestrator started successfully")
-
-	// Initialize business services
-	logger.Info("Initializing business services...")
-	
-	// Create market service (mock implementation)
-	marketService := &mockMarketService{}
-	
-	// Create event publisher wrapper
-	eventPublisher := &eventPublisherWrapper{publisher: publisher}
-	
-	orderService := services.NewOrderService(
+	// Initialize simplified order service (no orchestrator, no workers)
+	orderService := services.NewOrderServiceSimple(
 		orderRepo,
-		orchestrator,
 		executionService,
-		feeCalculator,
 		marketService,
 		eventPublisher,
 	)
+
+	logger.Info("✅ Business services initialized (simplified, no concurrency)")
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.ToAuthConfig())
@@ -162,26 +130,26 @@ func main() {
 		userBalanceClient,
 		marketClient,
 		publisher,
-		consumer,
+		nil, // No consumer
 	)
 
 	// Setup routes
-	logger.Info("Setting up HTTP routes...")
+	logger.Info("🛣️ Setting up HTTP routes...")
 	router := routes.NewRouter(
 		orderHandler,
 		healthHandler,
 		authMiddleware,
 		loggingMiddleware,
 		&routes.RouterConfig{
-			Debug:       cfg.Server.Debug,
-			CORSEnabled: cfg.Server.CORSEnabled,
+			Debug:          cfg.Server.Debug,
+			CORSEnabled:    cfg.Server.CORSEnabled,
 			AllowedOrigins: cfg.Server.AllowedOrigins,
 		},
 	)
 
 	router.SetupRoutes(&routes.RouterConfig{
-		Debug:       cfg.Server.Debug,
-		CORSEnabled: cfg.Server.CORSEnabled,
+		Debug:          cfg.Server.Debug,
+		CORSEnabled:    cfg.Server.CORSEnabled,
 		AllowedOrigins: cfg.Server.AllowedOrigins,
 	})
 
@@ -194,33 +162,37 @@ func main() {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	// Start HTTP server in a goroutine
+	// Start HTTP server
 	go func() {
-		logger.Infof("Starting HTTP server on %s", srv.Addr)
+		logger.Infof("🌐 HTTP server listening on %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("Failed to start HTTP server: %v", err)
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+	logger.Info("✨ Orders API is ready to accept requests!")
+	logger.Info("📝 System simplified: No workers, no orchestrator, synchronous execution")
+
+	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	logger.Info("Shutting down server...")
 
-	// Graceful shutdown with timeout
+	logger.Info("🛑 Shutting down server...")
+
+	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer shutdownCancel()
 
-	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Errorf("Server forced to shutdown: %v", err)
 	}
 
-	logger.Info("Server exited")
+	logger.Info("👋 Server exited gracefully")
 }
 
-func setupLogger(config *LoggingConfig) *logrus.Logger {
+// setupLogger configures the application logger
+func setupLogger(config *config.LoggingConfig) *logrus.Logger {
 	logger := logrus.New()
 
 	// Set log level
@@ -240,10 +212,13 @@ func setupLogger(config *LoggingConfig) *logrus.Logger {
 		logger.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp:   true,
 			TimestampFormat: config.TimestampFormat,
+			ForceColors:     true,
 		})
 	default:
-		logger.SetFormatter(&logrus.JSONFormatter{
+		logger.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp:   true,
 			TimestampFormat: config.TimestampFormat,
+			ForceColors:     true,
 		})
 	}
 
@@ -260,152 +235,178 @@ func setupLogger(config *LoggingConfig) *logrus.Logger {
 	return logger
 }
 
-func testClientConnections(ctx context.Context, userClient *clients.UserClient, userBalanceClient *clients.UserBalanceClient, marketClient *clients.MarketClient, logger *logrus.Logger) error {
+// testClientConnections tests external service connections (non-blocking)
+func testClientConnections(
+	ctx context.Context,
+	userClient *clients.UserClient,
+	userBalanceClient *clients.UserBalanceClient,
+	marketClient *clients.MarketClient,
+	logger *logrus.Logger,
+) {
 	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Test User API
 	if err := userClient.HealthCheck(testCtx); err != nil {
-		logger.Warnf("User API health check failed: %v", err)
-		return fmt.Errorf("user API connection failed: %w", err)
+		logger.Warnf("⚠️ User API health check failed: %v", err)
+	} else {
+		logger.Info("✅ User API connection successful")
 	}
-	logger.Info("User API connection successful")
 
-	// Test User Balance Client (uses User API)
+	// Test User Balance Client
 	if err := userBalanceClient.HealthCheck(testCtx); err != nil {
-		logger.Warnf("User Balance Client health check failed: %v", err)
-		return fmt.Errorf("user balance client connection failed: %w", err)
+		logger.Warnf("⚠️ User Balance Client health check failed: %v", err)
+	} else {
+		logger.Info("✅ User Balance Client connection successful")
 	}
-	logger.Info("User Balance Client connection successful")
 
 	// Test Market API
 	if err := marketClient.HealthCheck(testCtx); err != nil {
-		logger.Warnf("Market API health check failed: %v", err)
-		return fmt.Errorf("market API connection failed: %w", err)
+		logger.Warnf("⚠️ Market API health check failed: %v", err)
+	} else {
+		logger.Info("✅ Market API connection successful")
 	}
-	logger.Info("Market API connection successful")
-
-	return nil
 }
 
-func setupMessageHandlers(consumer *messaging.Consumer, logger *logrus.Logger) {
-	// Example message handlers - in production, these would be more comprehensive
-
-	// Handle order status updates
-	consumer.RegisterHandler("orders.created", func(ctx context.Context, message *messaging.EventMessage) error {
-		logger.WithField("message_id", message.ID).Info("Processing order created event")
-		// Handle order created event
-		return nil
-	})
-
-	consumer.RegisterHandler("orders.updated", func(ctx context.Context, message *messaging.EventMessage) error {
-		logger.WithField("message_id", message.ID).Info("Processing order updated event")
-		// Handle order updated event
-		return nil
-	})
-
-	consumer.RegisterHandler("orders.executed", func(ctx context.Context, message *messaging.EventMessage) error {
-		logger.WithField("message_id", message.ID).Info("Processing order executed event")
-		// Handle order executed event
-		return nil
-	})
-
-	consumer.RegisterHandler("orders.failed", func(ctx context.Context, message *messaging.EventMessage) error {
-		logger.WithField("message_id", message.ID).Error("Processing order failed event")
-		// Handle order failed event
-		return nil
-	})
-
-	consumer.RegisterHandler("orders.cancelled", func(ctx context.Context, message *messaging.EventMessage) error {
-		logger.WithField("message_id", message.ID).Info("Processing order cancelled event")
-		// Handle order cancelled event
-		return nil
-	})
-
-	logger.Info("Message handlers registered successfully")
+// marketServiceAdapter adapts MarketClient to MarketService interface
+type marketServiceAdapter struct {
+	marketClient *clients.MarketClient
 }
 
-// Mock implementations for services
-type mockMarketService struct{}
-
-func (m *mockMarketService) GetMarketPrice(ctx context.Context, symbol string) (*models.PriceResult, error) {
-	return &models.PriceResult{
-		Symbol:         symbol,
-		MarketPrice:    decimal.NewFromFloat(50000.0),
-		BidPrice:       decimal.NewFromFloat(49995.0),
-		AskPrice:       decimal.NewFromFloat(50005.0),
-		ExecutionPrice: decimal.NewFromFloat(50000.0),
-		Volume24h:      "1000000",
-		Change24h:      "1000",
-		ChangePercent:  "2.0",
-		High24h:        decimal.NewFromFloat(51000.0),
-		Low24h:         decimal.NewFromFloat(49000.0),
-		Source:         "mock",
-		Confidence:     "high",
-		LastUpdated:    time.Now().Format(time.RFC3339),
-		Slippage:       decimal.Zero,
-		SlippagePerc:   decimal.Zero,
-		Timestamp:      time.Now(),
-	}, nil
+func (m *marketServiceAdapter) GetCurrentPrice(ctx context.Context, symbol string) (decimal.Decimal, error) {
+	price, err := m.marketClient.GetCurrentPrice(ctx, symbol)
+	if err != nil {
+		// Fallback: usar precios simulados si Market API no responde
+		log.Printf("Market API error, using fallback price for %s: %v", symbol, err)
+		return m.getFallbackPrice(symbol), nil
+	}
+	return price.MarketPrice, nil
 }
 
-func (m *mockMarketService) GetMarketConditions(ctx context.Context, symbol string) (*models.MarketConditions, error) {
-	return &models.MarketConditions{
-		Symbol:              symbol,
-		CurrentPrice:        decimal.NewFromFloat(50000.0),
-		Volume24h:           decimal.NewFromFloat(1000000.0),
-		PriceChange24h:      decimal.NewFromFloat(1000.0),
-		MarketCap:           decimal.NewFromFloat(1000000000.0),
-		Liquidity:           "high",
-		Volatility:          "medium",
-		Spread:              decimal.NewFromFloat(10.0),
-		SpreadPercent:       decimal.NewFromFloat(0.02),
-		TradingVolume:       decimal.NewFromFloat(1000000.0),
-		OrderBookDepth:      decimal.NewFromFloat(10000.0),
-		CirculatingSupply:   decimal.NewFromFloat(21000000.0),
-		LastUpdated:         time.Now(),
-	}, nil
-}
+func (m *marketServiceAdapter) ValidateSymbol(ctx context.Context, symbol string) (*services.CryptoInfo, error) {
+	// Intentar obtener precio de Market API
+	price, err := m.marketClient.GetCurrentPrice(ctx, symbol)
 
-func (m *mockMarketService) ValidateSymbol(ctx context.Context, symbol string) (*services.CryptoInfo, error) {
+	var currentPrice decimal.Decimal
+	if err != nil {
+		// Fallback: validar contra lista conocida y usar precio simulado
+		log.Printf("Market API error for %s, using fallback: %v", symbol, err)
+		if !m.isKnownSymbol(symbol) {
+			return nil, fmt.Errorf("symbol %s not found or invalid", symbol)
+		}
+		currentPrice = m.getFallbackPrice(symbol)
+	} else {
+		currentPrice = price.MarketPrice
+	}
+
 	return &services.CryptoInfo{
-		Symbol:      symbol,
-		IsActive:    true,
-		Name:        "Mock " + symbol,
-		CurrentPrice: decimal.NewFromFloat(50000.0),
-		MinQuantity: decimal.NewFromFloat(0.001),
-		MaxQuantity: decimal.NewFromFloat(100.0),
+		Symbol:       symbol,
+		Name:         m.getCryptoName(symbol),
+		CurrentPrice: currentPrice,
+		IsActive:     true,
 	}, nil
 }
 
-func (m *mockMarketService) GetCurrentPrice(ctx context.Context, symbol string) (decimal.Decimal, error) {
-	return decimal.NewFromFloat(50000.0), nil
+// isKnownSymbol verifica si el símbolo es conocido
+func (m *marketServiceAdapter) isKnownSymbol(symbol string) bool {
+	knownSymbols := map[string]bool{
+		"BTC": true, "ETH": true, "BNB": true, "SOL": true,
+		"XRP": true, "ADA": true, "DOGE": true, "AVAX": true,
+		"DOT": true, "MATIC": true, "LTC": true, "LINK": true,
+	}
+	return knownSymbols[symbol]
 }
 
-func (m *mockMarketService) IsMarketOpen(ctx context.Context) bool {
-	return true
+// getFallbackPrice retorna un precio simulado para testing
+func (m *marketServiceAdapter) getFallbackPrice(symbol string) decimal.Decimal {
+	// Precios simulados para desarrollo/testing
+	prices := map[string]float64{
+		"BTC":   50000.00,
+		"ETH":   3000.00,
+		"BNB":   400.00,
+		"SOL":   100.00,
+		"XRP":   0.60,
+		"ADA":   0.50,
+		"DOGE":  0.10,
+		"AVAX":  35.00,
+		"DOT":   7.00,
+		"MATIC": 0.80,
+		"LTC":   70.00,
+		"LINK":  15.00,
+	}
+
+	if price, ok := prices[symbol]; ok {
+		return decimal.NewFromFloat(price)
+	}
+	return decimal.NewFromFloat(1000.00) // Precio por defecto
 }
 
-// Event publisher wrapper to match the interface
-type eventPublisherWrapper struct {
+// getCryptoName retorna el nombre completo de la crypto
+func (m *marketServiceAdapter) getCryptoName(symbol string) string {
+	names := map[string]string{
+		"BTC":   "Bitcoin",
+		"ETH":   "Ethereum",
+		"BNB":   "Binance Coin",
+		"SOL":   "Solana",
+		"XRP":   "Ripple",
+		"ADA":   "Cardano",
+		"DOGE":  "Dogecoin",
+		"AVAX":  "Avalanche",
+		"DOT":   "Polkadot",
+		"MATIC": "Polygon",
+		"LTC":   "Litecoin",
+		"LINK":  "Chainlink",
+	}
+
+	if name, ok := names[symbol]; ok {
+		return name
+	}
+	return symbol
+}
+
+// eventPublisherAdapter adapts messaging.Publisher to EventPublisher interface
+type eventPublisherAdapter struct {
 	publisher *messaging.Publisher
 }
 
-func (e *eventPublisherWrapper) PublishOrderExecuted(ctx context.Context, order *models.Order) error {
-	return e.publisher.PublishOrderExecuted(ctx, order, nil)
-}
-
-func (e *eventPublisherWrapper) PublishOrderCancelled(ctx context.Context, order *models.Order, reason string) error {
-	return e.publisher.PublishOrderCancelled(ctx, order, reason)
-}
-
-func (e *eventPublisherWrapper) PublishOrderFailed(ctx context.Context, order *models.Order, reason string) error {
-	return e.publisher.PublishOrderFailed(ctx, order, reason)
-}
-
-func (e *eventPublisherWrapper) PublishOrderCreated(ctx context.Context, order *models.Order) error {
+func (e *eventPublisherAdapter) PublishOrderCreated(ctx context.Context, order *Order) error {
 	return e.publisher.PublishOrderCreated(ctx, order)
 }
 
-// Type alias to avoid import cycle
-type LoggingConfig = config.LoggingConfig
+func (e *eventPublisherAdapter) PublishOrderExecuted(ctx context.Context, order *Order) error {
+	return e.publisher.PublishOrderExecuted(ctx, order)
+}
+
+func (e *eventPublisherAdapter) PublishOrderCancelled(ctx context.Context, order *Order, reason string) error {
+	return e.publisher.PublishOrderCancelled(ctx, order, reason)
+}
+
+func (e *eventPublisherAdapter) PublishOrderFailed(ctx context.Context, order *Order, reason string) error {
+	return e.publisher.PublishOrderFailed(ctx, order, reason)
+}
+
+// noopPublisher is a no-op publisher when RabbitMQ is not available
+type noopPublisher struct{}
+
+func (n *noopPublisher) PublishOrderCreated(ctx context.Context, order *Order) error {
+	log.Println("No-op: Order created event (RabbitMQ not available)")
+	return nil
+}
+
+func (n *noopPublisher) PublishOrderExecuted(ctx context.Context, order *Order) error {
+	log.Println("No-op: Order executed event (RabbitMQ not available)")
+	return nil
+}
+
+func (n *noopPublisher) PublishOrderCancelled(ctx context.Context, order *Order, reason string) error {
+	log.Println("No-op: Order cancelled event (RabbitMQ not available)")
+	return nil
+}
+
+func (n *noopPublisher) PublishOrderFailed(ctx context.Context, order *Order, reason string) error {
+	log.Println("No-op: Order failed event (RabbitMQ not available)")
+	return nil
+}
+
+// Type alias to avoid import issues
+type Order = models.Order

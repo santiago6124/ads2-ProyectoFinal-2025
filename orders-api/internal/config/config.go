@@ -8,22 +8,18 @@ import (
 
 	"github.com/shopspring/decimal"
 	"orders-api/internal/clients"
-	"orders-api/internal/concurrent"
-	"orders-api/internal/messaging"
 	"orders-api/internal/middleware"
-	"orders-api/internal/services"
 )
 
 type Config struct {
-	Server     *ServerConfig     `json:"server"`
-	Database   *DatabaseConfig   `json:"database"`
-	Auth       *AuthConfig       `json:"auth"`
-	Logging    *LoggingConfig    `json:"logging"`
-	Messaging  *MessagingConfig  `json:"messaging"`
-	Clients    *ClientsConfig    `json:"clients"`
-	Execution  *ExecutionConfig  `json:"execution"`
-	Fee        *FeeConfig        `json:"fee"`
-	Worker     *WorkerConfig     `json:"worker"`
+	Server    *ServerConfig    `json:"server"`
+	Database  *DatabaseConfig  `json:"database"`
+	Auth      *AuthConfig      `json:"auth"`
+	Logging   *LoggingConfig   `json:"logging"`
+	Messaging *MessagingConfig `json:"messaging"`
+	Clients   *ClientsConfig   `json:"clients"`
+	// Execution y Fee configs ya no se usan en sistema simplificado
+	// Worker config ya no se usa (sin orchestrator)
 }
 
 type ServerConfig struct {
@@ -131,9 +127,7 @@ func LoadConfig() (*Config, error) {
 		Logging:   loadLoggingConfig(),
 		Messaging: loadMessagingConfig(),
 		Clients:   loadClientsConfig(),
-		Execution: loadExecutionConfig(),
-		Fee:       loadFeeConfig(),
-		Worker:    loadWorkerConfig(),
+		// Execution, Fee y Worker configs eliminados en sistema simplificado
 	}
 
 	return config, nil
@@ -303,6 +297,8 @@ func (c *Config) ToMarketClientConfig() *clients.MarketClientConfig {
 	}
 }
 
+// ToMessagingConfig y ToConsumerConfig ya no se usan (sistema simplificado)
+/*
 func (c *Config) ToMessagingConfig() *messaging.MessagingConfig {
 	return &messaging.MessagingConfig{
 		URL:             c.Messaging.URL,
@@ -314,43 +310,10 @@ func (c *Config) ToMessagingConfig() *messaging.MessagingConfig {
 		Persistent:      c.Messaging.Persistent,
 	}
 }
+*/
 
-func (c *Config) ToConsumerConfig() *messaging.ConsumerConfig {
-	return &messaging.ConsumerConfig{
-		URL:           c.Messaging.URL,
-		QueuePrefix:   c.Messaging.QueuePrefix,
-		ConsumerTag:   c.Messaging.ConsumerTag,
-		PrefetchCount: c.Messaging.PrefetchCount,
-		AutoAck:       c.Messaging.AutoAck,
-		WorkerCount:   c.Messaging.WorkerCount,
-		RetryDelay:    c.Messaging.RetryDelay,
-		MaxRetries:    c.Messaging.MaxRetries,
-		DeadLetterTTL: c.Messaging.MessageTTL,
-	}
-}
-
-func (c *Config) ToExecutionConfig() *concurrent.ExecutionConfig {
-	return &concurrent.ExecutionConfig{
-		MaxWorkers:       c.Execution.MaxWorkers,
-		QueueSize:        c.Execution.QueueSize,
-		ExecutionTimeout: c.Execution.ExecutionTimeout,
-		MaxSlippage:      c.Execution.MaxSlippage,
-		SimulateLatency:  c.Execution.SimulateLatency,
-		MinExecutionTime: c.Execution.MinExecutionTime,
-		MaxExecutionTime: c.Execution.MaxExecutionTime,
-	}
-}
-
-func (c *Config) ToFeeConfig() *services.FeeConfig {
-	return &services.FeeConfig{
-		BaseFeePercentage: c.Fee.BaseFeePercentage,
-		MakerFee:          c.Fee.MakerFee,
-		TakerFee:          c.Fee.TakerFee,
-		MinimumFee:        c.Fee.MinimumFee,
-		MaximumFee:        c.Fee.MaximumFee,
-		VIPDiscounts:      c.Fee.VIPDiscounts,
-	}
-}
+// ToExecutionConfig y ToFeeConfig ya no se usan en el sistema simplificado
+// Las fees se calculan directamente en el ExecutionService (0.1% fijo)
 
 func (c *Config) ToAuthConfig() *middleware.AuthConfig {
 	return &middleware.AuthConfig{

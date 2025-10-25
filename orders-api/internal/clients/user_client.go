@@ -104,13 +104,6 @@ func (c *UserClient) VerifyUser(ctx context.Context, userID int) (*models.Valida
 		IsValid: c.validateUserStatus(userResp.User),
 		UserID:  userResp.User.ID,
 		Message: c.getValidationMessage(userResp.User),
-		UserData: map[string]interface{}{
-			"email":         userResp.User.Email,
-			"username":      userResp.User.Username,
-			"tier_level":    userResp.User.TierLevel,
-			"kyc_status":    userResp.User.KYCStatus,
-			"trading_limit": userResp.User.TradingLimit,
-		},
 	}
 
 	return validationResult, nil

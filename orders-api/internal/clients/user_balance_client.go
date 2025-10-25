@@ -72,8 +72,6 @@ func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount
 		Available:     availableBalance,
 		Required:      amount,
 		Currency:      "USD",
-		Locked:        decimal.Zero, // No hay locks en el sistema simplificado
-		Total:         availableBalance,
 	}
 
 	if hasSufficient {

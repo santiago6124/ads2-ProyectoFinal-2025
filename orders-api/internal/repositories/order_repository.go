@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -24,9 +23,8 @@ type OrderRepository interface {
 	Update(ctx context.Context, order *models.Order) error
 	Delete(ctx context.Context, id string) error
 	ListByUser(ctx context.Context, userID int, filter *dto.OrderFilterRequest) ([]models.Order, int64, error)
-	ListAll(ctx context.Context, filter *dto.AdminOrderFilterRequest) ([]models.Order, int64, error)
+	// ListAll y GetAdminStatistics eliminados en sistema simplificado (funciones admin no necesarias)
 	GetOrdersSummary(ctx context.Context, userID int) (*dto.OrdersSummary, error)
-	GetAdminStatistics(ctx context.Context) (*dto.AdminStatistics, error)
 	UpdateStatus(ctx context.Context, id string, status models.OrderStatus) error
 	GetPendingOrders(ctx context.Context, limit int) ([]models.Order, error)
 	GetOrdersByStatus(ctx context.Context, status models.OrderStatus, limit int) ([]models.Order, error)
@@ -152,6 +150,8 @@ func (r *orderRepository) ListByUser(ctx context.Context, userID int, filter *dt
 	return r.executeQuery(ctx, mongoFilter, filter)
 }
 
+// ListAll comentado - función admin no necesaria en sistema simplificado
+/*
 func (r *orderRepository) ListAll(ctx context.Context, filter *dto.AdminOrderFilterRequest) ([]models.Order, int64, error) {
 	mongoFilter := bson.M{}
 
@@ -163,6 +163,7 @@ func (r *orderRepository) ListAll(ctx context.Context, filter *dto.AdminOrderFil
 
 	return r.executeQuery(ctx, mongoFilter, &filter.OrderFilterRequest)
 }
+*/
 
 func (r *orderRepository) applyFilters(mongoFilter bson.M, filter *dto.OrderFilterRequest) {
 	if filter.Status != nil {
@@ -177,22 +178,8 @@ func (r *orderRepository) applyFilters(mongoFilter bson.M, filter *dto.OrderFilt
 		mongoFilter["type"] = *filter.Type
 	}
 
-	if filter.From != nil || filter.To != nil {
-		dateFilter := bson.M{}
-		if filter.From != nil {
-			if fromDate, err := time.Parse("2006-01-02", *filter.From); err == nil {
-				dateFilter["$gte"] = fromDate
-			}
-		}
-		if filter.To != nil {
-			if toDate, err := time.Parse("2006-01-02", *filter.To); err == nil {
-				dateFilter["$lte"] = toDate.Add(24 * time.Hour)
-			}
-		}
-		if len(dateFilter) > 0 {
-			mongoFilter["created_at"] = dateFilter
-		}
-	}
+	// Filtros de fecha From/To eliminados en sistema simplificado
+	// Se puede agregar después si se necesita
 }
 
 func (r *orderRepository) executeQuery(ctx context.Context, mongoFilter bson.M, filter *dto.OrderFilterRequest) ([]models.Order, int64, error) {
@@ -205,15 +192,8 @@ func (r *orderRepository) executeQuery(ctx context.Context, mongoFilter bson.M, 
 	findOptions.SetSkip(int64(filter.GetOffset()))
 	findOptions.SetLimit(int64(filter.Limit))
 
-	if filter.Sort != nil {
-		sortOrder := 1
-		sortField := *filter.Sort
-		if strings.HasPrefix(sortField, "-") {
-			sortOrder = -1
-			sortField = strings.TrimPrefix(sortField, "-")
-		}
-		findOptions.SetSort(bson.D{{sortField, sortOrder}})
-	}
+	// Sort por created_at descendente por defecto (más recientes primero)
+	findOptions.SetSort(bson.D{{"created_at", -1}})
 
 	cursor, err := r.collection.Find(ctx, mongoFilter, findOptions)
 	if err != nil {
@@ -259,16 +239,19 @@ func (r *orderRepository) GetOrdersSummary(ctx context.Context, userID int) (*dt
 
 	result := results[0]
 	summary := &dto.OrdersSummary{
-		TotalInvested:    parseDecimalFromBSON(result["total_invested"]),
-		TotalOrders:      parseInt64FromBSON(result["total_orders"]),
-		SuccessfulOrders: parseInt64FromBSON(result["successful_orders"]),
-		FailedOrders:     parseInt64FromBSON(result["failed_orders"]),
-		TotalFees:        parseDecimalFromBSON(result["total_fees"]),
+		TotalVolume:     parseDecimalFromBSON(result["total_invested"]),
+		TotalOrders:     parseInt64FromBSON(result["total_orders"]),
+		ExecutedOrders:  parseInt64FromBSON(result["successful_orders"]),
+		FailedOrders:    parseInt64FromBSON(result["failed_orders"]),
+		PendingOrders:   0, // Se puede calcular si se necesita
+		CancelledOrders: 0, // Se puede calcular si se necesita
 	}
 
 	return summary, nil
 }
 
+// GetAdminStatistics comentado - función admin no necesaria en sistema simplificado
+/*
 func (r *orderRepository) GetAdminStatistics(ctx context.Context) (*dto.AdminStatistics, error) {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -353,6 +336,7 @@ func (r *orderRepository) GetAdminStatistics(ctx context.Context) (*dto.AdminSta
 
 	return stats, nil
 }
+*/
 
 func (r *orderRepository) UpdateStatus(ctx context.Context, id string, status models.OrderStatus) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
