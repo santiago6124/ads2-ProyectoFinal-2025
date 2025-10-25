@@ -84,14 +84,15 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		fee = minFee
 	}
 
-	// 5. Verificar balance (para compras)
-	if order.Type == models.OrderTypeBuy {
-		// Get user token from context
-		userToken := ""
-		if token := ctx.Value("user_token"); token != nil {
-			userToken = token.(string)
-		}
+	// Get user token from context
+	userToken := ""
+	if token := ctx.Value("user_token"); token != nil {
+		userToken = token.(string)
+	}
 
+	// 5. Verificar balance y procesar transacción según el tipo
+	if order.Type == models.OrderTypeBuy {
+		// Para COMPRAS: verificar si tiene suficiente dinero
 		requiredAmount := totalAmount.Add(fee)
 		balanceResult, err := s.userBalanceClient.CheckBalance(ctx, order.UserID, requiredAmount, userToken)
 		if err != nil {
@@ -103,7 +104,7 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 				requiredAmount.String(), balanceResult.Available.String())
 		}
 
-		// Actualizar el balance del usuario
+		// Deduct del balance (comprar)
 		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, requiredAmount, "buy", order.ID.Hex(), fmt.Sprintf("Buy %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to process transaction: %w", err)
@@ -112,6 +113,24 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		// Actualizar holdings en el portfolio
 		if s.portfolioClient != nil {
 			err = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceResult.MarketPrice, "buy")
+			if err != nil {
+				// Log error but don't fail the order execution
+				fmt.Printf("⚠️ Failed to update portfolio holdings: %v\n", err)
+			}
+		}
+	} else if order.Type == models.OrderTypeSell {
+		// Para VENTAS: agregar dinero al balance (después de descontar fee)
+		netAmount := totalAmount.Sub(fee)
+		
+		// Para ventas, pasamos el monto positivo y ProcessTransaction lo suma al balance
+		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, netAmount, "sell", order.ID.Hex(), fmt.Sprintf("Sell %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to process transaction: %w", err)
+		}
+
+		// Actualizar holdings en el portfolio
+		if s.portfolioClient != nil {
+			err = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceResult.MarketPrice, "sell")
 			if err != nil {
 				// Log error but don't fail the order execution
 				fmt.Printf("⚠️ Failed to update portfolio holdings: %v\n", err)

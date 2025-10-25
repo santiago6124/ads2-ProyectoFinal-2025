@@ -28,17 +28,28 @@ export function PortfolioStats() {
         const ordersResponse = await apiService.getOrders(user.id, accessToken)
         const orders = ordersResponse.orders || []
         
-        // Calculate total value of crypto holdings
-        let cryptoValue = 0
+        // Calculate total value of crypto holdings (buy adds, sell subtracts)
+        const holdingsMap = new Map<string, number>()
+        
         orders.forEach((order: any) => {
-          if (order.status === 'executed' && order.type === 'buy') {
+          if (order.status === 'executed') {
             const quantity = parseFloat(order.quantity)
             const price = parseFloat(order.order_price)
             if (quantity > 0 && price > 0) {
-              cryptoValue += quantity * price
+              const value = quantity * price
+              const currentValue = holdingsMap.get(order.crypto_symbol) || 0
+              
+              if (order.type === 'buy') {
+                holdingsMap.set(order.crypto_symbol, currentValue + value)
+              } else if (order.type === 'sell') {
+                holdingsMap.set(order.crypto_symbol, Math.max(0, currentValue - value)) // Don't go negative
+              }
             }
           }
         })
+        
+        // Sum all crypto holdings
+        const cryptoValue = Array.from(holdingsMap.values()).reduce((sum, value) => sum + value, 0)
 
         // Total balance = cash + crypto holdings value
         setTotalBalance(cash + cryptoValue)

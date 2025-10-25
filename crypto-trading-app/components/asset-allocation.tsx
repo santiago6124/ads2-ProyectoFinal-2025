@@ -35,9 +35,9 @@ export function AssetAllocation() {
         if (orders && orders.length > 0) {
           const holdingsMap = new Map<string, { quantity: number; totalValue: number }>()
           
-          // Calculate holdings from executed buy orders
+          // Calculate holdings from executed orders (buy adds, sell subtracts)
           orders.forEach((order: any) => {
-            if (order.status === 'executed' && order.type === 'buy') {
+            if (order.status === 'executed') {
               const quantity = parseFloat(order.quantity)
               const price = parseFloat(order.order_price)
               
@@ -46,22 +46,34 @@ export function AssetAllocation() {
                 const totalValue = quantity * price
                 
                 const existing = holdingsMap.get(order.crypto_symbol) || { quantity: 0, totalValue: 0 }
-                holdingsMap.set(order.crypto_symbol, {
-                  quantity: existing.quantity + quantity,
-                  totalValue: existing.totalValue + totalValue
-                })
+                
+                if (order.type === 'buy') {
+                  // Add holdings for buy orders
+                  holdingsMap.set(order.crypto_symbol, {
+                    quantity: existing.quantity + quantity,
+                    totalValue: existing.totalValue + totalValue
+                  })
+                } else if (order.type === 'sell') {
+                  // Subtract holdings for sell orders
+                  holdingsMap.set(order.crypto_symbol, {
+                    quantity: existing.quantity - quantity,
+                    totalValue: existing.totalValue - totalValue
+                  })
+                }
               }
             }
           })
 
-          // Convert to array and calculate percentages
-          const holdingsArray = Array.from(holdingsMap.entries()).map(([symbol, data], index) => ({
-            name: symbol,
-            quantity: data.quantity,
-            value: data.totalValue,
-            percentage: 0, // Will be calculated below
-            color: COLORS[index % COLORS.length]
-          }))
+          // Convert to array, filter out holdings with quantity or value <= 0, and calculate percentages
+          const holdingsArray = Array.from(holdingsMap.entries())
+            .filter(([_, data]) => data.quantity > 0 && data.totalValue > 0) // Only keep positive holdings
+            .map(([symbol, data], index) => ({
+              name: symbol,
+              quantity: data.quantity,
+              value: data.totalValue,
+              percentage: 0, // Will be calculated below
+              color: COLORS[index % COLORS.length]
+            }))
 
           // Calculate total portfolio value
           const totalValue = holdingsArray.reduce((sum, asset) => sum + asset.value, 0) + user.initial_balance
