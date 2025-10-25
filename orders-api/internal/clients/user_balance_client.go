@@ -54,9 +54,9 @@ func NewUserBalanceClient(config *UserBalanceConfig) *UserBalanceClient {
 }
 
 // CheckBalance verifica si el usuario tiene suficiente balance para la orden
-func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount decimal.Decimal) (*models.BalanceResult, error) {
+func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount decimal.Decimal, userToken string) (*models.BalanceResult, error) {
 	// Obtener información del usuario desde Users API
-	user, err := c.GetUser(ctx, userID)
+	user, err := c.GetUser(ctx, userID, userToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -87,7 +87,7 @@ func (c *UserBalanceClient) CheckBalance(ctx context.Context, userID int, amount
 // LockFunds simula el lock de fondos (no hace nada real en el sistema simplificado)
 func (c *UserBalanceClient) LockFunds(ctx context.Context, userID int, amount decimal.Decimal) error {
 	// En el sistema simplificado, solo verificamos que tenga suficiente balance
-	balance, err := c.CheckBalance(ctx, userID, amount)
+	balance, err := c.CheckBalance(ctx, userID, amount, "")
 	if err != nil {
 		return fmt.Errorf("failed to check balance: %w", err)
 	}
@@ -114,7 +114,7 @@ func (c *UserBalanceClient) ReleaseFunds(ctx context.Context, userID int, amount
 // ProcessTransaction procesa una transacción actualizando el balance del usuario
 func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, amount decimal.Decimal, transactionType, orderID, description string) (string, error) {
 	// Obtener usuario actual
-	user, err := c.GetUser(ctx, userID)
+	user, err := c.GetUser(ctx, userID, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}
@@ -151,7 +151,7 @@ func (c *UserBalanceClient) ProcessTransaction(ctx context.Context, userID int, 
 }
 
 // GetUser obtiene la información del usuario desde Users API
-func (c *UserBalanceClient) GetUser(ctx context.Context, userID int) (*UserBalanceResponse, error) {
+func (c *UserBalanceClient) GetUser(ctx context.Context, userID int, userToken string) (*UserBalanceResponse, error) {
 	url := fmt.Sprintf("%s/api/users/%d", c.baseURL, userID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -159,7 +159,12 @@ func (c *UserBalanceClient) GetUser(ctx context.Context, userID int) (*UserBalan
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	// Use user token if provided, otherwise use API key
+	authToken := c.apiKey
+	if userToken != "" {
+		authToken = userToken
+	}
+	req.Header.Set("Authorization", "Bearer "+authToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)

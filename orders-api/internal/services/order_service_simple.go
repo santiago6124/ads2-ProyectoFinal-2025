@@ -61,10 +61,21 @@ func NewOrderServiceSimple(
 
 // CreateOrder crea y ejecuta una orden de forma simplificada
 func (s *OrderServiceSimple) CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int) (*models.Order, error) {
+	// DEBUG: Log request
+	log.Printf("🔍 CreateOrder received - Symbol: %s, MarketPrice field: '%s', OrderKind: %s",
+		req.CryptoSymbol, req.MarketPrice, req.OrderKind)
+
 	// 1. Validar request y parsear valores
-	quantity, limitPrice, err := req.Validate()
+	quantity, limitPrice, marketPrice, err := req.Validate()
 	if err != nil {
 		return nil, fmt.Errorf("validation error: %w", err)
+	}
+
+	// DEBUG: Log parsed values
+	if marketPrice != nil {
+		log.Printf("🔍 Parsed marketPrice: %s", marketPrice.String())
+	} else {
+		log.Printf("🔍 Parsed marketPrice is nil")
 	}
 
 	// 2. Validar símbolo de crypto
@@ -80,9 +91,15 @@ func (s *OrderServiceSimple) CreateOrder(ctx context.Context, req *dto.CreateOrd
 	// 3. Determinar precio de la orden
 	var orderPrice decimal.Decimal
 	if req.OrderKind == models.OrderKindLimit {
+		// Para limit orders, usar el precio límite
 		orderPrice = *limitPrice
+	} else if marketPrice != nil {
+		// Para market orders, usar el precio del frontend si está disponible
+		log.Printf("📊 Using market price from frontend: %s for %s", marketPrice.String(), req.CryptoSymbol)
+		orderPrice = *marketPrice
 	} else {
-		// Para market orders, obtener precio actual
+		// Si no viene precio del frontend, obtener del backend
+		log.Printf("⚠️ No market price from frontend, fetching from backend for %s", req.CryptoSymbol)
 		currentPrice, err := s.marketService.GetCurrentPrice(ctx, req.CryptoSymbol)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current price: %w", err)
@@ -128,9 +145,19 @@ func (s *OrderServiceSimple) CreateOrder(ctx context.Context, req *dto.CreateOrd
 
 	// 8. Si es market order, ejecutar inmediatamente de forma síncrona
 	if req.OrderKind == models.OrderKindMarket {
-		if err := s.executeOrderSync(ctx, order); err != nil {
-			log.Printf("Warning: failed to execute market order: %v", err)
-			// La orden queda en pending, el usuario puede ver el error
+		// Get user token from context if available
+		execCtx := ctx
+		if userToken := ctx.Value("user_token"); userToken != nil {
+			execCtx = context.WithValue(execCtx, "user_token", userToken)
+		}
+		
+		if err := s.executeOrderSync(execCtx, order); err != nil {
+			// Reload the order to get the updated status and error message
+			updatedOrder, reloadErr := s.orderRepo.GetByID(ctx, order.ID.Hex())
+			if reloadErr == nil && updatedOrder.Status == models.OrderStatusFailed {
+				return nil, fmt.Errorf("order execution failed: %s", updatedOrder.ErrorMessage)
+			}
+			return nil, fmt.Errorf("order execution failed: %w", err)
 		}
 	}
 

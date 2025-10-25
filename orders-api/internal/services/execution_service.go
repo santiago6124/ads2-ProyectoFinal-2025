@@ -23,7 +23,7 @@ type UserClient interface {
 
 // UserBalanceClient interface para verificar saldos
 type UserBalanceClient interface {
-	CheckBalance(ctx context.Context, userID int, amount decimal.Decimal) (*models.BalanceResult, error)
+	CheckBalance(ctx context.Context, userID int, amount decimal.Decimal, userToken string) (*models.BalanceResult, error)
 }
 
 // MarketClient interface para obtener precios
@@ -73,8 +73,14 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 
 	// 5. Verificar balance (para compras)
 	if order.Type == models.OrderTypeBuy {
+		// Get user token from context
+		userToken := ""
+		if token := ctx.Value("user_token"); token != nil {
+			userToken = token.(string)
+		}
+
 		requiredAmount := totalAmount.Add(fee)
-		balanceResult, err := s.userBalanceClient.CheckBalance(ctx, order.UserID, requiredAmount)
+		balanceResult, err := s.userBalanceClient.CheckBalance(ctx, order.UserID, requiredAmount, userToken)
 		if err != nil {
 			return nil, fmt.Errorf("balance check failed: %w", err)
 		}

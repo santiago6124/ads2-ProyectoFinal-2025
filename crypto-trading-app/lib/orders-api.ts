@@ -5,7 +5,8 @@ export interface OrderRequest {
   crypto_symbol: string
   quantity: string
   order_kind: "market" | "limit"  // Changed from order_type to order_kind
-  order_price?: string  // Added order_price field
+  limit_price?: string  // Price for limit orders
+  market_price?: string  // Current market price from frontend
 }
 
 export interface OrderResponse {

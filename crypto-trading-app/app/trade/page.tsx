@@ -91,7 +91,8 @@ function TradeContent() {
         type: "buy",
         crypto_symbol: selectedCrypto.symbol,
         quantity: qty.toString(),
-        order_kind: "market"  // Changed from order_type to order_kind
+        order_kind: "market",
+        market_price: selectedCrypto.price.toString()  // Send current market price from frontend
       }
       
       console.log('=== BUY ORDER PLACED ===')
@@ -154,7 +155,8 @@ function TradeContent() {
         type: "sell",
         crypto_symbol: selectedCrypto.symbol,
         quantity: qty.toString(),
-        order_kind: "market"  // Changed from order_type to order_kind
+        order_kind: "market",
+        market_price: selectedCrypto.price.toString()  // Send current market price from frontend
       }
       
       console.log('=== SELL ORDER PLACED ===')

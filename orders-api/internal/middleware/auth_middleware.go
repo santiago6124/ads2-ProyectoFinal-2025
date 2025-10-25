@@ -116,6 +116,7 @@ func (a *AuthMiddleware) ValidateToken() gin.HandlerFunc {
 		c.Set("user_username", claims.Username)
 		c.Set("user_role", claims.Role)
 		c.Set("token_claims", claims)
+		c.Set("user_token", tokenString) // Store the token string for use in downstream services
 
 		c.Next()
 	}

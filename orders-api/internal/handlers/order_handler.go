@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,6 +31,7 @@ type CreateOrderRequest struct {
 	CryptoSymbol string `json:"crypto_symbol" binding:"required"`
 	Quantity     string `json:"quantity" binding:"required"`
 	OrderPrice   string `json:"order_price,omitempty"`
+	MarketPrice  string `json:"market_price,omitempty"` // Market price from frontend
 }
 
 type UpdateOrderRequest struct {
@@ -92,6 +94,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
+	// DEBUG: Log the received request
+	log.Printf("🔍 Handler received request - MarketPrice: '%s', OrderKind: %s, Quantity: %s, Type: %s",
+		req.MarketPrice, req.OrderKind, req.Quantity, req.Type)
+
 	quantity, err := decimal.NewFromString(req.Quantity)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quantity format"})
@@ -107,12 +113,18 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
+	// Extract user token from context if available
+	if userToken, exists := c.Get("user_token"); exists {
+		ctx = context.WithValue(ctx, "user_token", userToken)
+	}
+
 	dtoReq := &dto.CreateOrderRequest{
 		Type:         models.OrderType(req.Type),
 		CryptoSymbol: req.CryptoSymbol,
 		Quantity:     req.Quantity,
 		OrderKind:    models.OrderKind(req.OrderKind),
 		LimitPrice:   req.OrderPrice,
+		MarketPrice:  req.MarketPrice, // Pass market price from frontend
 	}
 
 	createdOrder, err := h.orderService.CreateOrder(ctx, dtoReq, userID.(int))
@@ -380,22 +392,22 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 
 func (h *OrderHandler) convertToOrderResponse(order *models.Order) *OrderResponse {
 	response := &OrderResponse{
-		ID:           order.ID.Hex(),
-		OrderNumber:  order.OrderNumber,
-		UserID:       order.UserID,
-		Type:         string(order.Type),
-		OrderKind:    string(order.OrderKind),
-		Status:       string(order.Status),
-		CryptoSymbol: order.CryptoSymbol,
-		CryptoName:   order.CryptoName,
-		Quantity:     order.Quantity.String(),
-		OrderPrice:   order.Price.String(), // Simplificado: solo Price
-		TotalAmount:  order.TotalAmount.String(),
-		Fee:          order.Fee.String(),
+		ID:            order.ID.Hex(),
+		OrderNumber:   order.OrderNumber,
+		UserID:        order.UserID,
+		Type:          string(order.Type),
+		OrderKind:     string(order.OrderKind),
+		Status:        string(order.Status),
+		CryptoSymbol:  order.CryptoSymbol,
+		CryptoName:    order.CryptoName,
+		Quantity:      order.Quantity.String(),
+		OrderPrice:    order.Price.String(), // Simplificado: solo Price
+		TotalAmount:   order.TotalAmount.String(),
+		Fee:           order.Fee.String(),
 		FeePercentage: "0.1", // Siempre 0.1% en sistema simplificado
-		CreatedAt:    order.CreatedAt,
-		UpdatedAt:    order.UpdatedAt,
-		ExecutedAt:   order.ExecutedAt,
+		CreatedAt:     order.CreatedAt,
+		UpdatedAt:     order.UpdatedAt,
+		ExecutedAt:    order.ExecutedAt,
 		// CancelledAt eliminado en modelo simplificado
 	}
 

@@ -13,47 +13,61 @@ type CreateOrderRequest struct {
 	CryptoSymbol string           `json:"crypto_symbol" binding:"required,min=2,max=10"`
 	Quantity     string           `json:"quantity" binding:"required"` // String para evitar problemas de parseo JSON
 	OrderKind    models.OrderKind `json:"order_kind" binding:"required,oneof=market limit"`
-	LimitPrice   string           `json:"limit_price,omitempty"` // Solo requerido para limit orders
+	LimitPrice   string           `json:"limit_price,omitempty"`  // Solo requerido para limit orders
+	MarketPrice  string           `json:"market_price,omitempty"` // Precio de mercado desde el frontend
 }
 
 // Validate valida la request y retorna los valores parseados
-func (r *CreateOrderRequest) Validate() (decimal.Decimal, *decimal.Decimal, error) {
+func (r *CreateOrderRequest) Validate() (quantity decimal.Decimal, limitPrice *decimal.Decimal, marketPrice *decimal.Decimal, err error) {
 	// Parsear y validar quantity
-	quantity, err := decimal.NewFromString(r.Quantity)
+	quantity, err = decimal.NewFromString(r.Quantity)
 	if err != nil {
-		return decimal.Zero, nil, fmt.Errorf("invalid quantity format: must be a valid number")
+		return decimal.Zero, nil, nil, fmt.Errorf("invalid quantity format: must be a valid number")
 	}
 
 	if quantity.LessThanOrEqual(decimal.Zero) {
-		return decimal.Zero, nil, fmt.Errorf("quantity must be greater than zero")
+		return decimal.Zero, nil, nil, fmt.Errorf("quantity must be greater than zero")
 	}
 
 	// Validación de cantidad máxima
 	maxQuantity := decimal.NewFromInt(1000000)
 	if quantity.GreaterThan(maxQuantity) {
-		return decimal.Zero, nil, fmt.Errorf("quantity exceeds maximum allowed (1,000,000)")
+		return decimal.Zero, nil, nil, fmt.Errorf("quantity exceeds maximum allowed (1,000,000)")
 	}
 
 	// Validar limit price para órdenes limit
-	var limitPrice *decimal.Decimal
 	if r.OrderKind == models.OrderKindLimit {
 		if r.LimitPrice == "" {
-			return decimal.Zero, nil, fmt.Errorf("limit_price is required for limit orders")
+			return decimal.Zero, nil, nil, fmt.Errorf("limit_price is required for limit orders")
 		}
 
 		price, err := decimal.NewFromString(r.LimitPrice)
 		if err != nil {
-			return decimal.Zero, nil, fmt.Errorf("invalid limit_price format: must be a valid number")
+			return decimal.Zero, nil, nil, fmt.Errorf("invalid limit_price format: must be a valid number")
 		}
 
 		if price.LessThanOrEqual(decimal.Zero) {
-			return decimal.Zero, nil, fmt.Errorf("limit_price must be greater than zero")
+			return decimal.Zero, nil, nil, fmt.Errorf("limit_price must be greater than zero")
 		}
 
 		limitPrice = &price
 	}
 
-	return quantity, limitPrice, nil
+	// Validar market price si viene desde el frontend
+	if r.MarketPrice != "" {
+		price, err := decimal.NewFromString(r.MarketPrice)
+		if err != nil {
+			return decimal.Zero, nil, nil, fmt.Errorf("invalid market_price format: must be a valid number")
+		}
+
+		if price.LessThanOrEqual(decimal.Zero) {
+			return decimal.Zero, nil, nil, fmt.Errorf("market_price must be greater than zero")
+		}
+
+		marketPrice = &price
+	}
+
+	return quantity, limitPrice, marketPrice, nil
 }
 
 // OrderFilterRequest para filtrar y paginar órdenes

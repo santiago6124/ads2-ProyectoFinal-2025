@@ -120,7 +120,7 @@ func NewMarketClient(config *MarketClientConfig) *MarketClient {
 }
 
 func (c *MarketClient) GetCurrentPrice(ctx context.Context, symbol string) (*models.PriceResult, error) {
-	url := fmt.Sprintf("%s/api/market/price/%s", c.baseURL, symbol)
+	url := fmt.Sprintf("%s/api/v1/prices/%s", c.baseURL, symbol)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -136,22 +136,24 @@ func (c *MarketClient) GetCurrentPrice(ctx context.Context, symbol string) (*mod
 	}
 	defer resp.Body.Close()
 
-	var priceResp PriceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&priceResp); err != nil {
+	// The market API returns a simple structure, not a PriceResponse
+	var simpleResp struct {
+		Symbol    string  `json:"symbol"`
+		Name      string  `json:"name"`
+		Price     float64 `json:"price"`
+		Change24h float64 `json:"change_24h"`
+		MarketCap float64 `json:"market_cap"`
+		Volume    float64 `json:"volume"`
+		Timestamp int64   `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&simpleResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if priceResp.Error != "" {
-		return nil, fmt.Errorf("market service error: %s", priceResp.Error)
-	}
-
-	if priceResp.Price == nil {
-		return nil, fmt.Errorf("price data not available for symbol %s", symbol)
-	}
-
 	result := &models.PriceResult{
-		Symbol:      priceResp.Price.Symbol,
-		MarketPrice: priceResp.Price.Price,
+		Symbol:      simpleResp.Symbol,
+		MarketPrice: decimal.NewFromFloat(simpleResp.Price),
 		Timestamp:   time.Now(),
 	}
 
