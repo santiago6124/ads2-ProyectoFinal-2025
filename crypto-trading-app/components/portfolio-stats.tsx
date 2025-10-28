@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Wallet, DollarSign } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { apiService } from "@/lib/api"
+import { getPortfolio } from "@/lib/portfolio-api"
 
 export function PortfolioStats() {
   const { user } = useAuth()
@@ -17,44 +17,21 @@ export function PortfolioStats() {
       if (!user?.id) return
 
       try {
-        const accessToken = localStorage.getItem('crypto_access_token')
-        if (!accessToken) return
+        // Get complete portfolio data from portfolio-api (includes current prices, P&L, etc.)
+        const portfolio = await getPortfolio(user.id)
 
-        // Get cash balance from user
-        const cash = user.initial_balance || 0
+        // Use pre-calculated values from backend
+        const totalValue = parseFloat(portfolio.total_value) || 0
+        const cash = parseFloat(portfolio.total_cash) || 0
+
+        setTotalBalance(totalValue)
         setAvailableCash(cash)
-
-        // Get orders to calculate crypto holdings value
-        const ordersResponse = await apiService.getOrders(user.id, accessToken)
-        const orders = ordersResponse.orders || []
-        
-        // Calculate total value of crypto holdings (buy adds, sell subtracts)
-        const holdingsMap = new Map<string, number>()
-        
-        orders.forEach((order: any) => {
-          if (order.status === 'executed') {
-            const quantity = parseFloat(order.quantity)
-            const price = parseFloat(order.order_price)
-            if (quantity > 0 && price > 0) {
-              const value = quantity * price
-              const currentValue = holdingsMap.get(order.crypto_symbol) || 0
-              
-              if (order.type === 'buy') {
-                holdingsMap.set(order.crypto_symbol, currentValue + value)
-              } else if (order.type === 'sell') {
-                holdingsMap.set(order.crypto_symbol, Math.max(0, currentValue - value)) // Don't go negative
-              }
-            }
-          }
-        })
-        
-        // Sum all crypto holdings
-        const cryptoValue = Array.from(holdingsMap.values()).reduce((sum, value) => sum + value, 0)
-
-        // Total balance = cash + crypto holdings value
-        setTotalBalance(cash + cryptoValue)
       } catch (error) {
         console.error('Error fetching portfolio data:', error)
+        // On error, try to fallback to user balance
+        const fallbackCash = user.initial_balance || 0
+        setAvailableCash(fallbackCash)
+        setTotalBalance(fallbackCash)
       } finally {
         setLoading(false)
       }

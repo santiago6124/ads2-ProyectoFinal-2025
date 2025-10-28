@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 import { useAuth } from "@/lib/auth-context"
-import { apiService } from "@/lib/api"
+import { getPortfolio } from "@/lib/portfolio-api"
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -24,72 +24,29 @@ export function AssetAllocation() {
       if (!user?.id) return
 
       try {
-        const accessToken = localStorage.getItem('crypto_access_token')
-        if (!accessToken) return
+        // Get complete portfolio data from portfolio-api (includes current prices, percentages, etc.)
+        const portfolio = await getPortfolio(user.id)
 
-        // Get orders to calculate holdings
-        const ordersResponse = await apiService.getOrders(user.id, accessToken)
-        
-        const orders = ordersResponse.orders || []
-        
-        if (orders && orders.length > 0) {
-          const holdingsMap = new Map<string, { quantity: number; totalValue: number }>()
-          
-          // Calculate holdings from executed orders (buy adds, sell subtracts)
-          orders.forEach((order: any) => {
-            if (order.status === 'executed') {
-              const quantity = parseFloat(order.quantity)
-              const price = parseFloat(order.order_price)
-              
-              // Skip orders with invalid data (0 quantity or price)
-              if (quantity > 0 && price > 0) {
-                const totalValue = quantity * price
-                
-                const existing = holdingsMap.get(order.crypto_symbol) || { quantity: 0, totalValue: 0 }
-                
-                if (order.type === 'buy') {
-                  // Add holdings for buy orders
-                  holdingsMap.set(order.crypto_symbol, {
-                    quantity: existing.quantity + quantity,
-                    totalValue: existing.totalValue + totalValue
-                  })
-                } else if (order.type === 'sell') {
-                  // Subtract holdings for sell orders
-                  holdingsMap.set(order.crypto_symbol, {
-                    quantity: existing.quantity - quantity,
-                    totalValue: existing.totalValue - totalValue
-                  })
-                }
-              }
-            }
-          })
-
-          // Convert to array, filter out holdings with quantity or value <= 0, and calculate percentages
-          const holdingsArray = Array.from(holdingsMap.entries())
-            .filter(([_, data]) => data.quantity > 0 && data.totalValue > 0) // Only keep positive holdings
-            .map(([symbol, data], index) => ({
-              name: symbol,
-              quantity: data.quantity,
-              value: data.totalValue,
-              percentage: 0, // Will be calculated below
-              color: COLORS[index % COLORS.length]
-            }))
-
-          // Calculate total portfolio value
-          const totalValue = holdingsArray.reduce((sum, asset) => sum + asset.value, 0) + user.initial_balance
-          
-          // Calculate percentages
-          holdingsArray.forEach(asset => {
-            asset.percentage = totalValue > 0 ? (asset.value / totalValue) * 100 : 0
-          })
+        if (portfolio.holdings && portfolio.holdings.length > 0) {
+          // Use pre-calculated holdings from backend
+          const holdingsArray = portfolio.holdings.map((holding, index) => ({
+            name: holding.symbol,
+            quantity: parseFloat(holding.quantity),
+            value: parseFloat(holding.current_value),
+            percentage: parseFloat(holding.percentage_of_portfolio) * 100, // Convert to percentage
+            color: COLORS[index % COLORS.length]
+          }))
 
           // Add cash allocation
-          const cashPercentage = totalValue > 0 ? (user.initial_balance / totalValue) * 100 : 100
+          const totalValue = parseFloat(portfolio.total_value) || 0
+          const cash = parseFloat(portfolio.total_cash) || 0
+          const cashPercentage = totalValue > 0 ? (cash / totalValue) * 100 : 100
+
           if (cashPercentage > 0.01) { // Only show if > 0.01%
             holdingsArray.push({
               name: 'Cash',
-              quantity: user.initial_balance,
-              value: user.initial_balance,
+              quantity: cash,
+              value: cash,
               percentage: cashPercentage,
               color: COLORS[holdingsArray.length % COLORS.length]
             })
@@ -98,16 +55,26 @@ export function AssetAllocation() {
           setAssets(holdingsArray.sort((a, b) => b.value - a.value))
         } else {
           // No holdings, show only cash
+          const cash = parseFloat(portfolio.total_cash) || user.initial_balance || 0
           setAssets([{
             name: 'Cash',
-            quantity: user.initial_balance,
-            value: user.initial_balance,
+            quantity: cash,
+            value: cash,
             percentage: 100,
             color: COLORS[0]
           }])
         }
       } catch (error) {
         console.error('Error fetching holdings:', error)
+        // Fallback to cash only
+        const fallbackCash = user.initial_balance || 0
+        setAssets([{
+          name: 'Cash',
+          quantity: fallbackCash,
+          value: fallbackCash,
+          percentage: 100,
+          color: COLORS[0]
+        }])
       } finally {
         setLoading(false)
       }
