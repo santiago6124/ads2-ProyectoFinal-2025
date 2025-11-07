@@ -3,7 +3,6 @@ package unit
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,13 +13,12 @@ import (
 )
 
 func TestAuthService_Authenticate(t *testing.T) {
-	mockUserRepo := new(mocks.MockUserRepository)
-	mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
-	mockTokenService := new(mocks.MockTokenService)
-
-	service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
-
 	t.Run("successful authentication", func(t *testing.T) {
+		mockUserRepo := new(mocks.MockUserRepository)
+		mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
+		mockTokenService := new(mocks.MockTokenService)
+		service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
+
 		hashedPassword, _ := utils.HashPassword("Test123!")
 		user := &models.User{
 			ID:           1,
@@ -39,8 +37,8 @@ func TestAuthService_Authenticate(t *testing.T) {
 		mockLoginAttemptRepo.On("CountFailedAttempts", "test@example.com", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Once()
 		mockUserRepo.On("GetByEmail", "test@example.com").Return(user, nil).Once()
 		mockTokenService.On("GenerateTokenPair", user).Return(tokenPair, nil).Once()
-		mockUserRepo.On("UpdateLastLogin", uint(1)).Return(nil).Once()
-		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Twice()
+		mockUserRepo.On("UpdateLastLogin", int32(1)).Return(nil).Once()
+		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Once()
 
 		authResponse, err := service.Authenticate("test@example.com", "Test123!", "192.168.1.1", "Mozilla/5.0")
 
@@ -55,6 +53,11 @@ func TestAuthService_Authenticate(t *testing.T) {
 	})
 
 	t.Run("invalid email", func(t *testing.T) {
+		mockUserRepo := new(mocks.MockUserRepository)
+		mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
+		mockTokenService := new(mocks.MockTokenService)
+		service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
+
 		mockLoginAttemptRepo.On("CountFailedAttempts", "notfound@example.com", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Once()
 		mockUserRepo.On("GetByEmail", "notfound@example.com").Return(nil, fmt.Errorf("user not found")).Once()
 		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Once()
@@ -69,6 +72,11 @@ func TestAuthService_Authenticate(t *testing.T) {
 	})
 
 	t.Run("invalid password", func(t *testing.T) {
+		mockUserRepo := new(mocks.MockUserRepository)
+		mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
+		mockTokenService := new(mocks.MockTokenService)
+		service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
+
 		hashedPassword, _ := utils.HashPassword("Test123!")
 		user := &models.User{
 			ID:           1,
@@ -92,6 +100,11 @@ func TestAuthService_Authenticate(t *testing.T) {
 	})
 
 	t.Run("deactivated user", func(t *testing.T) {
+		mockUserRepo := new(mocks.MockUserRepository)
+		mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
+		mockTokenService := new(mocks.MockTokenService)
+		service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
+
 		hashedPassword, _ := utils.HashPassword("Test123!")
 		user := &models.User{
 			ID:           1,
@@ -115,6 +128,11 @@ func TestAuthService_Authenticate(t *testing.T) {
 	})
 
 	t.Run("rate limited", func(t *testing.T) {
+		mockUserRepo := new(mocks.MockUserRepository)
+		mockLoginAttemptRepo := new(mocks.MockLoginAttemptRepository)
+		mockTokenService := new(mocks.MockTokenService)
+		service := services.NewAuthService(mockUserRepo, mockLoginAttemptRepo, mockTokenService)
+
 		mockLoginAttemptRepo.On("CountFailedAttempts", "test@example.com", mock.AnythingOfType("time.Time")).Return(int64(5), nil).Once()
 		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Once()
 

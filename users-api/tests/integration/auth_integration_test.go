@@ -21,7 +21,8 @@ func setupTestRouter() *gin.Engine {
 
 func TestAuthIntegration_Register(t *testing.T) {
 	mockUserService := new(mocks.MockUserService)
-	mockAuthService := new(mocks.MockAuthService)
+	_ = mockUserService // TODO: Wire this into the router
+	// mockAuthService := new(mocks.MockAuthService)
 
 	router := setupTestRouter()
 
@@ -85,8 +86,9 @@ func TestAuthIntegration_Register(t *testing.T) {
 }
 
 func TestAuthIntegration_Login(t *testing.T) {
-	mockUserService := new(mocks.MockUserService)
+	// mockUserService := new(mocks.MockUserService)
 	mockAuthService := new(mocks.MockAuthService)
+	_ = mockAuthService // TODO: Wire this into the router
 
 	router := setupTestRouter()
 
@@ -158,8 +160,9 @@ func TestAuthIntegration_Login(t *testing.T) {
 }
 
 func TestAuthIntegration_RefreshToken(t *testing.T) {
-	mockUserService := new(mocks.MockUserService)
+	// mockUserService := new(mocks.MockUserService)
 	mockAuthService := new(mocks.MockAuthService)
+	_ = mockAuthService // TODO: Wire this into the router
 
 	router := setupTestRouter()
 

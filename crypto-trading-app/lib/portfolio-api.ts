@@ -46,6 +46,23 @@ export async function getPortfolio(userId: number): Promise<Portfolio> {
     })
 
     if (!response.ok) {
+      // If portfolio doesn't exist (404), return empty portfolio
+      if (response.status === 404) {
+        return {
+          id: '',
+          user_id: userId,
+          total_value: '0',
+          total_invested: '0',
+          total_cash: '0',
+          profit_loss: '0',
+          profit_loss_percentage: '0',
+          currency: 'USD',
+          holdings: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      }
+
       const errorData: PortfolioAPIError = await response.json().catch(() => ({
         error: 'Failed to fetch portfolio'
       }))
@@ -55,6 +72,24 @@ export async function getPortfolio(userId: number): Promise<Portfolio> {
     const data: Portfolio = await response.json()
     return data
   } catch (error) {
+    // If network error or CORS, return empty portfolio instead of crashing
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      console.warn('Portfolio API not available, returning empty portfolio')
+      return {
+        id: '',
+        user_id: userId,
+        total_value: '0',
+        total_invested: '0',
+        total_cash: '0',
+        profit_loss: '0',
+        profit_loss_percentage: '0',
+        currency: 'USD',
+        holdings: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    }
+
     console.error('Error fetching portfolio:', error)
     throw error
   }

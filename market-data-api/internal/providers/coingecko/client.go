@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +14,12 @@ import (
 	"golang.org/x/time/rate"
 
 	"market-data-api/internal/models"
-	"market-data-api/internal/providers"
+	"market-data-api/internal/types"
 )
 
 // Client represents a CoinGecko API client
 type Client struct {
-	*providers.ProviderClient
+	*types.ProviderClient
 	apiKey      string
 	httpClient  *http.Client
 	rateLimiter *rate.Limiter
@@ -60,11 +59,11 @@ func NewClient(config *Config) *Client {
 			Timeout: config.Timeout,
 		},
 		rateLimiter: limiter,
-		ProviderClient: &providers.ProviderClient{},
+		ProviderClient: &types.ProviderClient{},
 	}
 
 	// Initialize provider client
-	client.ProviderClient = &providers.ProviderClient{}
+	client.ProviderClient = &types.ProviderClient{}
 
 	return client
 }
@@ -84,7 +83,7 @@ func (c *Client) GetPrice(ctx context.Context, symbol string) (*models.Price, er
 	// Convert symbol to CoinGecko ID
 	coinID, err := c.symbolToCoinID(symbol)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
 	}
 
 	// Build URL
@@ -99,12 +98,12 @@ func (c *Client) GetPrice(ctx context.Context, symbol string) (*models.Price, er
 	var response map[string]SimplePriceResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse response", false)
+		return nil, types.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse response", false)
 	}
 
 	priceData, exists := response[coinID]
 	if !exists {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeNoData, fmt.Sprintf("No data for symbol: %s", symbol), false)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeNoData, fmt.Sprintf("No data for symbol: %s", symbol), false)
 	}
 
 	price := &models.Price{
@@ -150,7 +149,7 @@ func (c *Client) GetPrices(ctx context.Context, symbols []string) (map[string]*m
 	}
 
 	if len(coinIDs) == 0 {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeInvalidSymbol, "No valid symbols provided", false)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeInvalidSymbol, "No valid symbols provided", false)
 	}
 
 	// Build URL
@@ -167,7 +166,7 @@ func (c *Client) GetPrices(ctx context.Context, symbols []string) (map[string]*m
 	var response map[string]SimplePriceResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse response", false)
+		return nil, types.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse response", false)
 	}
 
 	// Convert to prices map
@@ -209,7 +208,7 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 
 	coinID, err := c.symbolToCoinID(symbol)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
 	}
 
 	// CoinGecko uses different endpoints for different time ranges
@@ -238,7 +237,7 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 	var response MarketChartResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse historical data", false)
+		return nil, types.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse historical data", false)
 	}
 
 	// Convert to candles
@@ -295,7 +294,7 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 
 	coinID, err := c.symbolToCoinID(symbol)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeInvalidSymbol, fmt.Sprintf("Invalid symbol: %s", symbol), false)
 	}
 
 	endpoint := fmt.Sprintf("/coins/%s?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false", coinID)
@@ -310,7 +309,7 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 	var response CoinResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse market data", false)
+		return nil, types.NewProviderError("coingecko", "PARSE_ERROR", "Failed to parse market data", false)
 	}
 
 	// Convert to MarketData
@@ -358,7 +357,7 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 
 // GetOrderBook returns an error as CoinGecko doesn't provide order book data
 func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*models.OrderBook, error) {
-	return nil, providers.NewProviderError("coingecko", "NOT_SUPPORTED", "Order book data not available from CoinGecko", false)
+	return nil, types.NewProviderError("coingecko", "NOT_SUPPORTED", "Order book data not available from CoinGecko", false)
 }
 
 // Ping checks if the CoinGecko API is accessible
@@ -368,11 +367,11 @@ func (c *Client) Ping(ctx context.Context) error {
 	latency := time.Since(start)
 
 	if err != nil {
-		c.UpdateStatus(providers.StatusDown, latency, 1)
+		c.UpdateStatus(types.StatusDown, latency, 1)
 		return err
 	}
 
-	c.UpdateStatus(providers.StatusHealthy, latency, 0)
+	c.UpdateStatus(types.StatusHealthy, latency, 0)
 	return nil
 }
 
@@ -380,7 +379,7 @@ func (c *Client) Ping(ctx context.Context) error {
 func (c *Client) makeRequest(ctx context.Context, endpoint string) ([]byte, error) {
 	// Wait for rate limiter
 	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeRateLimit, "Rate limit wait cancelled", true)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeRateLimit, "Rate limit wait cancelled", true)
 	}
 
 	// Build full URL
@@ -389,7 +388,7 @@ func (c *Client) makeRequest(ctx context.Context, endpoint string) ([]byte, erro
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", "REQUEST_ERROR", "Failed to create request", false)
+		return nil, types.NewProviderError("coingecko", "REQUEST_ERROR", "Failed to create request", false)
 	}
 
 	// Add headers
@@ -403,14 +402,14 @@ func (c *Client) makeRequest(ctx context.Context, endpoint string) ([]byte, erro
 	// Make request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", providers.ErrorCodeNetworkError, "Network error: "+err.Error(), true)
+		return nil, types.NewProviderError("coingecko", types.ErrorCodeNetworkError, "Network error: "+err.Error(), true)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, providers.NewProviderError("coingecko", "READ_ERROR", "Failed to read response", false)
+		return nil, types.NewProviderError("coingecko", "READ_ERROR", "Failed to read response", false)
 	}
 
 	// Check status code
@@ -455,7 +454,7 @@ func (c *Client) handleErrorResponse(statusCode int, body []byte) error {
 		}
 	}
 
-	return providers.NewProviderError("coingecko", strconv.Itoa(statusCode), errorMsg, retryable)
+	return types.NewProviderError("coingecko", strconv.Itoa(statusCode), errorMsg, retryable)
 }
 
 // GetBaseURL returns the base URL for the API

@@ -35,7 +35,7 @@ func NewRedisClient(cfg config.CacheConfig) (*RedisClient, error) {
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		PoolTimeout:  cfg.PoolTimeout,
-		IdleTimeout:  cfg.IdleTimeout,
+		ConnMaxIdleTime: cfg.IdleTimeout,
 	})
 
 	// Test connection

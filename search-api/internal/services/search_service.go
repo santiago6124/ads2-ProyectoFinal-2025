@@ -12,11 +12,18 @@ import (
 	"search-api/internal/repositories"
 )
 
+// TrendingServiceInterface for testing
+type TrendingServiceInterface interface {
+	GetTrendingCryptos(ctx context.Context, period string, limit int) ([]models.TrendingCrypto, error)
+	UpdateTrendingScores(ctx context.Context) error
+	GetTrendingScore(ctx context.Context, cryptoID string) (float32, error)
+}
+
 // SearchService handles search business logic with caching
 type SearchService struct {
 	solrRepo      repositories.SearchRepository
 	cacheRepo     repositories.CachedSearchRepository
-	trendingService *TrendingService
+	trendingService TrendingServiceInterface
 	logger        *logrus.Logger
 }
 
@@ -24,7 +31,7 @@ type SearchService struct {
 func NewSearchService(
 	solrRepo repositories.SearchRepository,
 	cacheRepo repositories.CachedSearchRepository,
-	trendingService *TrendingService,
+	trendingService TrendingServiceInterface,
 	logger *logrus.Logger,
 ) *SearchService {
 	return &SearchService{
@@ -111,7 +118,7 @@ func (s *SearchService) GetTrending(ctx context.Context, req *dto.TrendingReques
 	}
 
 	// Update trending scores based on recent activity
-	s.enhanceTrendingWithRealtimeData(trending)
+	s.enhanceTrendingWithRealtimeData(ctx, trending)
 
 	// Cache results asynchronously
 	go func() {
@@ -310,14 +317,14 @@ func (s *SearchService) buildSearchResponse(result *repositories.SearchResult, r
 	}
 }
 
-func (s *SearchService) enhanceTrendingWithRealtimeData(trending []models.TrendingCrypto) {
+func (s *SearchService) enhanceTrendingWithRealtimeData(ctx context.Context, trending []models.TrendingCrypto) {
 	// In a real implementation, this would fetch real-time data from external sources
 	// For now, we'll simulate some enhancements
 
 	for i := range trending {
 		// Add simulated search volume increase
 		if s.trendingService != nil {
-			if score, exists := s.trendingService.GetTrendingScore(trending[i].ID); exists {
+			if score, exists := s.trendingService.GetTrendingScore(ctx, trending[i].ID); exists {
 				trending[i].TrendingScore = score
 			}
 		}

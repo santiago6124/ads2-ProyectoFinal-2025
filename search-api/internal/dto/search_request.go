@@ -117,6 +117,16 @@ func (r *ReindexRequest) SetDefaults() {
 
 // Validate validates the search request
 func (r *SearchRequest) Validate() error {
+	// Validate page
+	if r.Page < 1 {
+		return NewValidationError("page must be greater than 0")
+	}
+
+	// Validate limit
+	if r.Limit < 1 || r.Limit > 100 {
+		return NewValidationError("limit must be between 1 and 100")
+	}
+
 	// Validate price range
 	if r.MinPrice != nil && r.MaxPrice != nil && *r.MinPrice > *r.MaxPrice {
 		return NewValidationError("min_price cannot be greater than max_price")
@@ -134,9 +144,9 @@ func (r *SearchRequest) Validate() error {
 
 	// Validate category
 	validCategories := map[string]bool{
-		"DeFi": true, "NFT": true, "Gaming": true, "Layer1": true, "Layer2": true,
+		"Currency": true, "DeFi": true, "NFT": true, "Gaming": true, "Layer1": true, "Layer2": true,
 		"Metaverse": true, "Web3": true, "AI": true, "Infrastructure": true,
-		"Privacy": true, "Oracle": true, "Exchange": true,
+		"Privacy": true, "Oracle": true, "Exchange": true, "Smart Contract Platform": true,
 	}
 
 	for _, cat := range r.Category {
@@ -312,6 +322,16 @@ func (r *SearchRequest) ToSolrQuery() map[string]interface{} {
 	params["indent"] = "true"
 
 	return params
+}
+
+// ToSolrParams is an alias for ToSolrQuery for backward compatibility
+func (r *SearchRequest) ToSolrParams() map[string]interface{} {
+	return r.ToSolrQuery()
+}
+
+// BuildCacheKey is an alias for ToCacheKey for backward compatibility
+func (r *SearchRequest) BuildCacheKey() string {
+	return r.ToCacheKey()
 }
 
 // ToCacheKey generates a cache key for the search request

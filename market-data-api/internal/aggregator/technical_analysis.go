@@ -37,8 +37,11 @@ func (ta *TechnicalAnalyzer) AnalyzeTechnicalIndicators(ctx context.Context, sym
 	}
 
 	indicators := &models.TechnicalIndicators{
+		MACD: &models.MACDData{},
+		BollingerBands: &models.BollingerData{},
+		MovingAverages: &models.MovingAverages{},
 		Symbol:    symbol,
-		Timestamp: time.Now(),
+		LastUpdated: time.Now(),
 	}
 
 	// Calculate various technical indicators
@@ -108,14 +111,15 @@ func (ta *TechnicalAnalyzer) calculateMovingAverages(candles []*models.Candle, i
 	}
 
 	// Simple Moving Averages
-	indicators.SMA20 = ta.calculateSMA(candles, 20)
-	indicators.SMA50 = ta.calculateSMA(candles, 50)
-	indicators.SMA200 = ta.calculateSMA(candles, 200)
+	indicators.MovingAverages.MA20 = ta.calculateSMA(candles, 20)
+	indicators.MovingAverages.MA50 = ta.calculateSMA(candles, 50)
+	indicators.MovingAverages.MA200 = ta.calculateSMA(candles, 200)
 
 	// Exponential Moving Averages
-	indicators.EMA12 = ta.calculateEMA(candles, 12)
-	indicators.EMA26 = ta.calculateEMA(candles, 26)
-	indicators.EMA50 = ta.calculateEMA(candles, 50)
+	indicators.MovingAverages.EMA12 = ta.calculateEMA(candles, 12)
+	indicators.MovingAverages.EMA26 = ta.calculateEMA(candles, 26)
+	// EMA50 not defined in MovingAverages struct - commented out
+	// indicators.MovingAverages.EMA50 = ta.calculateEMA(candles, 50)
 }
 
 // calculateSMA calculates Simple Moving Average
@@ -209,14 +213,14 @@ func (ta *TechnicalAnalyzer) calculateMACD(candles []*models.Candle, indicators 
 	ema12 := ta.calculateEMA(candles, 12)
 	ema26 := ta.calculateEMA(candles, 26)
 
-	indicators.MACDLine = ema12.Sub(ema26)
+	indicators.MACD.MACD = ema12.Sub(ema26)
 
 	// Calculate signal line (9-period EMA of MACD line)
 	// For simplicity, we'll use the current MACD value
 	// In a full implementation, you'd need historical MACD values
-	indicators.MACDSignal = indicators.MACDLine.Mul(decimal.NewFromFloat(0.2)) // Simplified
+	indicators.MACD.Signal = indicators.MACD.MACD.Mul(decimal.NewFromFloat(0.2)) // Simplified
 
-	indicators.MACDHistogram = indicators.MACDLine.Sub(indicators.MACDSignal)
+	indicators.MACD.Histogram = indicators.MACD.MACD.Sub(indicators.MACD.Signal)
 }
 
 // calculateBollingerBands calculates Bollinger Bands
@@ -240,9 +244,9 @@ func (ta *TechnicalAnalyzer) calculateBollingerBands(candles []*models.Candle, i
 
 	multiplier := decimal.NewFromFloat(stdDev)
 
-	indicators.BBUpper = sma.Add(standardDeviation.Mul(multiplier))
-	indicators.BBMiddle = sma
-	indicators.BBLower = sma.Sub(standardDeviation.Mul(multiplier))
+	indicators.BollingerBands.Upper = sma.Add(standardDeviation.Mul(multiplier))
+	indicators.BollingerBands.Middle = sma
+	indicators.BollingerBands.Lower = sma.Sub(standardDeviation.Mul(multiplier))
 }
 
 // calculateStochastic calculates Stochastic Oscillator
@@ -406,7 +410,7 @@ func (ta *TechnicalAnalyzer) calculateOBV(candles []*models.Candle, indicators *
 func (ta *TechnicalAnalyzer) GetTechnicalSignals(indicators *models.TechnicalIndicators) *TechnicalSignals {
 	signals := &TechnicalSignals{
 		Symbol:    indicators.Symbol,
-		Timestamp: time.Now(),
+		LastUpdated: time.Now(),
 		Signals:   make(map[string]string),
 		Strength:  make(map[string]float64),
 	}
@@ -438,8 +442,8 @@ func (ta *TechnicalAnalyzer) GetTechnicalSignals(indicators *models.TechnicalInd
 	}
 
 	// MACD signals
-	if !indicators.MACDLine.IsZero() && !indicators.MACDSignal.IsZero() {
-		if indicators.MACDLine.GreaterThan(indicators.MACDSignal) {
+	if !indicators.MACD.MACD.IsZero() && !indicators.MACD.Signal.IsZero() {
+		if indicators.MACD.MACD.GreaterThan(indicators.MACD.Signal) {
 			signals.Signals["MACD"] = "BUY"
 		} else {
 			signals.Signals["MACD"] = "SELL"

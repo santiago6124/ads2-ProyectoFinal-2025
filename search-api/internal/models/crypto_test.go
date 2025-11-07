@@ -165,23 +165,25 @@ func TestQueryInfo_Validation(t *testing.T) {
 
 func TestCrypto_FullValidation(t *testing.T) {
 	now := time.Now()
+	totalSupply := int64(21000000)
+	maxSupply := int64(21000000)
 	crypto := Crypto{
 		ID:                    "bitcoin",
 		Symbol:                "BTC",
 		Name:                  "Bitcoin",
 		Description:           "The first cryptocurrency",
 		CurrentPrice:          50000.0,
-		MarketCap:             950000000000.0,
-		Volume24h:             30000000000.0,
+		MarketCap:             950000000000,
+		Volume24h:             30000000000,
 		PriceChange24h:        5.2,
 		PriceChangePercent24h: 0.1,
 		MarketCapRank:         1,
-		CirculatingSupply:     19000000.0,
-		TotalSupply:           21000000.0,
-		MaxSupply:             &[]float64{21000000.0}[0],
+		CirculatingSupply:     19000000,
+		TotalSupply:           &totalSupply,
+		MaxSupply:             &maxSupply,
 		ATH:                   69000.0,
 		ATL:                   0.05,
-		Categories:            []string{"Currency", "Store of Value"},
+		Category:              []string{"Currency", "Store of Value"},
 		Tags:                  []string{"pow", "sha-256"},
 		Platform:              "",
 		LastUpdated:           now,
@@ -265,14 +267,14 @@ func TestPriceRange_Validation(t *testing.T) {
 func TestMarketCapRange_Validation(t *testing.T) {
 	mcRange := MarketCapRange{
 		Label: "$1M - $10M",
-		Min:   1000000.0,
-		Max:   10000000.0,
+		Min:   1000000,
+		Max:   10000000,
 		Count: 200,
 	}
 
 	assert.Equal(t, "$1M - $10M", mcRange.Label)
-	assert.Equal(t, 1000000.0, mcRange.Min)
-	assert.Equal(t, 10000000.0, mcRange.Max)
+	assert.Equal(t, int64(1000000), mcRange.Min)
+	assert.Equal(t, int64(10000000), mcRange.Max)
 	assert.Equal(t, int64(200), mcRange.Count)
 	assert.True(t, mcRange.Min < mcRange.Max)
 }

@@ -176,7 +176,6 @@ func NormalizeSymbol(symbol string) string {
 		"CRV":  "CRV-USD",
 		"QUICK": "QUICK-USD",
 		"POLY": "POLY-USD",
-		"LTC":  "LTC-USD",
 		"MATIC": "MATIC-USD",
 		"SUSHI": "SUSHI-USD",
 		"ALGO": "ALGO-USD",

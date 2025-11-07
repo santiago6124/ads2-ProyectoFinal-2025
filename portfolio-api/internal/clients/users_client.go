@@ -21,13 +21,13 @@ type UsersClient struct {
 
 func NewUsersClient(cfg config.ExternalAPIsConfig) *UsersClient {
 	return &UsersClient{
-		baseURL: cfg.UsersAPI.URL,
+		baseURL: cfg.UsersAPI.BaseURL,
 		httpClient: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout: cfg.UsersAPI.Timeout,
 		},
 		apiKey:  cfg.UsersAPI.APIKey,
-		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		timeout: cfg.UsersAPI.Timeout,
+		retries: cfg.UsersAPI.MaxRetries,
 	}
 }
 

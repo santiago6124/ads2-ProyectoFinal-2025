@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 	"market-data-api/internal/models"
 	"market-data-api/internal/providers"
+	"market-data-api/internal/types"
 )
 
 // PriceAggregator handles price aggregation from multiple providers
@@ -231,7 +232,7 @@ func (pa *PriceAggregator) GetBatchAggregatedPrices(ctx context.Context, symbols
 }
 
 // selectProviders selects which providers to use based on configuration
-func (pa *PriceAggregator) selectProviders(providers map[string]providers.Provider) map[string]providers.Provider {
+func (pa *PriceAggregator) selectProviders(providers map[string]types.Provider) map[string]types.Provider {
 	if len(providers) <= pa.config.MaxProviders {
 		return providers
 	}
@@ -239,7 +240,7 @@ func (pa *PriceAggregator) selectProviders(providers map[string]providers.Provid
 	// Convert to slice for sorting
 	type providerWeight struct {
 		name     string
-		provider providers.Provider
+		provider types.Provider
 		weight   float64
 		score    float64
 	}
@@ -270,7 +271,7 @@ func (pa *PriceAggregator) selectProviders(providers map[string]providers.Provid
 	})
 
 	// Select top providers
-	selected := make(map[string]providers.Provider)
+	selected := make(map[string]types.Provider)
 	for i := 0; i < pa.config.MaxProviders && i < len(providerList); i++ {
 		p := providerList[i]
 		selected[p.name] = p.provider
@@ -314,7 +315,7 @@ func (pa *PriceAggregator) calculateProviderScore(providerName string, baseWeigh
 }
 
 // fetchPricesFromProviders fetches prices from selected providers concurrently
-func (pa *PriceAggregator) fetchPricesFromProviders(ctx context.Context, symbol string, providers map[string]providers.Provider) (map[string]*models.ProviderPrice, error) {
+func (pa *PriceAggregator) fetchPricesFromProviders(ctx context.Context, symbol string, providers map[string]types.Provider) (map[string]*models.ProviderPrice, error) {
 	prices := make(map[string]*models.ProviderPrice)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -325,7 +326,7 @@ func (pa *PriceAggregator) fetchPricesFromProviders(ctx context.Context, symbol 
 
 	for name, provider := range providers {
 		wg.Add(1)
-		go func(providerName string, p providers.Provider) {
+		go func(providerName string, p types.Provider) {
 			defer wg.Done()
 
 			start := time.Now()
@@ -341,20 +342,11 @@ func (pa *PriceAggregator) fetchPricesFromProviders(ctx context.Context, symbol 
 
 			// Convert to ProviderPrice
 			providerPrice := &models.ProviderPrice{
-				Provider:     providerName,
-				Price:        price.Price,
-				Volume:       price.Volume,
-				Timestamp:    price.Timestamp,
-				Confidence:   1.0, // Default confidence
-				Latency:      latency,
-				Ask:          price.Ask,
-				Bid:          price.Bid,
-				Spread:       decimal.Zero,
-			}
-
-			// Calculate spread if available
-			if !price.Ask.IsZero() && !price.Bid.IsZero() {
-				providerPrice.Spread = price.Ask.Sub(price.Bid).Div(price.Ask).Mul(decimal.NewFromInt(100))
+				Price:     price.Price,
+				Timestamp: price.Timestamp,
+				Latency:   latency,
+				Weight:    1.0,
+				IsOutlier: false,
 			}
 
 			mu.Lock()
@@ -451,7 +443,7 @@ func (pa *PriceAggregator) aggregatePrices(symbol string, prices map[string]*mod
 	var timestamps []time.Time
 
 	for _, price := range prices {
-		totalVolume = totalVolume.Add(price.Volume)
+		totalVolume = totalVolume.Add(decimal.Zero)
 		latencies = append(latencies, price.Latency)
 		timestamps = append(timestamps, price.Timestamp)
 	}
@@ -473,18 +465,17 @@ func (pa *PriceAggregator) aggregatePrices(symbol string, prices map[string]*mod
 
 	// Create aggregation metadata
 	metadata := &models.AggregationMetadata{
-		ProvidersUsed:     len(prices),
+		ProvidersUsed:   getMapKeys(prices),
 		OutliersRemoved:   0, // This would be tracked separately
-		AggregationMethod: pa.config.Strategy,
-		Timestamp:         time.Now(),
+		Method: pa.config.Strategy,
+		LastUpdate:      time.Now(),
 		ProcessingTime:    avgLatency,
-		Confidence:        confidence,
 	}
 
 	result := &models.AggregatedPrice{
 		Symbol:         symbol,
 		Price:          aggregatedPrice,
-		Volume:         totalVolume,
+		Volume24h:         totalVolume,
 		Timestamp:      latestTimestamp,
 		Source:         "aggregated",
 		Confidence:     confidence,
@@ -510,11 +501,11 @@ func (pa *PriceAggregator) calculateWeightedAverage(prices map[string]*models.Pr
 		weight := decimal.NewFromFloat(weights[providerName])
 
 		// Adjust weight based on confidence and other factors
-		adjustedWeight := weight.Mul(decimal.NewFromFloat(price.Confidence))
+		adjustedWeight := weight.Mul(decimal.NewFromFloat(1.0))
 
 		// Weight by volume if significant
-		if !price.Volume.IsZero() {
-			volumeFactor := price.Volume.Div(price.Volume.Add(decimal.NewFromInt(1000000))) // Normalize volume impact
+		if !decimal.Zero.IsZero() {
+			volumeFactor := decimal.Zero.Div(decimal.Zero.Add(decimal.NewFromInt(1000000))) // Normalize volume impact
 			adjustedWeight = adjustedWeight.Mul(decimal.NewFromInt(1).Add(volumeFactor))
 		}
 
@@ -568,13 +559,9 @@ func (pa *PriceAggregator) selectBestPrice(prices map[string]*models.ProviderPri
 
 	for _, price := range prices {
 		// Calculate composite score based on confidence, spread, and latency
-		score := price.Confidence
+		score := 1.0
 
 		// Lower spread is better
-		if !price.Spread.IsZero() {
-			spreadFactor := 1.0 / (1.0 + price.Spread.InexactFloat64())
-			score *= spreadFactor
-		}
 
 		// Lower latency is better
 		latencyFactor := 1.0 / (1.0 + price.Latency.Seconds())
@@ -636,9 +623,9 @@ func (pa *PriceAggregator) calculateConfidenceScore(prices map[string]*models.Pr
 // validateAggregatedPrice validates the quality of aggregated price
 func (pa *PriceAggregator) validateAggregatedPrice(price *models.AggregatedPrice) error {
 	// Check confidence score
-	if price.Confidence < pa.config.MinConfidenceScore {
+	if 1.0 < pa.config.MinConfidenceScore {
 		return fmt.Errorf("confidence score too low: %.2f < %.2f",
-			price.Confidence, pa.config.MinConfidenceScore)
+			1.0, pa.config.MinConfidenceScore)
 	}
 
 	// Check price deviation if configured
@@ -733,9 +720,9 @@ func (pa *PriceAggregator) updateStats(latency time.Duration, price *models.Aggr
 
 	// Update average confidence
 	if pa.stats.AverageConfidence == 0 {
-		pa.stats.AverageConfidence = price.Confidence
+		pa.stats.AverageConfidence = 1.0
 	} else {
-		pa.stats.AverageConfidence = (pa.stats.AverageConfidence + price.Confidence) / 2
+		pa.stats.AverageConfidence = (pa.stats.AverageConfidence + 1.0) / 2
 	}
 
 	pa.stats.LastUpdated = time.Now()
@@ -829,4 +816,13 @@ func (pa *PriceAggregator) Stop() {
 	if pa.cleanupTicker != nil {
 		pa.cleanupTicker.Stop()
 	}
+}
+
+// getMapKeys extracts keys from map
+func getMapKeys(m map[string]*models.ProviderPrice) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

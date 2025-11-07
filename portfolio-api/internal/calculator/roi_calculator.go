@@ -274,18 +274,7 @@ func (roi *ROICalculator) CalculatePeriodROI(ctx context.Context, snapshots []mo
 
 func (roi *ROICalculator) calculateRealizedGains(portfolio *models.Portfolio) decimal.Decimal {
 	// This would be calculated from actual transaction history
-	// For now, we'll estimate based on portfolio metadata
-	if portfolio.Metadata != nil {
-		if realizedGains, exists := portfolio.Metadata["realized_gains"]; exists {
-			if gains, ok := realizedGains.(string); ok {
-				if decimal, err := decimal.NewFromString(gains); err == nil {
-					return decimal
-				}
-			}
-		}
-	}
-
-	// Default estimation: assume 20% of profit/loss is realized
+	// For now, we'll estimate: assume 20% of profit/loss is realized
 	return portfolio.ProfitLoss.Mul(decimal.NewFromFloat(0.2))
 }
 

@@ -104,10 +104,13 @@ function TradeContent() {
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
         console.log('Order created successfully:', orderResponse)
-        
+
+        const totalCostWithFee = totalCost * 1.001 // Include 0.1% fee
+
         toast({
-          title: "Buy Order Placed",
-          description: `Buy order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+          title: "✅ Purchase Successful!",
+          description: `You bought ${qty} ${selectedCrypto.symbol} for $${totalCostWithFee.toFixed(2)}. Check your portfolio to see your new holdings.`,
+          duration: 5000,
         })
 
         // Refresh user data to get updated balance
@@ -117,6 +120,13 @@ function TradeContent() {
             try {
               const updatedUser = await apiService.getUserProfile(user.id, accessToken)
               updateUser(updatedUser)
+
+              // Show balance update notification
+              toast({
+                title: "💰 Balance Updated",
+                description: `New balance: $${parseFloat(updatedUser.initial_balance).toFixed(2)}`,
+                duration: 3000,
+              })
             } catch (error) {
               console.error('Error refreshing user data:', error)
             }
@@ -181,10 +191,13 @@ function TradeContent() {
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
         console.log('Order created successfully:', orderResponse)
-        
+
+        const totalValueAfterFee = totalValue * 0.999 // Subtract 0.1% fee
+
         toast({
-          title: "Sell Order Placed",
-          description: `Sell order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+          title: "✅ Sale Successful!",
+          description: `You sold ${qty} ${selectedCrypto.symbol} for $${totalValueAfterFee.toFixed(2)}. Your balance has been updated.`,
+          duration: 5000,
         })
 
         // Refresh user data to get updated balance
@@ -194,6 +207,13 @@ function TradeContent() {
             try {
               const updatedUser = await apiService.getUserProfile(user.id, accessToken)
               updateUser(updatedUser)
+
+              // Show balance update notification
+              toast({
+                title: "💰 Balance Updated",
+                description: `New balance: $${parseFloat(updatedUser.initial_balance).toFixed(2)}`,
+                duration: 3000,
+              })
             } catch (error) {
               console.error('Error refreshing user data:', error)
             }

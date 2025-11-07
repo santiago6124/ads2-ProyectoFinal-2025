@@ -152,6 +152,20 @@ type PortfolioAllocation struct {
 	CashPercentage    decimal.Decimal `json:"cash_percentage"`
 }
 
+// Transaction represents a buy/sell transaction
+type Transaction struct {
+	ID        string          `json:"id" bson:"id"`
+	Symbol    string          `json:"symbol" bson:"symbol"`
+	Type      string          `json:"type" bson:"type"` // "buy" or "sell" or "dividend"
+	Quantity  decimal.Decimal `json:"quantity" bson:"quantity"`
+	Price     decimal.Decimal `json:"price" bson:"price"`
+	Amount    decimal.Decimal `json:"amount" bson:"amount"` // Total amount (used in roi_calculator)
+	Value     decimal.Decimal `json:"value" bson:"value"`   // Total value (used in pnl_calculator)
+	Fee       decimal.Decimal `json:"fee" bson:"fee"`
+	Timestamp time.Time       `json:"timestamp" bson:"timestamp"`
+	Date      time.Time       `json:"date" bson:"date"` // Alternative date field (used in roi_calculator)
+}
+
 // TransactionSummary represents transaction summary for a holding
 type TransactionSummary struct {
 	Total         int       `json:"total"`
@@ -277,6 +291,27 @@ func (p *Portfolio) MarkCalculated(duration int64) {
 func (p *Portfolio) IsStale(maxAge time.Duration) bool {
 	return p.Metadata.NeedsRecalculation ||
 		   time.Since(p.Metadata.LastCalculated) > maxAge
+}
+
+// NewPortfolio creates a new portfolio for a user
+func NewPortfolio(userID int64) *Portfolio {
+	now := time.Now()
+	return &Portfolio{
+		UserID:               userID,
+		TotalValue:           decimal.Zero,
+		TotalInvested:        decimal.Zero,
+		TotalCash:            decimal.Zero,
+		ProfitLoss:           decimal.Zero,
+		ProfitLossPercentage: decimal.Zero,
+		Currency:             "USD",
+		Holdings:             []Holding{},
+		Performance:          Performance{},
+		RiskMetrics:          RiskMetrics{},
+		Diversification:      Diversification{Categories: make(map[string]decimal.Decimal)},
+		Metadata:             PortfolioMetadata{NeedsRecalculation: false},
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
 }
 
 // Validate validates the portfolio data

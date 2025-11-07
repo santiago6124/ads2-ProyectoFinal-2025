@@ -23,13 +23,13 @@ type OrdersClient struct {
 
 func NewOrdersClient(cfg config.ExternalAPIsConfig) *OrdersClient {
 	return &OrdersClient{
-		baseURL: cfg.OrdersAPI.URL,
+		baseURL: cfg.OrdersAPI.BaseURL,
 		httpClient: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout: cfg.OrdersAPI.Timeout,
 		},
 		apiKey:  cfg.OrdersAPI.APIKey,
-		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		timeout: cfg.OrdersAPI.Timeout,
+		retries: cfg.OrdersAPI.MaxRetries,
 	}
 }
 

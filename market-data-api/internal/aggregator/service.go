@@ -1,8 +1,10 @@
 package aggregator
 
 import (
+	"sort"
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -239,7 +241,7 @@ func (s *Service) calculateQualityScore(price *models.AggregatedPrice) float64 {
 
 	// Provider count factor (more providers = higher quality)
 	if price.Metadata != nil {
-		providerFactor := float64(price.Metadata.ProvidersUsed) / 5.0 // Normalize to max 5 providers
+		providerFactor := float64(len(price.Metadata.ProvidersUsed)) / 5.0 // Normalize to max 5 providers
 		if providerFactor > 1.0 {
 			providerFactor = 1.0
 		}
@@ -252,8 +254,8 @@ func (s *Service) calculateQualityScore(price *models.AggregatedPrice) float64 {
 	factors += 0.4
 
 	// Volume factor (higher volume = more reliable)
-	if !price.Volume.IsZero() {
-		volumeFactor := math.Min(price.Volume.InexactFloat64()/1000000, 1.0) // Normalize to 1M volume
+	if !price.Volume24h.IsZero() {
+		volumeFactor := math.Min(price.Volume24h.InexactFloat64()/1000000, 1.0) // Normalize to 1M volume
 		score += volumeFactor * 0.2
 		factors += 0.2
 	}
@@ -346,7 +348,6 @@ func (s *Service) calculateVolatility(ctx context.Context, symbol string, period
 	volatility := &models.VolatilityData{
 		Symbol:           symbol,
 		Period:           period,
-		Timestamp:        time.Now(),
 		CalculationMethod: "close-to-close",
 	}
 
@@ -363,8 +364,8 @@ func (s *Service) calculateVolatility(ctx context.Context, symbol string, period
 	}
 	variance /= float64(len(returns) - 1)
 
-	volatility.Value = decimal.NewFromFloat(math.Sqrt(variance))
-	volatility.AnnualizedValue = volatility.Value.Mul(decimal.NewFromFloat(math.Sqrt(365 * 24))) // Assuming hourly data
+	volatility.Volatility = decimal.NewFromFloat(math.Sqrt(variance))
+	volatility.AnnualizedVolatility = volatility.Volatility.Mul(decimal.NewFromFloat(math.Sqrt(365 * 24))) // Assuming hourly data
 
 	return volatility, nil
 }
@@ -419,8 +420,8 @@ func (s *Service) findTopMovers(prices map[string]*EnhancedAggregatedPrice, gain
 	for symbol, price := range prices {
 		// Calculate change based on technical indicators or provider data
 		change := decimal.Zero
-		if price.TechnicalIndicators != nil && !price.TechnicalIndicators.SMA20.IsZero() {
-			change = price.Price.Sub(price.TechnicalIndicators.SMA20).Div(price.TechnicalIndicators.SMA20).Mul(decimal.NewFromInt(100))
+		if price.TechnicalIndicators != nil && !price.TechnicalIndicators.MovingAverages.MA20.IsZero() {
+			change = price.Price.Sub(price.TechnicalIndicators.MovingAverages.MA20).Div(price.TechnicalIndicators.MovingAverages.MA20).Mul(decimal.NewFromInt(100))
 		}
 
 		movers = append(movers, mover{
@@ -469,8 +470,8 @@ func (s *Service) calculateMarketStatistics(prices map[string]*EnhancedAggregate
 	confidenceSum := 0.0
 
 	for _, price := range prices {
-		totalVolume = totalVolume.Add(price.Volume)
-		totalValue = totalValue.Add(price.Price.Mul(price.Volume))
+		totalVolume = totalVolume.Add(price.Volume24h)
+		totalValue = totalValue.Add(price.Price.Mul(price.Volume24h))
 		qualitySum += price.QualityScore
 		confidenceSum += price.Confidence
 	}

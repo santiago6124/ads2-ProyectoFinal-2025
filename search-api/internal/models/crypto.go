@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type Crypto struct {
 	MarketCapRank       int       `json:"market_cap_rank" solr:"market_cap_rank"`
 	Volume24h           int64     `json:"volume_24h" solr:"volume_24h"`
 	PriceChange24h      float64   `json:"price_change_24h" solr:"price_change_24h"`
+	PriceChangePercent24h float64 `json:"price_change_percent_24h" solr:"price_change_percent_24h"`
 	PriceChange7d       float64   `json:"price_change_7d" solr:"price_change_7d"`
 	PriceChange30d      float64   `json:"price_change_30d" solr:"price_change_30d"`
 	CirculatingSupply   int64     `json:"circulating_supply" solr:"circulating_supply"`
@@ -62,20 +64,38 @@ type Suggestion struct {
 	ID        string  `json:"id"`
 	Symbol    string  `json:"symbol"`
 	Name      string  `json:"name"`
+	Type      string  `json:"type"`
 	MatchType string  `json:"match_type"`
-	Score     float64 `json:"score"`
+	Score     float32 `json:"score"`
 }
 
 // Filter represents available search filters
 type Filter struct {
-	Categories      []CategoryFilter      `json:"categories"`
-	PriceRanges     []PriceRangeFilter    `json:"price_ranges"`
+	Categories      []CategoryFilter       `json:"categories"`
+	Platforms       []PlatformFilter       `json:"platforms"`
+	Tags            []TagFilter            `json:"tags"`
+	PriceRanges     []PriceRangeFilter     `json:"price_ranges"`
 	MarketCapRanges []MarketCapRangeFilter `json:"market_cap_ranges"`
-	SortOptions     []SortOption          `json:"sort_options"`
+	SortOptions     []SortOption           `json:"sort_options"`
+}
+
+// PlatformFilter represents a platform filter with count
+type PlatformFilter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// TagFilter represents a tag filter with count
+type TagFilter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Count int64  `json:"count"`
 }
 
 // CategoryFilter represents a category filter with count
 type CategoryFilter struct {
+	Name  string `json:"name"`
 	Value string `json:"value"`
 	Count int64  `json:"count"`
 	Label string `json:"label"`
@@ -96,6 +116,13 @@ type MarketCapRangeFilter struct {
 	Count int64  `json:"count"`
 	Label string `json:"label"`
 }
+
+// Type aliases for backward compatibility with tests
+type FilterCategory = CategoryFilter
+type FilterPlatform = PlatformFilter
+type FilterTag = TagFilter
+type PriceRange = PriceRangeFilter
+type MarketCapRange = MarketCapRangeFilter
 
 // SortOption represents a sorting option
 type SortOption struct {
@@ -156,6 +183,32 @@ type FiltersResponse struct {
 
 // Validation methods
 
+// Validate validates the Crypto struct
+func (c *Crypto) Validate() error {
+	if c.ID == "" {
+		return fmt.Errorf("crypto ID is required")
+	}
+	if c.Symbol == "" {
+		return fmt.Errorf("crypto symbol is required")
+	}
+	if len(c.Symbol) > 10 {
+		return fmt.Errorf("crypto symbol cannot exceed 10 characters")
+	}
+	if c.Name == "" {
+		return fmt.Errorf("crypto name is required")
+	}
+	if c.CurrentPrice < 0 {
+		return fmt.Errorf("current price cannot be negative")
+	}
+	if c.MarketCap < 0 {
+		return fmt.Errorf("market cap cannot be negative")
+	}
+	if c.Volume24h < 0 {
+		return fmt.Errorf("volume 24h cannot be negative")
+	}
+	return nil
+}
+
 // IsValidSort checks if the sort option is valid
 func IsValidSort(sort string) bool {
 	validSorts := map[string]bool{
@@ -210,14 +263,30 @@ func IsValidCategory(category string) bool {
 func GetDefaultFilters() Filter {
 	return Filter{
 		Categories: []CategoryFilter{
-			{Value: "DeFi", Label: "Decentralized Finance", Count: 0},
-			{Value: "NFT", Label: "Non-Fungible Tokens", Count: 0},
-			{Value: "Gaming", Label: "Gaming & Metaverse", Count: 0},
-			{Value: "Layer1", Label: "Layer 1 Blockchains", Count: 0},
-			{Value: "Layer2", Label: "Layer 2 Solutions", Count: 0},
-			{Value: "Web3", Label: "Web3 Infrastructure", Count: 0},
-			{Value: "AI", Label: "Artificial Intelligence", Count: 0},
-			{Value: "Privacy", Label: "Privacy Coins", Count: 0},
+			{Name: "Currency", Value: "Currency", Label: "Currency", Count: 0},
+			{Name: "DeFi", Value: "DeFi", Label: "Decentralized Finance", Count: 0},
+			{Name: "NFT", Value: "NFT", Label: "Non-Fungible Tokens", Count: 0},
+			{Name: "Gaming", Value: "Gaming", Label: "Gaming & Metaverse", Count: 0},
+			{Name: "Layer1", Value: "Layer1", Label: "Layer 1 Blockchains", Count: 0},
+			{Name: "Layer2", Value: "Layer2", Label: "Layer 2 Solutions", Count: 0},
+			{Name: "Smart Contract Platform", Value: "Smart Contract Platform", Label: "Smart Contract Platform", Count: 0},
+			{Name: "Web3", Value: "Web3", Label: "Web3 Infrastructure", Count: 0},
+			{Name: "AI", Value: "AI", Label: "Artificial Intelligence", Count: 0},
+			{Name: "Privacy", Value: "Privacy", Label: "Privacy Coins", Count: 0},
+		},
+		Platforms: []PlatformFilter{
+			{Name: "Ethereum", Value: "ethereum", Count: 0},
+			{Name: "Binance Smart Chain", Value: "bsc", Count: 0},
+			{Name: "Polygon", Value: "polygon", Count: 0},
+			{Name: "Solana", Value: "solana", Count: 0},
+			{Name: "Avalanche", Value: "avalanche", Count: 0},
+		},
+		Tags: []TagFilter{
+			{Name: "DeFi", Value: "defi", Count: 0},
+			{Name: "NFT", Value: "nft", Count: 0},
+			{Name: "Gaming", Value: "gaming", Count: 0},
+			{Name: "Layer1", Value: "layer1", Count: 0},
+			{Name: "Layer2", Value: "layer2", Count: 0},
 		},
 		PriceRanges: []PriceRangeFilter{
 			{Min: 0, Max: 1, Label: "Under $1", Count: 0},

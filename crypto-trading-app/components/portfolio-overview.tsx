@@ -2,36 +2,39 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
+import { ArrowUpRight, ArrowDownRight, Loader2, RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
 import { getPortfolio, formatCrypto, formatUSD, formatPercentage, getTrend, type Portfolio } from "@/lib/portfolio-api"
+import { useAuth } from "@/lib/auth-context"
 
 export function PortfolioOverview() {
+  const { user } = useAuth()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Get user ID from session/auth - for now using hardcoded value
-  // TODO: Replace with actual user ID from authentication
-  const userId = 1
-
-  useEffect(() => {
-    const fetchPortfolio = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await getPortfolio(userId)
-        setPortfolio(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load portfolio')
-        console.error('Error loading portfolio:', err)
-      } finally {
-        setLoading(false)
-      }
+  const fetchPortfolio = async () => {
+    if (!user) {
+      setLoading(false)
+      return
     }
 
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await getPortfolio(user.id)
+      setPortfolio(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load portfolio')
+      console.error('Error loading portfolio:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchPortfolio()
-  }, [userId])
+  }, [user])
 
   if (loading) {
     return (
@@ -46,9 +49,18 @@ export function PortfolioOverview() {
   if (error) {
     return (
       <Card className="p-6 bg-black border border-white/10 shadow-lg">
-        <div className="flex flex-col items-center justify-center py-12">
-          <p className="text-red-400 mb-4">Error loading portfolio</p>
+        <div className="flex flex-col items-center justify-center py-12 gap-4">
+          <p className="text-red-400 mb-2">Error loading portfolio</p>
           <p className="text-sm text-white/60">{error}</p>
+          <Button
+            onClick={fetchPortfolio}
+            variant="outline"
+            size="sm"
+            className="border-white/20 text-white hover:bg-white/10"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
         </div>
       </Card>
     )

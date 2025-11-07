@@ -339,7 +339,7 @@ const (
 	ErrCodeTimeout         = "TIMEOUT"
 	ErrCodeSerialization   = "SERIALIZATION_ERROR"
 	ErrCodeInvalidKey      = "INVALID_KEY"
-	ErrCodeCacheFullَ       = "CACHE_FULL"
+	ErrCodeCacheFull       = "CACHE_FULL"
 )
 
 // NewCacheError creates a new cache error

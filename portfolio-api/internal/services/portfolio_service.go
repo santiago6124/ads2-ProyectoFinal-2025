@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"portfolio-api/internal/analytics"
 	"portfolio-api/internal/calculator"
@@ -16,28 +15,65 @@ import (
 	"portfolio-api/pkg/cache"
 )
 
+// Interfaces for testing
+type CacheInterface interface {
+	GetPortfolio(ctx context.Context, userID int64, portfolio interface{}) error
+	SetPortfolio(ctx context.Context, userID int64, portfolio interface{}) error
+	DeletePortfolio(ctx context.Context, userID int64) error
+	InvalidatePortfolio(ctx context.Context, userID int64) error
+	Get(ctx context.Context, key string, value interface{}) error
+	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
+}
+
+type UserClientInterface interface {
+	GetUserBalance(ctx context.Context, userID int64) (decimal.Decimal, error)
+}
+
+type PnLCalculatorInterface interface {
+	CalculatePnL(ctx context.Context, portfolio *models.Portfolio) error
+}
+
+type RiskCalculatorInterface interface {
+	CalculateRisk(ctx context.Context, portfolio *models.Portfolio) error
+	CalculateRiskMetrics(ctx context.Context, portfolio *models.Portfolio) error
+}
+
+type ROICalculatorInterface interface {
+	CalculateROI(ctx context.Context, portfolio *models.Portfolio) error
+	CalculatePortfolioROI(ctx context.Context, portfolio *models.Portfolio) (*models.ROIData, error)
+}
+
+type AnalyzerInterface interface {
+	Analyze(ctx context.Context, portfolio *models.Portfolio) (*models.AnalysisResult, error)
+	PerformComprehensiveAnalysis(ctx context.Context, portfolio *models.Portfolio) (*models.AnalysisResult, error)
+}
+
+type OptimizerInterface interface {
+	Optimize(ctx context.Context, portfolio *models.Portfolio, constraints *analytics.OptimizationConstraints) (*analytics.OptimizationResult, error)
+}
+
 type PortfolioService struct {
 	portfolioRepo   repositories.PortfolioRepository
 	snapshotRepo    repositories.SnapshotRepository
-	cache           *cache.RedisClient
-	userClient      *clients.UserClient
-	pnlCalculator   *calculator.PnLCalculator
-	riskCalculator  *calculator.RiskCalculator
-	roiCalculator   *calculator.ROICalculator
-	analyzer        *analytics.PortfolioAnalyzer
-	optimizer       *analytics.PortfolioOptimizer
+	cache           CacheInterface
+	userClient      UserClientInterface
+	pnlCalculator   PnLCalculatorInterface
+	riskCalculator  RiskCalculatorInterface
+	roiCalculator   ROICalculatorInterface
+	analyzer        AnalyzerInterface
+	optimizer       OptimizerInterface
 }
 
 func NewPortfolioService(
 	portfolioRepo repositories.PortfolioRepository,
 	snapshotRepo repositories.SnapshotRepository,
-	cache *cache.RedisClient,
-	userClient *clients.UserClient,
-	pnlCalculator *calculator.PnLCalculator,
-	riskCalculator *calculator.RiskCalculator,
-	roiCalculator *calculator.ROICalculator,
-	analyzer *analytics.PortfolioAnalyzer,
-	optimizer *analytics.PortfolioOptimizer,
+	cache CacheInterface,
+	userClient UserClientInterface,
+	pnlCalculator PnLCalculatorInterface,
+	riskCalculator RiskCalculatorInterface,
+	roiCalculator ROICalculatorInterface,
+	analyzer AnalyzerInterface,
+	optimizer OptimizerInterface,
 ) *PortfolioService {
 	return &PortfolioService{
 		portfolioRepo:  portfolioRepo,
@@ -159,20 +195,19 @@ func (ps *PortfolioService) AddHolding(ctx context.Context, userID int64, holdin
 	}
 
 	// Check if holding already exists
-	existingHolding := portfolio.GetHoldingBySymbol(holding.Symbol)
-	if existingHolding != nil {
+	existingHolding, found := portfolio.GetHoldingBySymbol(holding.Symbol)
+	if found {
 		// Update existing holding
 		existingHolding.Quantity = existingHolding.Quantity.Add(holding.Quantity)
-		existingHolding.AverageCost = ps.calculateNewAverageCost(
-			existingHolding.AverageCost, existingHolding.Quantity.Sub(holding.Quantity),
-			holding.AverageCost, holding.Quantity,
+		existingHolding.AverageBuyPrice = ps.calculateNewAverageCost(
+			existingHolding.AverageBuyPrice, existingHolding.Quantity.Sub(holding.Quantity),
+			holding.AverageBuyPrice, holding.Quantity,
 		)
-		existingHolding.UpdatedAt = time.Now()
+		existingHolding.LastPurchaseDate = time.Now()
 	} else {
 		// Add new holding
-		holding.ID = primitive.NewObjectID()
-		holding.CreatedAt = time.Now()
-		holding.UpdatedAt = time.Now()
+		holding.FirstPurchaseDate = time.Now()
+		holding.LastPurchaseDate = time.Now()
 		portfolio.Holdings = append(portfolio.Holdings, *holding)
 	}
 
@@ -221,16 +256,16 @@ func (ps *PortfolioService) UpdateHolding(ctx context.Context, userID int64, hol
 	}
 
 	// Find and update holding
-	existingHolding := portfolio.GetHoldingBySymbol(holding.Symbol)
-	if existingHolding == nil {
+	existingHolding, found := portfolio.GetHoldingBySymbol(holding.Symbol)
+	if !found {
 		return fmt.Errorf("holding %s not found", holding.Symbol)
 	}
 
 	// Update holding fields
 	existingHolding.Quantity = holding.Quantity
-	existingHolding.AverageCost = holding.AverageCost
+	existingHolding.AverageBuyPrice = holding.AverageBuyPrice
 	existingHolding.CurrentPrice = holding.CurrentPrice
-	existingHolding.UpdatedAt = time.Now()
+	existingHolding.LastPurchaseDate = time.Now()
 
 	// Recalculate portfolio
 	err = ps.RecalculatePortfolio(ctx, portfolio)
@@ -255,10 +290,10 @@ func (ps *PortfolioService) RecalculatePortfolio(ctx context.Context, portfolio 
 		holding.CurrentValue = holding.Quantity.Mul(holding.CurrentPrice)
 
 		// Calculate P&L
-		holding.ProfitLoss = holding.CurrentValue.Sub(holding.Quantity.Mul(holding.AverageCost))
+		holding.ProfitLoss = holding.CurrentValue.Sub(holding.Quantity.Mul(holding.AverageBuyPrice))
 
 		// Calculate P&L percentage
-		costBasis := holding.Quantity.Mul(holding.AverageCost)
+		costBasis := holding.Quantity.Mul(holding.AverageBuyPrice)
 		if !costBasis.IsZero() {
 			holding.ProfitLossPercentage = holding.ProfitLoss.Div(costBasis)
 		}
@@ -283,11 +318,9 @@ func (ps *PortfolioService) RecalculatePortfolio(ctx context.Context, portfolio 
 	ps.calculateDiversificationMetrics(portfolio)
 
 	// Update metadata
-	portfolio.Metadata = map[string]interface{}{
-		"last_calculated":     time.Now(),
-		"needs_recalculation": false,
-		"calculation_version": "1.0",
-	}
+	portfolio.Metadata.LastCalculated = time.Now()
+	portfolio.Metadata.NeedsRecalculation = false
+	portfolio.Metadata.CalculationVersion = "1.0"
 
 	return nil
 }
@@ -300,7 +333,7 @@ func (ps *PortfolioService) calculatePortfolioTotals(portfolio *models.Portfolio
 
 	for _, holding := range portfolio.Holdings {
 		totalValue = totalValue.Add(holding.CurrentValue)
-		totalInvested = totalInvested.Add(holding.Quantity.Mul(holding.AverageCost))
+		totalInvested = totalInvested.Add(holding.Quantity.Mul(holding.AverageBuyPrice))
 		totalPnL = totalPnL.Add(holding.ProfitLoss)
 	}
 
@@ -397,14 +430,14 @@ func (ps *PortfolioService) calculateRiskMetrics(ctx context.Context, portfolio 
 	if err != nil || len(snapshots) < 30 {
 		// Set default risk metrics if insufficient data
 		portfolio.RiskMetrics = models.RiskMetrics{
-			Volatility30d:  decimal.NewFromFloat(0.2),
-			SharpeRatio:    decimal.Zero,
-			SortinoRatio:   decimal.Zero,
-			MaxDrawdown:    decimal.Zero,
-			VaR95:          decimal.Zero,
-			CVaR95:         decimal.Zero,
-			Beta:           decimal.NewFromInt(1),
-			Alpha:          decimal.Zero,
+			Volatility30d:      decimal.NewFromFloat(0.2),
+			SharpeRatio:        decimal.Zero,
+			SortinoRatio:       decimal.Zero,
+			MaxDrawdown:        decimal.Zero,
+			ValueAtRisk95:      decimal.Zero,
+			ConditionalVaR95:   decimal.Zero,
+			Beta:               decimal.NewFromInt(1),
+			Alpha:              decimal.Zero,
 		}
 		return nil
 	}
@@ -417,14 +450,14 @@ func (ps *PortfolioService) calculateRiskMetrics(ctx context.Context, portfolio 
 
 	// Map to portfolio risk metrics
 	portfolio.RiskMetrics = models.RiskMetrics{
-		Volatility30d:  riskMetrics.Volatility30d,
-		SharpeRatio:    riskMetrics.SharpeRatio,
-		SortinoRatio:   riskMetrics.SortinoRatio,
-		MaxDrawdown:    riskMetrics.MaxDrawdown,
-		VaR95:          riskMetrics.VaR95,
-		CVaR95:         riskMetrics.CVaR95,
-		Beta:           riskMetrics.Beta,
-		Alpha:          riskMetrics.Alpha,
+		Volatility30d:      riskMetrics.Volatility30d,
+		SharpeRatio:        riskMetrics.SharpeRatio,
+		SortinoRatio:       riskMetrics.SortinoRatio,
+		MaxDrawdown:        riskMetrics.MaxDrawdown,
+		ValueAtRisk95:      riskMetrics.VaR95,
+		ConditionalVaR95:   riskMetrics.CVaR95,
+		Beta:               riskMetrics.Beta,
+		Alpha:              riskMetrics.Alpha,
 	}
 
 	return nil
@@ -467,12 +500,12 @@ func (ps *PortfolioService) calculateDiversificationMetrics(portfolio *models.Po
 	}
 
 	portfolio.Diversification = models.Diversification{
-		HoldingsCount:               holdingsCount,
-		EffectiveHoldings:           effectiveHoldings,
-		ConcentrationIndex:          hhi,
-		LargestPositionPercentage:   largestPosition,
-		SectorCount:                 len(sectorWeights),
-		SectorDiversificationRatio:  decimal.NewFromInt(int64(len(sectorWeights))).Div(decimal.NewFromInt(int64(holdingsCount))),
+		HoldingsCount:             holdingsCount,
+		EffectiveHoldings:         effectiveHoldings,
+		HerfindahlIndex:           hhi,
+		ConcentrationIndex:        hhi,
+		LargestPositionPercentage: largestPosition,
+		Categories:                sectorWeights,
 	}
 }
 
@@ -686,12 +719,8 @@ func (ps *PortfolioService) MarkForRecalculation(ctx context.Context, userID int
 		return fmt.Errorf("failed to get portfolio: %w", err)
 	}
 
-	if portfolio.Metadata == nil {
-		portfolio.Metadata = make(map[string]interface{})
-	}
-
-	portfolio.Metadata["needs_recalculation"] = true
-	portfolio.Metadata["marked_at"] = time.Now()
+	portfolio.Metadata.NeedsRecalculation = true
+	portfolio.UpdatedAt = time.Now()
 
 	return ps.UpdatePortfolio(ctx, portfolio)
 }

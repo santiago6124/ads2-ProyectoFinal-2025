@@ -6,6 +6,15 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// StatisticalData represents statistical analysis results
+type StatisticalData struct {
+	Symbol         string              `json:"symbol"`
+	Statistics     *PriceStatistics    `json:"statistics,omitempty"`
+	Volatility     *VolatilityData     `json:"volatility,omitempty"`
+	Indicators     *TechnicalIndicators `json:"indicators,omitempty"`
+	LastUpdated    time.Time           `json:"last_updated"`
+}
+
 // VolatilityData represents volatility calculation results
 type VolatilityData struct {
 	Symbol                string          `json:"symbol"`

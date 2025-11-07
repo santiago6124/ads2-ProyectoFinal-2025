@@ -148,7 +148,7 @@ func (ts *TrendingService) UpdateTrendingScore(cryptoID string, eventType string
 }
 
 // GetTrendingScore returns the current trending score for a cryptocurrency
-func (ts *TrendingService) GetTrendingScore(cryptoID string) (float32, bool) {
+func (ts *TrendingService) GetTrendingScore(ctx context.Context, cryptoID string) (float32, bool) {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 

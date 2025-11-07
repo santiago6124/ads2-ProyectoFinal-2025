@@ -16,7 +16,7 @@ func (m *MockUserRepository) Create(user *models.User) error {
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) GetByID(id uint) (*models.User, error) {
+func (m *MockUserRepository) GetByID(id int32) (*models.User, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -45,7 +45,12 @@ func (m *MockUserRepository) Update(user *models.User) error {
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) Delete(id uint) error {
+func (m *MockUserRepository) UpdateBalance(id int32, newBalance float64) error {
+	args := m.Called(id, newBalance)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) Delete(id int32) error {
 	args := m.Called(id)
 	return args.Error(0)
 }
@@ -55,12 +60,12 @@ func (m *MockUserRepository) List(offset, limit int, search string, role string,
 	return args.Get(0).([]models.User), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockUserRepository) UpdateLastLogin(id uint) error {
+func (m *MockUserRepository) UpdateLastLogin(id int32) error {
 	args := m.Called(id)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) Exists(id uint) (bool, error) {
+func (m *MockUserRepository) Exists(id int32) (bool, error) {
 	args := m.Called(id)
 	return args.Bool(0), args.Error(1)
 }
@@ -82,7 +87,7 @@ func (m *MockRefreshTokenRepository) GetByToken(token string) (*models.RefreshTo
 	return args.Get(0).(*models.RefreshToken), args.Error(1)
 }
 
-func (m *MockRefreshTokenRepository) RevokeByUserID(userID uint) error {
+func (m *MockRefreshTokenRepository) RevokeByUserID(userID int32) error {
 	args := m.Called(userID)
 	return args.Error(0)
 }

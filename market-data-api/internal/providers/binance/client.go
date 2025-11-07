@@ -18,12 +18,12 @@ import (
 	"golang.org/x/time/rate"
 
 	"market-data-api/internal/models"
-	"market-data-api/internal/providers"
+	"market-data-api/internal/types"
 )
 
 // Client represents a Binance API client
 type Client struct {
-	*providers.ProviderClient
+	*types.ProviderClient
 	apiKey      string
 	secretKey   string
 	baseURL     string
@@ -68,7 +68,20 @@ func NewClient(config *Config) *Client {
 			Timeout: config.Timeout,
 		},
 		rateLimiter: limiter,
-		ProviderClient: &providers.ProviderClient{},
+		ProviderClient: &types.ProviderClient{
+			Name:    "binance",
+			Weight:  config.Weight,
+			BaseURL: config.BaseURL,
+			Timeout: config.Timeout,
+			Status: &models.ProviderStatus{
+				Name:   "binance",
+				Status: "healthy",
+				Weight: config.Weight,
+			},
+			Metrics: &types.ProviderMetrics{
+				Name: "binance",
+			},
+		},
 	}
 
 	return client
@@ -100,16 +113,16 @@ func (c *Client) GetPrice(ctx context.Context, symbol string) (*models.Price, er
 	}
 
 	// Parse response
-	var response Ticker24hrResponse
+	var response TickerResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Failed to parse response", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Failed to parse response", false)
 	}
 
 	// Convert to Price model
 	price, err := decimal.NewFromString(response.LastPrice)
 	if err != nil {
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Invalid price format", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Invalid price format", false)
 	}
 
 	volume24h, _ := decimal.NewFromString(response.Volume)
@@ -154,10 +167,10 @@ func (c *Client) GetPrices(ctx context.Context, symbols []string) (map[string]*m
 	}
 
 	// Parse response
-	var tickers []Ticker24hrResponse
+	var tickers []TickerResponse
 	if err := json.Unmarshal(data, &tickers); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Failed to parse response", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Failed to parse response", false)
 	}
 
 	// Create symbol map for filtering
@@ -240,7 +253,7 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 	var response [][]interface{}
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Failed to parse klines data", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Failed to parse klines data", false)
 	}
 
 	// Convert to candles
@@ -306,10 +319,10 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 		return nil, err
 	}
 
-	var ticker Ticker24hrResponse
+	var ticker TickerResponse
 	if err := json.Unmarshal(data, &ticker); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Failed to parse ticker data", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Failed to parse ticker data", false)
 	}
 
 	// Convert to MarketData
@@ -364,12 +377,12 @@ func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*m
 	var response OrderBookResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError("binance", "PARSE_ERROR", "Failed to parse order book", false)
+		return nil, types.NewProviderError("binance", "PARSE_ERROR", "Failed to parse order book", false)
 	}
 
 	// Convert to OrderBook
 	orderBook := models.NewOrderBook(symbol)
-	orderBook.LastUpdate = time.Unix(response.LastUpdateID/1000, 0)
+	orderBook.LastUpdate = time.Unix(response.LastUpdateId/1000, 0)
 
 	// Process bids
 	for _, bid := range response.Bids {
@@ -410,11 +423,11 @@ func (c *Client) Ping(ctx context.Context) error {
 	latency := time.Since(start)
 
 	if err != nil {
-		c.UpdateStatus(providers.StatusDown, latency, 1)
+		c.UpdateStatus(types.StatusDown, latency, 1)
 		return err
 	}
 
-	c.UpdateStatus(providers.StatusHealthy, latency, 0)
+	c.UpdateStatus(types.StatusHealthy, latency, 0)
 	return nil
 }
 
@@ -422,7 +435,7 @@ func (c *Client) Ping(ctx context.Context) error {
 func (c *Client) makeRequest(ctx context.Context, method, endpoint string, params url.Values, signed bool) ([]byte, error) {
 	// Wait for rate limiter
 	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return nil, providers.NewProviderError("binance", providers.ErrorCodeRateLimit, "Rate limit wait cancelled", true)
+		return nil, types.NewProviderError("binance", types.ErrorCodeRateLimit, "Rate limit wait cancelled", true)
 	}
 
 	// Build URL
@@ -446,7 +459,7 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, param
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, nil)
 	if err != nil {
-		return nil, providers.NewProviderError("binance", "REQUEST_ERROR", "Failed to create request", false)
+		return nil, types.NewProviderError("binance", "REQUEST_ERROR", "Failed to create request", false)
 	}
 
 	// Add headers
@@ -460,14 +473,14 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, param
 	// Make request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, providers.NewProviderError("binance", providers.ErrorCodeNetworkError, "Network error: "+err.Error(), true)
+		return nil, types.NewProviderError("binance", types.ErrorCodeNetworkError, "Network error: "+err.Error(), true)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, providers.NewProviderError("binance", "READ_ERROR", "Failed to read response", false)
+		return nil, types.NewProviderError("binance", "READ_ERROR", "Failed to read response", false)
 	}
 
 	// Check status code
@@ -491,7 +504,7 @@ func (c *Client) handleErrorResponse(statusCode int, body []byte) error {
 	var retryable bool
 
 	// Try to parse Binance error response
-	var binanceError BinanceErrorResponse
+	var binanceError ErrorResponse
 	if json.Unmarshal(body, &binanceError) == nil && binanceError.Msg != "" {
 		errorMsg = binanceError.Msg
 	} else {
@@ -499,7 +512,7 @@ func (c *Client) handleErrorResponse(statusCode int, body []byte) error {
 	}
 
 	switch statusCode {
-	case http.StatusTooManyRequests, 429:
+	case http.StatusTooManyRequests:
 		retryable = true
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
 		retryable = true
@@ -507,7 +520,7 @@ func (c *Client) handleErrorResponse(statusCode int, body []byte) error {
 		retryable = false
 	}
 
-	return providers.NewProviderError("binance", strconv.Itoa(statusCode), errorMsg, retryable)
+	return types.NewProviderError("binance", strconv.Itoa(statusCode), errorMsg, retryable)
 }
 
 // formatSymbol converts a symbol to Binance format

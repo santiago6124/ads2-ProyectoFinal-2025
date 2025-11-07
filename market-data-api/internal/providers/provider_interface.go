@@ -4,11 +4,35 @@ import (
 	"context"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"market-data-api/internal/models"
+	"market-data-api/internal/types"
 )
 
-// Provider defines the interface for cryptocurrency data providers
+// Re-export types from the types package to maintain backward compatibility
+type Provider = types.Provider
+type ProviderClient = types.ProviderClient
+type ProviderMetrics = types.ProviderMetrics
+type ProviderError = types.ProviderError
+type PriceUpdate = types.PriceUpdate
+type OrderBookUpdate = types.OrderBookUpdate
+type TradeUpdate = types.TradeUpdate
+type RateLimiter = types.RateLimiter
+type CircuitBreaker = types.CircuitBreaker
+
+// NewProviderError creates a new provider error (wrapper around types)
+func NewProviderError(provider, code, message string, retryable bool) *types.ProviderError {
+	return &types.ProviderError{
+		Provider:  provider,
+		Code:      code,
+		Message:   message,
+		Retryable: retryable,
+		Timestamp: time.Now(),
+	}
+}
+
+// Provider interface is now aliased from types package
+// Original definition kept below for reference only
+/*
 type Provider interface {
 	// Basic price operations
 	GetPrice(ctx context.Context, symbol string) (*models.Price, error)
@@ -33,6 +57,7 @@ type Provider interface {
 	CheckRateLimit() error
 	Ping(ctx context.Context) error
 }
+*/
 
 // WebSocketProvider defines the interface for real-time data providers
 type WebSocketProvider interface {
@@ -54,35 +79,7 @@ type WebSocketProvider interface {
 	Reconnect(ctx context.Context) error
 }
 
-// PriceUpdate represents a real-time price update
-type PriceUpdate struct {
-	Symbol    string          `json:"symbol"`
-	Price     decimal.Decimal `json:"price"`
-	Volume    decimal.Decimal `json:"volume,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Provider  string          `json:"provider"`
-	Change24h decimal.Decimal `json:"change_24h,omitempty"`
-}
-
-// OrderBookUpdate represents a real-time order book update
-type OrderBookUpdate struct {
-	Symbol    string                 `json:"symbol"`
-	Bids      []*models.OrderLevel   `json:"bids"`
-	Asks      []*models.OrderLevel   `json:"asks"`
-	Timestamp time.Time              `json:"timestamp"`
-	Provider  string                 `json:"provider"`
-}
-
-// TradeUpdate represents a real-time trade update
-type TradeUpdate struct {
-	Symbol    string          `json:"symbol"`
-	Price     decimal.Decimal `json:"price"`
-	Quantity  decimal.Decimal `json:"quantity"`
-	Side      string          `json:"side"` // "buy" or "sell"
-	Timestamp time.Time       `json:"timestamp"`
-	TradeID   string          `json:"trade_id,omitempty"`
-	Provider  string          `json:"provider"`
-}
+// PriceUpdate, OrderBookUpdate, and TradeUpdate are now re-exported from types package (see above)
 
 // ProviderConfig represents configuration for a provider
 type ProviderConfig struct {
@@ -99,25 +96,7 @@ type ProviderConfig struct {
 	HealthCheckInterval time.Duration `json:"health_check_interval"`
 }
 
-// ProviderError represents an error from a data provider
-type ProviderError struct {
-	Provider string    `json:"provider"`
-	Code     string    `json:"code"`
-	Message  string    `json:"message"`
-	Details  string    `json:"details,omitempty"`
-	Retryable bool     `json:"retryable"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// Error implements the error interface
-func (pe *ProviderError) Error() string {
-	return pe.Provider + ": " + pe.Message
-}
-
-// IsRetryable returns whether the error is retryable
-func (pe *ProviderError) IsRetryable() bool {
-	return pe.retryable
-}
+// ProviderError is now re-exported from types package (see above)
 
 // Common error codes
 const (
@@ -141,16 +120,7 @@ const (
 	StatusMaintenance = "maintenance"
 )
 
-// NewProviderError creates a new provider error
-func NewProviderError(provider, code, message string, retryable bool) *ProviderError {
-	return &ProviderError{
-		Provider:  provider,
-		Code:      code,
-		Message:   message,
-		Retryable: retryable,
-		Timestamp: time.Now(),
-	}
-}
+// NewProviderError is defined at the top of this file
 
 // ProviderFactory defines the interface for creating providers
 type ProviderFactory interface {
@@ -238,125 +208,5 @@ func (pm *ProviderManager) HealthCheck(ctx context.Context) map[string]error {
 	return results
 }
 
-// RateLimiter defines the interface for rate limiting
-type RateLimiter interface {
-	Allow() bool
-	Wait(ctx context.Context) error
-	Limit() int
-	Remaining() int
-	Reset() time.Time
-}
-
-// CircuitBreaker defines the interface for circuit breaking
-type CircuitBreaker interface {
-	Call(func() error) error
-	State() string
-	IsOpen() bool
-	IsClosed() bool
-	IsHalfOpen() bool
-}
-
-// ProviderMetrics represents metrics for a provider
-type ProviderMetrics struct {
-	Name             string        `json:"name"`
-	RequestCount     int64         `json:"request_count"`
-	SuccessCount     int64         `json:"success_count"`
-	ErrorCount       int64         `json:"error_count"`
-	SuccessRate      float64       `json:"success_rate"`
-	AverageLatency   time.Duration `json:"average_latency"`
-	LastRequest      time.Time     `json:"last_request"`
-	RateLimitHits    int64         `json:"rate_limit_hits"`
-	CircuitBreakerTrips int64      `json:"circuit_breaker_trips"`
-}
-
-// CalculateSuccessRate calculates the success rate
-func (pm *ProviderMetrics) CalculateSuccessRate() {
-	if pm.RequestCount > 0 {
-		pm.SuccessRate = float64(pm.SuccessCount) / float64(pm.RequestCount)
-	}
-}
-
-// ProviderClient provides a base implementation for HTTP-based providers
-type ProviderClient struct {
-	name         string
-	baseURL      string
-	timeout      time.Duration
-	rateLimiter  RateLimiter
-	circuitBreaker CircuitBreaker
-	metrics      *ProviderMetrics
-	status       *models.ProviderStatus
-	weight       float64
-}
-
-// GetName returns the provider name
-func (pc *ProviderClient) GetName() string {
-	return pc.name
-}
-
-// GetWeight returns the provider weight
-func (pc *ProviderClient) GetWeight() float64 {
-	return pc.weight
-}
-
-// GetStatus returns the provider status
-func (pc *ProviderClient) GetStatus() *models.ProviderStatus {
-	return pc.status
-}
-
-// IsHealthy returns whether the provider is healthy
-func (pc *ProviderClient) IsHealthy() bool {
-	return pc.status != nil && pc.status.Status == StatusHealthy
-}
-
-// CheckRateLimit checks if the rate limit allows the request
-func (pc *ProviderClient) CheckRateLimit() error {
-	if pc.rateLimiter != nil && !pc.rateLimiter.Allow() {
-		return NewProviderError(pc.name, ErrorCodeRateLimit, "Rate limit exceeded", true)
-	}
-	return nil
-}
-
-// UpdateMetrics updates provider metrics
-func (pc *ProviderClient) UpdateMetrics(success bool, latency time.Duration) {
-	if pc.metrics == nil {
-		return
-	}
-
-	pc.metrics.RequestCount++
-	pc.metrics.LastRequest = time.Now()
-
-	if success {
-		pc.metrics.SuccessCount++
-	} else {
-		pc.metrics.ErrorCount++
-	}
-
-	pc.metrics.CalculateSuccessRate()
-
-	// Update average latency (simple moving average)
-	if pc.metrics.AverageLatency == 0 {
-		pc.metrics.AverageLatency = latency
-	} else {
-		pc.metrics.AverageLatency = (pc.metrics.AverageLatency + latency) / 2
-	}
-}
-
-// UpdateStatus updates provider status
-func (pc *ProviderClient) UpdateStatus(status string, latency time.Duration, errorCount int) {
-	if pc.status == nil {
-		pc.status = &models.ProviderStatus{
-			Name: pc.name,
-		}
-	}
-
-	pc.status.Status = status
-	pc.status.Latency = latency
-	pc.status.LastUpdate = time.Now()
-	pc.status.ErrorCount = errorCount
-	pc.status.Weight = pc.weight
-
-	if pc.metrics != nil {
-		pc.status.SuccessRate = pc.metrics.SuccessRate
-		pc.status.ResponseTime = pc.metrics.AverageLatency
-	}
-}
+// RateLimiter, CircuitBreaker, ProviderMetrics, and ProviderClient are now re-exported from types package (see above)
+// All their methods are implemented in the types package

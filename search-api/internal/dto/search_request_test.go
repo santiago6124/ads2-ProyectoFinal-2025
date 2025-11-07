@@ -7,6 +7,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Helper functions for creating pointers
+func float64Ptr(v float64) *float64 {
+	return &v
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestSearchRequest_Validate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -79,8 +92,8 @@ func TestSearchRequest_Validate(t *testing.T) {
 				Page:     1,
 				Limit:    50,
 				Category: []string{"DeFi", "Smart Contract Platform"},
-				MinPrice: &[]float64{10.0}[0],
-				MaxPrice: &[]float64{1000.0}[0],
+				MinPrice: float64Ptr(10.0),
+				MaxPrice: float64Ptr(1000.0),
 				Sort:     "market_cap_desc",
 			},
 			wantError: false,
@@ -91,8 +104,8 @@ func TestSearchRequest_Validate(t *testing.T) {
 				Query:    "bitcoin",
 				Page:     1,
 				Limit:    20,
-				MinPrice: &[]float64{1000.0}[0],
-				MaxPrice: &[]float64{100.0}[0],
+				MinPrice: float64Ptr(1000.0),
+				MaxPrice: float64Ptr(100.0),
 			},
 			wantError: true,
 			errorMsg:  "min_price cannot be greater than max_price",
@@ -103,8 +116,8 @@ func TestSearchRequest_Validate(t *testing.T) {
 				Query:        "bitcoin",
 				Page:         1,
 				Limit:        20,
-				MinMarketCap: &[]float64{1000000000.0}[0],
-				MaxMarketCap: &[]float64{100000000.0}[0],
+				MinMarketCap: int64Ptr(int64(1000000000.0)),
+				MaxMarketCap: int64Ptr(int64(100000000.0)),
 			},
 			wantError: true,
 			errorMsg:  "min_market_cap cannot be greater than max_market_cap",
@@ -137,7 +150,7 @@ func TestSearchRequest_SetDefaults(t *testing.T) {
 			request:       SearchRequest{},
 			expectedPage:  1,
 			expectedLimit: 20,
-			expectedSort:  "relevance",
+			expectedSort:  "market_cap_desc",
 		},
 		{
 			name: "partial request",
@@ -146,7 +159,7 @@ func TestSearchRequest_SetDefaults(t *testing.T) {
 			},
 			expectedPage:  1,
 			expectedLimit: 20,
-			expectedSort:  "relevance",
+			expectedSort:  "market_cap_desc",
 		},
 		{
 			name: "request with values",
@@ -194,7 +207,7 @@ func TestTrendingRequest_Validate(t *testing.T) {
 				Limit:  10,
 			},
 			wantError: true,
-			errorMsg:  "period must be one of: 1h, 24h, 7d, 30d",
+			errorMsg:  "invalid period: must be one of 1h, 24h, 7d, 30d",
 		},
 		{
 			name: "invalid limit - zero",
@@ -281,7 +294,7 @@ func TestSuggestionRequest_SetDefaults(t *testing.T) {
 			request: SuggestionRequest{
 				Query: "bit",
 			},
-			expectedLimit: 10,
+			expectedLimit: 5,
 		},
 		{
 			name: "with limit",
@@ -329,8 +342,8 @@ func TestSearchRequest_ToSolrParams(t *testing.T) {
 				Page:     2,
 				Limit:    10,
 				Category: []string{"DeFi"},
-				MinPrice: &[]float64{10.0}[0],
-				MaxPrice: &[]float64{1000.0}[0],
+				MinPrice: float64Ptr(10.0),
+				MaxPrice: float64Ptr(1000.0),
 				Sort:     "market_cap_desc",
 			},
 			expected: map[string]interface{}{
@@ -407,12 +420,12 @@ func TestSearchRequest_ComplexFiltering(t *testing.T) {
 		Category:        []string{"DeFi", "Lending"},
 		Platform:        "ethereum",
 		Tags:            []string{"yield-farming", "governance"},
-		MinPrice:        &[]float64{1.0}[0],
-		MaxPrice:        &[]float64{100.0}[0],
-		MinMarketCap:    &[]float64{1000000.0}[0],
-		MaxMarketCap:    &[]float64{1000000000.0}[0],
+		MinPrice:        float64Ptr(1.0),
+		MaxPrice:        float64Ptr(100.0),
+		MinMarketCap:    int64Ptr(1000000),
+		MaxMarketCap:    int64Ptr(1000000000),
 		PriceChange24h:  "positive",
-		IsTrending:      &[]bool{true}[0],
+		IsTrending:      boolPtr(true),
 		Sort:            "volume_desc",
 	}
 

@@ -198,7 +198,9 @@ func (po *PortfolioOptimizer) estimateReturnsAndCovariance(portfolio *models.Por
 				// Covariance = correlation * sqrt(var_i * var_j)
 				var_i := covarianceMatrix[i][i]
 				var_j := covarianceMatrix[j][j]
-				covariance := correlation.Mul(var_i.Mul(var_j).Sqrt())
+				product := var_i.Mul(var_j)
+				sqrtProduct := decimal.NewFromFloat(math.Sqrt(product.InexactFloat64()))
+				covariance := correlation.Mul(sqrtProduct)
 				covarianceMatrix[i][j] = covariance
 			}
 		}
@@ -329,7 +331,7 @@ func (po *PortfolioOptimizer) calculateRiskParityWeights(covarianceMatrix [][]de
 	for i := 0; i < n; i++ {
 		variance := covarianceMatrix[i][i]
 		if variance.GreaterThan(decimal.Zero) {
-			volatility := variance.Sqrt()
+			volatility := decimal.NewFromFloat(math.Sqrt(variance.InexactFloat64()))
 			inverseVol := decimal.NewFromInt(1).Div(volatility)
 			volatilities[i] = inverseVol
 			sumInverseVol = sumInverseVol.Add(inverseVol)
@@ -384,7 +386,7 @@ func (po *PortfolioOptimizer) generateRebalancingActions(portfolio *models.Portf
 	}
 
 	// Generate actions for existing holdings
-	for symbol, currentWeight := range currentWeights {
+	for symbol := range currentWeights {
 		targetWeight := targetWeights[symbol]
 		if targetWeight.IsZero() {
 			continue
@@ -677,13 +679,4 @@ func (po *PortfolioOptimizer) calculateNextRebalancingDate(frequency string) str
 	default:
 		return "next_month"
 	}
-}
-
-// Extension for decimal sqrt operation
-func (d decimal.Decimal) Sqrt() decimal.Decimal {
-	f, _ := d.Float64()
-	if f < 0 {
-		return decimal.Zero
-	}
-	return decimal.NewFromFloat(math.Sqrt(f))
 }

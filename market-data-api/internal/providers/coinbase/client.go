@@ -7,13 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"market-data-api/internal/models"
-	"market-data-api/internal/providers"
+	"market-data-api/internal/types"
 )
 
 const (
@@ -23,7 +22,7 @@ const (
 
 // Client represents the Coinbase Pro API client
 type Client struct {
-	*providers.ProviderClient
+	*types.ProviderClient
 
 	httpClient   *http.Client
 	baseURL      string
@@ -91,7 +90,7 @@ func NewClient(config *Config) *Client {
 	}
 
 	// Initialize base provider client
-	client.ProviderClient = &providers.ProviderClient{}
+	client.ProviderClient = &types.ProviderClient{}
 
 	return client
 }
@@ -120,29 +119,25 @@ func (c *Client) GetPrice(ctx context.Context, symbol string) (*models.Price, er
 	var tickerResp TickerResponse
 	if err := c.makeRequest(ctx, "GET", endpoint, nil, &tickerResp); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		return nil, types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("failed to get price for %s: %v", symbol, err), true)
 	}
 
 	price, err := decimal.NewFromString(tickerResp.Price)
 	if err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeBadRequest,
+		return nil, types.NewProviderError(Name, types.ErrorCodeBadRequest,
 			fmt.Sprintf("invalid price format: %s", tickerResp.Price), false)
 	}
 
 	volume, _ := decimal.NewFromString(tickerResp.Volume)
-	ask, _ := decimal.NewFromString(tickerResp.Ask)
-	bid, _ := decimal.NewFromString(tickerResp.Bid)
-
 	result := &models.Price{
 		Symbol:    DenormalizeSymbol(normalizedSymbol),
 		Price:     price,
-		Volume:    volume,
+		PriceUSD:  price,
+		Volume24h: volume,
 		Timestamp: time.Now(),
 		Source:    Name,
-		Ask:       ask,
-		Bid:       bid,
 	}
 
 	c.UpdateMetrics(true, time.Since(start))
@@ -152,7 +147,7 @@ func (c *Client) GetPrice(ctx context.Context, symbol string) (*models.Price, er
 // GetPrices retrieves current prices for multiple symbols
 func (c *Client) GetPrices(ctx context.Context, symbols []string) (map[string]*models.Price, error) {
 	if len(symbols) == 0 {
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeBadRequest, "symbols list is empty", false)
+		return nil, types.NewProviderError(Name, types.ErrorCodeBadRequest, "symbols list is empty", false)
 	}
 
 	results := make(map[string]*models.Price)
@@ -185,7 +180,7 @@ func (c *Client) GetPrices(ctx context.Context, symbols []string) (map[string]*m
 	wg.Wait()
 
 	if len(results) == 0 {
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeNoData, "no prices retrieved", true)
+		return nil, types.NewProviderError(Name, types.ErrorCodeNoData, "no prices retrieved", true)
 	}
 
 	return results, nil
@@ -203,7 +198,7 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 	normalizedInterval := NormalizeInterval(interval)
 
 	if !IsValidInterval(normalizedInterval) {
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeBadRequest,
+		return nil, types.NewProviderError(Name, types.ErrorCodeBadRequest,
 			fmt.Sprintf("unsupported interval: %s", interval), false)
 	}
 
@@ -222,7 +217,7 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 	var candleData [][]float64
 	if err := c.makeRequest(ctx, "GET", endpoint+"?"+params.Encode(), nil, &candleData); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		return nil, types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("failed to get historical data for %s: %v", symbol, err), true)
 	}
 
@@ -234,14 +229,12 @@ func (c *Client) GetHistoricalData(ctx context.Context, symbol, interval string,
 		}
 
 		candle := &models.Candle{
-			Symbol:    DenormalizeSymbol(normalizedSymbol),
 			Timestamp: time.Unix(int64(data[0]), 0),
 			Open:      decimal.NewFromFloat(data[3]),
 			High:      decimal.NewFromFloat(data[2]),
 			Low:       decimal.NewFromFloat(data[1]),
 			Close:     decimal.NewFromFloat(data[4]),
 			Volume:    decimal.NewFromFloat(data[5]),
-			Source:    Name,
 		}
 
 		candles = append(candles, candle)
@@ -271,7 +264,7 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 	var tickerResp TickerResponse
 	if err := c.makeRequest(ctx, "GET", tickerEndpoint, nil, &tickerResp); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		return nil, types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("failed to get market data for %s: %v", symbol, err), true)
 	}
 
@@ -280,7 +273,7 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 	var statsResp StatsResponse
 	if err := c.makeRequest(ctx, "GET", statsEndpoint, nil, &statsResp); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		return nil, types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("failed to get stats for %s: %v", symbol, err), true)
 	}
 
@@ -297,16 +290,15 @@ func (c *Client) GetMarketData(ctx context.Context, symbol string) (*models.Mark
 	}
 
 	marketData := &models.MarketData{
-		Symbol:           DenormalizeSymbol(normalizedSymbol),
-		Price:            price,
-		Volume24h:        volume,
-		High24h:          high24h,
-		Low24h:           low24h,
-		Open24h:          open24h,
-		Change24h:        change24h,
-		ChangePercent24h: changePercent24h,
-		LastUpdated:      time.Now(),
-		Source:           Name,
+		Symbol:                   DenormalizeSymbol(normalizedSymbol),
+		CurrentPrice:             price,
+		TotalVolume:              volume,
+		High24h:                  high24h,
+		Low24h:                   low24h,
+		PriceChange24h:           change24h,
+		PriceChangePercentage24h: changePercent24h,
+		LastUpdated:              time.Now(),
+		DataSource:               Name,
 	}
 
 	c.UpdateMetrics(true, time.Since(start))
@@ -341,7 +333,7 @@ func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*m
 	var orderBookResp OrderBookResponse
 	if err := c.makeRequest(ctx, "GET", endpoint+"?"+params.Encode(), nil, &orderBookResp); err != nil {
 		c.UpdateMetrics(false, time.Since(start))
-		return nil, providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		return nil, types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("failed to get order book for %s: %v", symbol, err), true)
 	}
 
@@ -358,7 +350,7 @@ func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*m
 
 		bids = append(bids, &models.OrderLevel{
 			Price:    price,
-			Quantity: size,
+			Amount: size,
 		})
 	}
 
@@ -371,7 +363,7 @@ func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*m
 
 		asks = append(asks, &models.OrderLevel{
 			Price:    price,
-			Quantity: size,
+			Amount: size,
 		})
 	}
 
@@ -380,7 +372,7 @@ func (c *Client) GetOrderBook(ctx context.Context, symbol string, depth int) (*m
 		Bids:      bids,
 		Asks:      asks,
 		Timestamp: time.Now(),
-		Source:    Name,
+		// No Source field in OrderBook,
 	}
 
 	c.UpdateMetrics(true, time.Since(start))
@@ -399,7 +391,7 @@ func (c *Client) CheckRateLimit() error {
 	}
 
 	if c.requestCount >= 10 { // Coinbase Pro limit: 10 requests per second
-		return providers.NewProviderError(Name, providers.ErrorCodeRateLimit, "rate limit exceeded", true)
+		return types.NewProviderError(Name, types.ErrorCodeRateLimit, "rate limit exceeded", true)
 	}
 
 	c.requestCount++
@@ -416,12 +408,12 @@ func (c *Client) Ping(ctx context.Context) error {
 	c.UpdateMetrics(err == nil, time.Since(start))
 
 	if err != nil {
-		c.UpdateStatus(providers.StatusDown, time.Since(start), 1)
-		return providers.NewProviderError(Name, providers.ErrorCodeServerError,
+		c.UpdateStatus(types.StatusDown, time.Since(start), 1)
+		return types.NewProviderError(Name, types.ErrorCodeServerError,
 			fmt.Sprintf("ping failed: %v", err), true)
 	}
 
-	c.UpdateStatus(providers.StatusHealthy, time.Since(start), 0)
+	c.UpdateStatus(types.StatusHealthy, time.Since(start), 0)
 	return nil
 }
 
@@ -430,7 +422,7 @@ func (c *Client) IsHealthy() bool {
 	// Simple health check based on recent errors
 	if c.ProviderClient != nil {
 		status := c.GetStatus()
-		return status != nil && status.Status == providers.StatusHealthy
+		return status != nil && status.Status == types.StatusHealthy
 	}
 	return true
 }

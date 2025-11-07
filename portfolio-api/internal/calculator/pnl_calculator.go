@@ -15,8 +15,8 @@ import (
 
 // PnLCalculator handles profit and loss calculations
 type PnLCalculator struct {
-	marketClient *clients.MarketClient
-	logger       *logrus.Logger
+	marketClient *clients.MarketDataClient
+	logger       *logrus.Entry
 }
 
 // PnLResult represents the result of P&L calculation
@@ -53,18 +53,6 @@ type HoldingPnL struct {
 	DailyChangePercentage decimal.Decimal `json:"daily_change_percentage"`
 }
 
-// Transaction represents a buy/sell transaction
-type Transaction struct {
-	ID        string          `json:"id"`
-	Symbol    string          `json:"symbol"`
-	Type      string          `json:"type"` // "buy" or "sell"
-	Quantity  decimal.Decimal `json:"quantity"`
-	Price     decimal.Decimal `json:"price"`
-	Value     decimal.Decimal `json:"value"`
-	Fee       decimal.Decimal `json:"fee"`
-	Timestamp time.Time       `json:"timestamp"`
-}
-
 // CostBasisMethod represents different cost basis calculation methods
 type CostBasisMethod string
 
@@ -75,7 +63,7 @@ const (
 )
 
 // NewPnLCalculator creates a new P&L calculator
-func NewPnLCalculator(marketClient *clients.MarketClient) *PnLCalculator {
+func NewPnLCalculator(marketClient *clients.MarketDataClient) *PnLCalculator {
 	return &PnLCalculator{
 		marketClient: marketClient,
 		logger:       logrus.WithField("component", "pnl_calculator"),
@@ -102,10 +90,13 @@ func (calc *PnLCalculator) CalculatePortfolioPnL(ctx context.Context, portfolio 
 		}
 
 		// Get current price for the holding
-		currentPrice, err := calc.marketClient.GetCurrentPrice(ctx, holding.Symbol)
+		var currentPrice decimal.Decimal
+		priceData, err := calc.marketClient.GetPrice(ctx, holding.Symbol)
 		if err != nil {
 			calc.logger.WithError(err).WithField("symbol", holding.Symbol).Warn("Failed to get current price")
 			currentPrice = holding.CurrentPrice // Use cached price
+		} else {
+			currentPrice = priceData.Price
 		}
 
 		// Calculate holding P&L
@@ -246,7 +237,7 @@ func (calc *PnLCalculator) calculatePeriodicChanges(result *PnLResult, snapshots
 }
 
 // CalculateCostBasis calculates cost basis using specified method
-func (calc *PnLCalculator) CalculateCostBasis(transactions []Transaction, method CostBasisMethod) (decimal.Decimal, decimal.Decimal, error) {
+func (calc *PnLCalculator) CalculateCostBasis(transactions []models.Transaction, method CostBasisMethod) (decimal.Decimal, decimal.Decimal, error) {
 	if len(transactions) == 0 {
 		return decimal.Zero, decimal.Zero, nil
 	}
@@ -269,8 +260,8 @@ func (calc *PnLCalculator) CalculateCostBasis(transactions []Transaction, method
 }
 
 // calculateFIFOCostBasis calculates cost basis using First In, First Out method
-func (calc *PnLCalculator) calculateFIFOCostBasis(transactions []Transaction) (decimal.Decimal, decimal.Decimal, error) {
-	var queue []Transaction
+func (calc *PnLCalculator) calculateFIFOCostBasis(transactions []models.Transaction) (decimal.Decimal, decimal.Decimal, error) {
+	var queue []models.Transaction
 	totalCost := decimal.Zero
 	totalQuantity := decimal.Zero
 
@@ -311,8 +302,8 @@ func (calc *PnLCalculator) calculateFIFOCostBasis(transactions []Transaction) (d
 }
 
 // calculateLIFOCostBasis calculates cost basis using Last In, First Out method
-func (calc *PnLCalculator) calculateLIFOCostBasis(transactions []Transaction) (decimal.Decimal, decimal.Decimal, error) {
-	var stack []Transaction
+func (calc *PnLCalculator) calculateLIFOCostBasis(transactions []models.Transaction) (decimal.Decimal, decimal.Decimal, error) {
+	var stack []models.Transaction
 	totalCost := decimal.Zero
 	totalQuantity := decimal.Zero
 
@@ -354,7 +345,7 @@ func (calc *PnLCalculator) calculateLIFOCostBasis(transactions []Transaction) (d
 }
 
 // calculateAverageCostBasis calculates cost basis using weighted average method
-func (calc *PnLCalculator) calculateAverageCostBasis(transactions []Transaction) (decimal.Decimal, decimal.Decimal, error) {
+func (calc *PnLCalculator) calculateAverageCostBasis(transactions []models.Transaction) (decimal.Decimal, decimal.Decimal, error) {
 	totalCost := decimal.Zero
 	totalQuantity := decimal.Zero
 
@@ -382,7 +373,7 @@ func (calc *PnLCalculator) calculateAverageCostBasis(transactions []Transaction)
 }
 
 // UpdateHoldingFromTransactions updates a holding based on transaction history
-func (calc *PnLCalculator) UpdateHoldingFromTransactions(holding *models.Holding, transactions []Transaction, method CostBasisMethod) error {
+func (calc *PnLCalculator) UpdateHoldingFromTransactions(holding *models.Holding, transactions []models.Transaction, method CostBasisMethod) error {
 	quantity, averagePrice, err := calc.CalculateCostBasis(transactions, method)
 	if err != nil {
 		return fmt.Errorf("failed to calculate cost basis: %w", err)
@@ -400,7 +391,7 @@ func (calc *PnLCalculator) UpdateHoldingFromTransactions(holding *models.Holding
 			return transactions[i].Timestamp.Before(transactions[j].Timestamp)
 		})
 
-		var firstBuy, lastBuy *Transaction
+		var firstBuy, lastBuy *models.Transaction
 		for i := range transactions {
 			if transactions[i].Type == "buy" {
 				if firstBuy == nil {
@@ -422,7 +413,7 @@ func (calc *PnLCalculator) UpdateHoldingFromTransactions(holding *models.Holding
 }
 
 // ValidateTransactions validates a slice of transactions
-func (calc *PnLCalculator) ValidateTransactions(transactions []Transaction) error {
+func (calc *PnLCalculator) ValidateTransactions(transactions []models.Transaction) error {
 	for i, tx := range transactions {
 		if tx.Symbol == "" {
 			return fmt.Errorf("transaction %d: symbol is required", i)

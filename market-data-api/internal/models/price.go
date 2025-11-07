@@ -41,6 +41,7 @@ type AggregatedPrice struct {
 	Metadata       *AggregationMetadata       `json:"metadata,omitempty"`
 
 	// Market data
+	Volume         decimal.Decimal            `json:"volume,omitempty"`
 	Volume24h      decimal.Decimal            `json:"volume_24h,omitempty"`
 	MarketCap      decimal.Decimal            `json:"market_cap,omitempty"`
 	Change24h      decimal.Decimal            `json:"change_24h,omitempty"`
@@ -113,6 +114,7 @@ type OrderBook struct {
 	Spread      decimal.Decimal `json:"spread"`
 	SpreadPct   decimal.Decimal `json:"spread_percentage"`
 	LastUpdate  time.Time     `json:"last_update"`
+	Source      string        `json:"source,omitempty"`
 }
 
 // OrderLevel represents a single level in the order book

@@ -23,13 +23,13 @@ type MarketDataClient struct {
 
 func NewMarketDataClient(cfg config.ExternalAPIsConfig) *MarketDataClient {
 	return &MarketDataClient{
-		baseURL: cfg.MarketDataAPI.URL,
+		baseURL: cfg.MarketDataAPI.BaseURL,
 		httpClient: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout: cfg.MarketDataAPI.Timeout,
 		},
 		apiKey:  cfg.MarketDataAPI.APIKey,
-		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		timeout: cfg.MarketDataAPI.Timeout,
+		retries: cfg.MarketDataAPI.MaxRetries,
 	}
 }
 
