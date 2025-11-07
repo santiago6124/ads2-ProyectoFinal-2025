@@ -89,7 +89,7 @@ services:
       - RABBITMQ_WORKER_COUNT=5
       # External APIs (Service Discovery)
       - USER_API_BASE_URL=http://users-api:8001
-      - USER_API_KEY=internal-secret-key
+      - USER_API_KEY=${INTERNAL_API_KEY:-internal-secret-key-change-in-production}
       - MARKET_API_BASE_URL=http://market-data-api:8004
       - PORTFOLIO_API_BASE_URL=http://portfolio-api:8080
       - PORTFOLIO_API_KEY=portfolio-api-key
