@@ -93,7 +93,8 @@ func (h *HealthHandler) Health(c *gin.Context) {
 	// Determine overall status
 	overallStatus := "healthy"
 	for _, service := range services {
-		if service.Status != "healthy" {
+		// Ignore not_applicable status (e.g., consumer in simplified system)
+		if service.Status != "healthy" && service.Status != "not_applicable" {
 			overallStatus = "unhealthy"
 			break
 		}
