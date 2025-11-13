@@ -1,6 +1,6 @@
 # 🔍 Search API - CryptoSim Platform
 
-Microservicio de búsqueda de criptomonedas con Apache Solr, cache distribuido y filtros avanzados.
+Microservicio de búsqueda de órdenes con Apache Solr, cache distribuido (CCache + Memcached) y sincronización automática vía RabbitMQ.
 
 ## 🚀 Quick Start (Recommended)
 
@@ -42,9 +42,13 @@ make shell-search
 1. **CCache** (local) - Cache en memoria del proceso
 2. **Memcached** (distribuido) - Cache compartido entre instancias
 
+### Comunica con:
+- **Orders API** (http://orders-api:8080) - Obtiene detalles completos de órdenes para indexación
+- **RabbitMQ** - Consume eventos de órdenes (created, executed, cancelled, failed) para sincronización automática
+
 ### Es consumido por:
-- Frontend (búsqueda de criptomonedas)
-- Trading interface (selección de activos)
+- Frontend (búsqueda de órdenes)
+- Trading interface (historial y filtrado de órdenes)
 
 **Documentación completa**: Ver [README principal](../README.md)
 
@@ -52,58 +56,83 @@ make shell-search
 
 ## ⚡ Características
 
-- **Búsqueda Full-Text**: Motor Solr con tokenización avanzada
-- **Filtros Complejos**: Por precio, volumen, categoría, trending score
-- **Cache Multinivel**: CCache local + Memcached distribuido
-- **Trending Detection**: Algoritmo de detección de criptos en tendencia
-- **Faceted Search**: Búsqueda por facetas (categorías, rangos)
-- **Paginación**: Resultados paginados con offset/limit
+- **Búsqueda Full-Text**: Motor Solr con tokenización avanzada sobre órdenes
+- **Filtros Complejos**: Por status, tipo (buy/sell), order_kind (market/limit), crypto_symbol, monto total, fechas
+- **Cache Multinivel**: CCache local + Memcached distribuido para consultas frecuentes
+- **Sincronización Automática**: Consumer de RabbitMQ que indexa órdenes automáticamente cuando se crean/actualizan
+- **Consistencia de Datos**: Invoca Orders API para obtener detalles completos antes de indexar
+- **Faceted Search**: Búsqueda por facetas (status, type, order_kind, crypto_symbol)
+- **Paginación**: Resultados paginados con page/limit
 
 ## 📊 Endpoints Principales
 
-### Buscar Criptomonedas
+### Buscar Órdenes
 ```http
-GET /api/search/cryptos?q=bitcoin&limit=20&offset=0
+POST /api/v1/search
 Content-Type: application/json
+
+{
+  "q": "BTC",
+  "page": 1,
+  "limit": 20,
+  "sort": "created_at_desc",
+  "status": ["executed", "pending"],
+  "type": ["buy"],
+  "order_kind": ["market"],
+  "crypto_symbol": ["BTC", "ETH"],
+  "min_total_amount": 100.0,
+  "max_total_amount": 10000.0,
+  "date_from": "2025-01-01T00:00:00Z",
+  "date_to": "2025-01-31T23:59:59Z"
+}
 ```
 
 **Parámetros:**
-- `q` (string): Término de búsqueda
-- `category` (string): Filtrar por categoría (defi, nft, stablecoin, etc)
-- `min_price` (float): Precio mínimo
-- `max_price` (float): Precio máximo
-- `min_volume` (int): Volumen 24h mínimo
-- `sort` (string): Campo de ordenamiento (price, volume, market_cap)
-- `limit` (int): Resultados por página (default: 20)
-- `offset` (int): Offset para paginación (default: 0)
+- `q` (string): Término de búsqueda (busca en crypto_symbol, crypto_name, order_id)
+- `page` (int): Número de página (default: 1)
+- `limit` (int): Resultados por página (default: 20, max: 100)
+- `sort` (string): Ordenamiento (created_at_desc, total_amount_desc, price_asc, etc.)
+- `status` (array): Filtrar por status (pending, executed, cancelled, failed)
+- `type` (array): Filtrar por tipo (buy, sell)
+- `order_kind` (array): Filtrar por tipo de orden (market, limit)
+- `crypto_symbol` (array): Filtrar por símbolo (BTC, ETH, etc.)
+- `user_id` (int): Filtrar por ID de usuario
+- `min_total_amount` (float): Monto total mínimo
+- `max_total_amount` (float): Monto total máximo
+- `date_from` (string): Fecha desde (ISO 8601)
+- `date_to` (string): Fecha hasta (ISO 8601)
 
-### Criptomonedas en Tendencia
+### Obtener Orden por ID
 ```http
-GET /api/search/cryptos/trending?limit=10
+GET /api/v1/orders/:id
 ```
 
 ### Obtener Filtros Disponibles
 ```http
-GET /api/search/cryptos/filters
+GET /api/v1/filters
 ```
 
 Respuesta:
 ```json
 {
-  "categories": ["defi", "nft", "stablecoin", "exchange", "gaming"],
-  "price_ranges": [
-    {"min": 0, "max": 1, "count": 245},
-    {"min": 1, "max": 100, "count": 520},
-    {"min": 100, "max": 1000, "count": 89}
+  "statuses": [
+    {"value": "pending", "label": "Pending", "count": 45},
+    {"value": "executed", "label": "Executed", "count": 120}
   ],
-  "volume_ranges": [...]
+  "types": [
+    {"value": "buy", "label": "Buy", "count": 85},
+    {"value": "sell", "label": "Sell", "count": 80}
+  ],
+  "order_kinds": [
+    {"value": "market", "label": "Market Orders", "count": 100},
+    {"value": "limit", "label": "Limit Orders", "count": 65}
+  ],
+  "crypto_symbols": [
+    {"value": "BTC", "label": "BTC", "count": 50},
+    {"value": "ETH", "label": "ETH", "count": 40}
+  ],
+  "sort_options": [...]
 }
-```
-
-### Reindexar (Admin)
-```http
-POST /api/search/reindex
-Authorization: Bearer {admin_jwt_token}
 ```
 
 ## 🔧 Variables de Entorno
@@ -114,7 +143,7 @@ Principales variables:
 ```env
 # Solr
 SOLR_BASE_URL=http://solr:8983/solr
-SOLR_COLLECTION=crypto_search
+SOLR_COLLECTION=orders_search
 
 # Memcached
 CACHE_MEMCACHED_HOSTS=memcached:11211
@@ -122,6 +151,14 @@ CACHE_MEMCACHED_HOSTS=memcached:11211
 # RabbitMQ
 RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
 RABBITMQ_ENABLED=true
+RABBITMQ_EXCHANGE_NAME=orders.events
+RABBITMQ_QUEUE_NAME=search.sync
+RABBITMQ_ROUTING_KEYS=orders.created,orders.executed,orders.cancelled,orders.failed
+
+# Orders API (para obtener detalles completos de órdenes)
+ORDERS_API_BASE_URL=http://orders-api:8080
+ORDERS_API_KEY=internal-secret-key
+ORDERS_API_TIMEOUT_MS=10000
 
 # Server
 SERVER_PORT=8080
@@ -160,19 +197,24 @@ go run cmd/server/main.go
 
 ## 🗂️ Schema de Solr
 
-El schema de Solr define los campos indexados:
+El schema de Solr define los campos indexados para órdenes:
 
-```xml
-<field name="symbol" type="string" indexed="true" stored="true"/>
-<field name="name" type="string" indexed="true" stored="true"/>
-<field name="current_price" type="pdouble" indexed="true" stored="true"/>
-<field name="market_cap" type="plong" indexed="true" stored="true"/>
-<field name="volume_24h" type="plong" indexed="true" stored="true"/>
-<field name="price_change_24h" type="pdouble" indexed="true" stored="true"/>
-<field name="category" type="string" indexed="true" stored="true" multiValued="true"/>
-<field name="trending_score" type="pint" indexed="true" stored="true"/>
-<field name="is_active" type="boolean" indexed="true" stored="true"/>
-```
+**Campos principales:**
+- `id` (string): ID único de la orden (MongoDB ObjectID)
+- `user_id` (int): ID del usuario propietario
+- `type` (string): Tipo de orden (buy, sell)
+- `status` (string): Estado (pending, executed, cancelled, failed)
+- `order_kind` (string): Tipo de orden (market, limit)
+- `crypto_symbol` (string): Símbolo de la criptomoneda (BTC, ETH, etc.)
+- `crypto_name` (string): Nombre completo de la criptomoneda
+- `quantity_s` / `quantity_d` (string/double): Cantidad
+- `price_s` / `price_d` (string/double): Precio
+- `total_amount_display_s` / `total_amount_value_d` (string/double): Monto total
+- `fee_s` / `fee_d` (string/double): Comisión
+- `created_at`, `updated_at`, `executed_at`, `cancelled_at` (date): Fechas
+- `search_text` (text): Campo de búsqueda full-text
+
+Los campos con sufijo `_s` son strings (para display), los `_d` son doubles (para ordenamiento y filtrado numérico).
 
 ## 🐛 Troubleshooting
 
@@ -197,11 +239,20 @@ docker-compose ps memcached
 telnet localhost 11211
 ```
 
-### Reindexar datos
+### Sincronización automática
+El servicio se sincroniza automáticamente con Orders API mediante RabbitMQ:
+- Cuando se crea una orden → se indexa en Solr
+- Cuando se ejecuta una orden → se actualiza el índice
+- Cuando se cancela una orden → se elimina del índice
+- Cuando falla una orden → se actualiza el estado en el índice
+
+Para verificar la sincronización:
 ```bash
-# Si la colección está vacía o corrupta
-curl -X POST http://localhost:8003/api/search/reindex \
-  -H "Authorization: Bearer {admin_token}"
+# Ver logs del consumer
+make logs-search | grep "RabbitMQ"
+
+# Verificar eventos en RabbitMQ
+open http://localhost:15672  # guest/guest
 ```
 
 ## 📚 Documentación Adicional

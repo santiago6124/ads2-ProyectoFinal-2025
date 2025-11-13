@@ -179,41 +179,46 @@ POST   /api/users/:id/upgrade   - Convertir a admin
 
 ### Orders API (Puerto 8002)
 
-Gestión de órdenes de trading con ejecución concurrente.
+Gestión de órdenes de trading con ejecución concurrente (goroutines, channels, WaitGroups).
 
 **Endpoints principales:**
 ```
-POST   /api/orders              - Crear orden
-GET    /api/orders/:id          - Obtener orden
-GET    /api/orders/user/:userId - Listar órdenes
-POST   /api/orders/:id/execute  - Ejecutar orden
-DELETE /api/orders/:id          - Cancelar orden
+POST   /api/v1/orders              - Crear orden
+GET    /api/v1/orders/:id          - Obtener orden
+PUT    /api/v1/orders/:id          - Actualizar orden (limit orders)
+GET    /api/v1/orders              - Listar órdenes del usuario
+POST   /api/v1/orders/:id/execute  - Ejecutar orden
+POST   /api/v1/orders/:id/cancel   - Cancelar orden
+DELETE /api/v1/orders/:id          - Eliminar orden
 ```
 
 **Características:**
-- Ejecución concurrente con goroutines
-- Cálculo de fees y slippage
-- Integración con RabbitMQ
-- Comunicación con Users y Market Data APIs
-- Gestión directa de balance desde Users API
+- Ejecución concurrente con goroutines, channels y WaitGroups
+- Cálculo de fees (maker/taker) y slippage
+- Integración con RabbitMQ (publica eventos: created, executed, cancelled, failed)
+- Validación de propietario contra Users API para todas las operaciones de escritura
+- Comunicación con Users API (verificación de usuarios y balance USD)
+- Comunicación con Market Data API (precios actuales)
+- Integración opcional con Portfolio API
 
 ### Search API (Puerto 8003)
 
-Motor de búsqueda de criptomonedas con Apache Solr.
+Motor de búsqueda de órdenes con Apache Solr y sincronización automática.
 
 **Endpoints principales:**
 ```
-GET    /api/search/cryptos           - Buscar criptomonedas
-GET    /api/search/cryptos/trending  - Trending
-GET    /api/search/cryptos/filters   - Filtros disponibles
-POST   /api/search/reindex           - Reindexar (admin)
+POST   /api/v1/search                - Buscar órdenes con filtros avanzados
+GET    /api/v1/orders/:id            - Obtener orden por ID
+GET    /api/v1/filters                - Filtros disponibles (status, type, order_kind, crypto_symbol)
 ```
 
 **Características:**
-- Búsqueda full-text
-- Filtros por categoría, precio, volumen
-- Cache con Memcached y CCache
-- Consumidor de RabbitMQ
+- Búsqueda full-text sobre órdenes
+- Filtros por status, tipo, order_kind, crypto_symbol, monto total, fechas
+- Cache multinivel: CCache (local) + Memcached (distribuido)
+- Sincronización automática vía RabbitMQ (consume eventos de Orders API)
+- Invoca Orders API para obtener detalles completos antes de indexar
+- Paginación y ordenamiento avanzado
 
 ### Market Data API (Puerto 8004)
 
@@ -431,17 +436,20 @@ open http://localhost:15672
 docker-compose restart shared-rabbitmq
 ```
 
-### Solr no indexa
+### Solr no indexa órdenes
 
 ```bash
 # Verificar Solr
-curl http://localhost:8983/solr/admin/ping
+curl http://localhost:8983/solr/orders_search/admin/ping
 
 # Ver logs
 docker-compose logs solr
 
-# Crear colección manualmente
-docker-compose exec solr solr create -c crypto_search
+# Verificar colección
+curl http://localhost:8983/solr/orders_search/select?q=*:*&rows=0
+
+# Verificar sincronización desde RabbitMQ
+make logs-search | grep "RabbitMQ\|indexing"
 ```
 
 ## 📊 Monitoring

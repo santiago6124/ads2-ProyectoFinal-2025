@@ -39,9 +39,9 @@ make shell-orders
 - **Redis** (`shared-redis` container - opcional para cache)
 
 ### Comunica con:
-- **Users API** (http://users-api:8001) - Verificación de usuarios
-- **Wallet API** (http://wallet-api:8080) - Lock/release de fondos
+- **Users API** (http://users-api:8001) - Verificación de usuarios y gestión de balance USD
 - **Market Data API** (http://market-data-api:8004) - Precios actuales
+- **Portfolio API** (http://portfolio-api:8080) - Actualización de holdings (opcional)
 
 ### Es consumido por:
 - Portfolio API (para actualización de holdings)
@@ -53,52 +53,75 @@ make shell-orders
 
 ## ⚡ Características
 
-- **Ejecución Concurrente**: Uso de goroutines para procesamiento paralelo
+- **Ejecución Concurrente**: Uso de goroutines, channels y WaitGroups para procesamiento paralelo
 - **Cálculo de Fees**: Maker/Taker fees con configuración personalizada
 - **Slippage Simulation**: Simulación realista de condiciones de mercado
-- **Message Queue**: Integración con RabbitMQ para eventos async
-- **Validación de Saldo**: Verificación automática con Wallet API
+- **Message Queue**: Integración con RabbitMQ para eventos async (created, executed, cancelled, failed)
+- **Validación de Saldo**: Verificación automática con Users API (balance USD gestionado directamente)
+- **Validación de Propietario**: Verificación contra Users API para todas las operaciones de escritura
 - **Historial Completo**: Tracking de todas las órdenes por usuario
 
 ## 📊 Endpoints Principales
 
 ### Crear Orden
 ```http
-POST /api/orders
+POST /api/v1/orders
 Authorization: Bearer {jwt_token}
 Content-Type: application/json
 
 {
-  "user_id": 1,
   "type": "buy",
+  "order_kind": "market",
   "crypto_symbol": "BTC",
-  "crypto_name": "Bitcoin",
-  "quantity": 0.1,
-  "order_price": 45000.00
+  "quantity": "0.1",
+  "market_price": "45000.00"
 }
 ```
 
 ### Obtener Orden
 ```http
-GET /api/orders/:id
+GET /api/v1/orders/:id
 Authorization: Bearer {jwt_token}
+```
+
+### Actualizar Orden (Limit Orders)
+```http
+PUT /api/v1/orders/:id
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
+
+{
+  "quantity": "0.15",
+  "limit_price": "44000.00"
+}
 ```
 
 ### Listar Órdenes de Usuario
 ```http
-GET /api/orders/user/:userId?status=executed&limit=20&offset=0
+GET /api/v1/orders?status=executed&limit=20&page=1
 Authorization: Bearer {jwt_token}
 ```
 
 ### Ejecutar Orden
 ```http
-POST /api/orders/:id/execute
+POST /api/v1/orders/:id/execute
 Authorization: Bearer {jwt_token}
 ```
 
 ### Cancelar Orden
 ```http
-DELETE /api/orders/:id
+POST /api/v1/orders/:id/cancel
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
+
+{
+  "reason": "User requested cancellation"
+}
+```
+
+### Eliminar Orden
+```http
+DELETE /api/v1/orders/:id
 Authorization: Bearer {jwt_token}
 ```
 
@@ -119,8 +142,10 @@ RABBITMQ_WORKER_COUNT=5
 
 # External APIs
 USER_API_BASE_URL=http://users-api:8001
-WALLET_API_BASE_URL=http://wallet-api:8080
+USER_API_KEY=internal-secret-key
 MARKET_API_BASE_URL=http://market-data-api:8004
+PORTFOLIO_API_BASE_URL=http://portfolio-api:8080
+PORTFOLIO_API_KEY=portfolio-api-key
 
 # Fees
 FEE_BASE_PERCENTAGE=0.001
@@ -161,9 +186,10 @@ go run cmd/server/main.go
 ## 🐛 Troubleshooting
 
 ### Orden no se ejecuta
-- Verificar saldo suficiente en Wallet API
+- Verificar saldo suficiente en Users API (balance USD)
 - Revisar logs: `make logs-orders`
 - Verificar conexión con Market Data API
+- Verificar que el usuario existe y está activo en Users API
 
 ### Error de conexión MongoDB
 ```bash
