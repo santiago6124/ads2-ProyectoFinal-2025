@@ -95,6 +95,12 @@ func (r *OrderFilterRequest) GetOffset() int {
 	return (r.Page - 1) * r.Limit
 }
 
+// UpdateOrderRequest request para actualizar una orden
+type UpdateOrderRequest struct {
+	Quantity   *decimal.Decimal `json:"quantity,omitempty"`
+	LimitPrice *decimal.Decimal `json:"limit_price,omitempty"`
+}
+
 // OrdersSummary resumen de las órdenes del usuario
 type OrdersSummary struct {
 	TotalOrders     int64           `json:"total_orders"`

@@ -118,15 +118,16 @@ func main() {
 		eventPublisher = &noopPublisher{} // No-op si no hay RabbitMQ
 	}
 
-	// Initialize simplified order service (no orchestrator, no workers)
+	// Create order service with concurrency (goroutines, channels, WaitGroup)
 	orderService := services.NewOrderServiceSimple(
 		orderRepo,
 		executionService,
 		marketService,
 		eventPublisher,
+		userClient, // Agregado para validación de owner contra API de usuarios
 	)
 
-	logger.Info("✅ Business services initialized (simplified, no concurrency)")
+	logger.Info("✅ Business services initialized with concurrent processing (goroutines, channels, WaitGroup)")
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.ToAuthConfig())

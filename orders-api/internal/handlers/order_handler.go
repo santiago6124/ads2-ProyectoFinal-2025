@@ -239,8 +239,7 @@ func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// UpdateOrder comentado - no está en OrderServiceSimple (sistema simplificado)
-/*
+// UpdateOrder actualiza una orden existente
 func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	if orderID == "" {
@@ -274,7 +273,7 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]interface{})
+	dtoReq := &dto.UpdateOrderRequest{}
 
 	if req.OrderPrice != "" {
 		orderPrice, err := decimal.NewFromString(req.OrderPrice)
@@ -282,7 +281,7 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order price format"})
 			return
 		}
-		updates["order_price"] = orderPrice
+		dtoReq.LimitPrice = &orderPrice
 	}
 
 	if req.Quantity != "" {
@@ -295,11 +294,14 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "quantity must be greater than zero"})
 			return
 		}
-		updates["quantity"] = quantity
+		dtoReq.Quantity = &quantity
 	}
 
-	dtoReq := &dto.UpdateOrderRequest{}
-	// Convert updates map to DTO fields as needed
+	// Validar que al menos un campo se proporcione
+	if dtoReq.Quantity == nil && dtoReq.LimitPrice == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one field (quantity or order_price) must be provided"})
+		return
+	}
 
 	updatedOrder, err := h.orderService.UpdateOrder(ctx, orderID, dtoReq, userID.(int))
 	if err != nil {
@@ -329,29 +331,58 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
+	err := h.orderService.CancelOrder(ctx, orderID, userID.(int), reason)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
-		return
-	}
-
-	if existingOrder.UserID != userID.(int) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
-		return
-	}
-
-	err = h.orderService.CancelOrder(ctx, orderID, userID.(int), reason)
-	if err != nil {
+		if err.Error() == "order not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		if err.Error() == "access denied: order does not belong to user" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Order cancelled successfully"})
 }
-*/
 
-// ExecuteOrder comentado - no está en OrderServiceSimple (sistema simplificado)
-/*
+// DeleteOrder elimina una orden
+func (h *OrderHandler) DeleteOrder(c *gin.Context) {
+	orderID := c.Param("id")
+	if orderID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order ID is required"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	defer cancel()
+
+	err := h.orderService.DeleteOrder(ctx, orderID, userID.(int))
+	if err != nil {
+		if err.Error() == "order not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		if err.Error() == "access denied: order does not belong to user" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
+}
+
+// ExecuteOrder ejecuta una orden pendiente (endpoint de acción)
 func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	if orderID == "" {
@@ -368,19 +399,21 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
-		return
+	// Extract user token from context if available
+	if userToken, exists := c.Get("user_token"); exists {
+		ctx = context.WithValue(ctx, "user_token", userToken)
 	}
 
-	if existingOrder.UserID != userID.(int) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
-		return
-	}
-
-	executionResult, err := h.orderService.ExecuteOrder(ctx, orderID, false)
+	executionResult, err := h.orderService.ExecuteOrder(ctx, orderID, userID.(int))
 	if err != nil {
+		if err.Error() == "order not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		if err.Error() == "access denied: order does not belong to user" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -388,7 +421,6 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 	response := h.convertToExecutionResponse(executionResult)
 	c.JSON(http.StatusOK, response)
 }
-*/
 
 func (h *OrderHandler) convertToOrderResponse(order *models.Order) *OrderResponse {
 	response := &OrderResponse{

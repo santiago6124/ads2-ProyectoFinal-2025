@@ -10,6 +10,9 @@ import (
 type OrderService interface {
 	CreateOrder(ctx context.Context, req *dto.CreateOrderRequest, userID int) (*models.Order, error)
 	GetOrder(ctx context.Context, orderID string, userID int) (*models.Order, error)
+	UpdateOrder(ctx context.Context, orderID string, req *dto.UpdateOrderRequest, userID int) (*models.Order, error)
+	DeleteOrder(ctx context.Context, orderID string, userID int) error
 	ListUserOrders(ctx context.Context, userID int, filter *dto.OrderFilterRequest) ([]models.Order, int64, *dto.OrdersSummary, error)
 	CancelOrder(ctx context.Context, orderID string, userID int, reason string) error
+	ExecuteOrder(ctx context.Context, orderID string, userID int) (*models.ExecutionResult, error)
 }

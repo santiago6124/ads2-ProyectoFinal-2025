@@ -3,13 +3,14 @@ package services
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"orders-api/internal/models"
 )
 
-// ExecutionService servicio simplificado para ejecutar órdenes
+// ExecutionService servicio con procesamiento concurrente usando goroutines, channels y WaitGroup
 type ExecutionService struct {
 	userClient        UserClient
 	userBalanceClient UserBalanceClient
@@ -38,6 +39,27 @@ type PortfolioClient interface {
 	UpdateHoldings(ctx context.Context, userID int64, symbol string, quantity, price decimal.Decimal, orderType string) error
 }
 
+// Resultados de cálculos concurrentes
+type validationResult struct {
+	userValid *models.ValidationResult
+	userErr   error
+}
+
+type priceResult struct {
+	price *models.PriceResult
+	err   error
+}
+
+type balanceResult struct {
+	balance *models.BalanceResult
+	err     error
+}
+
+type feeResult struct {
+	fee        decimal.Decimal
+	totalAmount decimal.Decimal
+}
+
 // NewExecutionService crea una nueva instancia del servicio de ejecución
 func NewExecutionService(
 	userClient UserClient,
@@ -58,31 +80,18 @@ func (s *ExecutionService) SetPortfolioClient(pc PortfolioClient) {
 	s.portfolioClient = pc
 }
 
-// ExecuteOrder ejecuta una orden de manera síncrona y simplificada
+// ExecuteOrder ejecuta una orden usando procesamiento concurrente con goroutines, channels y WaitGroup
 func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order) (*models.ExecutionResult, error) {
 	start := time.Now()
 
-	// 1. Verificar usuario
-	_, err := s.userClient.VerifyUser(ctx, order.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("user validation failed: %w", err)
-	}
+	// Channels para comunicación entre goroutines
+	userValidationChan := make(chan validationResult, 1)
+	priceChan := make(chan priceResult, 1)
+	balanceChan := make(chan balanceResult, 1)
+	feeChan := make(chan feeResult, 1)
 
-	// 2. Obtener precio de mercado
-	priceResult, err := s.marketClient.GetCurrentPrice(ctx, order.CryptoSymbol)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get market price: %w", err)
-	}
-
-	// 3. Calcular monto total
-	totalAmount := order.Quantity.Mul(priceResult.MarketPrice)
-
-	// 4. Calcular comisión
-	fee := totalAmount.Mul(decimal.NewFromFloat(0.001)) // 0.1%
-	minFee := decimal.NewFromFloat(0.01)
-	if fee.LessThan(minFee) {
-		fee = minFee
-	}
+	// WaitGroup para sincronizar todas las goroutines
+	var wg sync.WaitGroup
 
 	// Get user token from context
 	userToken := ""
@@ -90,61 +99,122 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		userToken = token.(string)
 	}
 
-	// 5. Verificar balance y procesar transacción según el tipo
+	// Goroutine 1: Validar usuario
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		userValid, err := s.userClient.VerifyUser(ctx, order.UserID)
+		userValidationChan <- validationResult{userValid: userValid, userErr: err}
+	}()
+
+	// Goroutine 2: Obtener precio de mercado
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		price, err := s.marketClient.GetCurrentPrice(ctx, order.CryptoSymbol)
+		priceChan <- priceResult{price: price, err: err}
+	}()
+
+	// Esperar a que terminen las validaciones básicas antes de calcular balance
+	wg.Wait()
+
+	// Leer resultados de las goroutines
+	userValidation := <-userValidationChan
+	if userValidation.userErr != nil {
+		return nil, fmt.Errorf("user validation failed: %w", userValidation.userErr)
+	}
+	if userValidation.userValid != nil && !userValidation.userValid.IsValid {
+		return nil, fmt.Errorf("user validation failed: %s", userValidation.userValid.Message)
+	}
+
+	priceRes := <-priceChan
+	if priceRes.err != nil {
+		return nil, fmt.Errorf("failed to get market price: %w", priceRes.err)
+	}
+	if priceRes.price == nil {
+		return nil, fmt.Errorf("price result is nil")
+	}
+
+	// Goroutine 3: Calcular fee y total amount (cálculo local, rápido)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		totalAmount := order.Quantity.Mul(priceRes.price.MarketPrice)
+		fee := totalAmount.Mul(decimal.NewFromFloat(0.001)) // 0.1%
+		minFee := decimal.NewFromFloat(0.01)
+		if fee.LessThan(minFee) {
+			fee = minFee
+		}
+		feeChan <- feeResult{fee: fee, totalAmount: totalAmount}
+	}()
+
+	// Esperar cálculo de fee
+	wg.Wait()
+	feeRes := <-feeChan
+
+	// Goroutine 4: Verificar balance (solo para órdenes de compra)
 	if order.Type == models.OrderTypeBuy {
-		// Para COMPRAS: verificar si tiene suficiente dinero
-		requiredAmount := totalAmount.Add(fee)
-		balanceResult, err := s.userBalanceClient.CheckBalance(ctx, order.UserID, requiredAmount, userToken)
-		if err != nil {
-			return nil, fmt.Errorf("balance check failed: %w", err)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			requiredAmount := feeRes.totalAmount.Add(feeRes.fee)
+			balance, err := s.userBalanceClient.CheckBalance(ctx, order.UserID, requiredAmount, userToken)
+			balanceChan <- balanceResult{balance: balance, err: err}
+		}()
+		wg.Wait()
 
-		if !balanceResult.HasSufficient {
+		balanceRes := <-balanceChan
+		if balanceRes.err != nil {
+			return nil, fmt.Errorf("balance check failed: %w", balanceRes.err)
+		}
+		if balanceRes.balance == nil || !balanceRes.balance.HasSufficient {
 			return nil, fmt.Errorf("insufficient balance: required %s, available %s",
-				requiredAmount.String(), balanceResult.Available.String())
-		}
-
-		// Deduct del balance (comprar)
-		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, requiredAmount, "buy", order.ID.Hex(), fmt.Sprintf("Buy %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
-		if err != nil {
-			return nil, fmt.Errorf("failed to process transaction: %w", err)
-		}
-
-		// Actualizar holdings en el portfolio
-		if s.portfolioClient != nil {
-			err = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceResult.MarketPrice, "buy")
-			if err != nil {
-				// Log error but don't fail the order execution
-				fmt.Printf("⚠️ Failed to update portfolio holdings: %v\n", err)
-			}
-		}
-	} else if order.Type == models.OrderTypeSell {
-		// Para VENTAS: agregar dinero al balance (después de descontar fee)
-		netAmount := totalAmount.Sub(fee)
-		
-		// Para ventas, pasamos el monto positivo y ProcessTransaction lo suma al balance
-		_, err = s.userBalanceClient.ProcessTransaction(ctx, order.UserID, netAmount, "sell", order.ID.Hex(), fmt.Sprintf("Sell %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceResult.MarketPrice.String()))
-		if err != nil {
-			return nil, fmt.Errorf("failed to process transaction: %w", err)
-		}
-
-		// Actualizar holdings en el portfolio
-		if s.portfolioClient != nil {
-			err = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceResult.MarketPrice, "sell")
-			if err != nil {
-				// Log error but don't fail the order execution
-				fmt.Printf("⚠️ Failed to update portfolio holdings: %v\n", err)
-			}
+				feeRes.totalAmount.Add(feeRes.fee).String(),
+				func() string {
+					if balanceRes.balance != nil {
+						return balanceRes.balance.Available.String()
+					}
+					return "0"
+				}())
 		}
 	}
 
-	// 6. Crear resultado exitoso
+	// Procesar transacción según el tipo (operación síncrona crítica)
+	if order.Type == models.OrderTypeBuy {
+		requiredAmount := feeRes.totalAmount.Add(feeRes.fee)
+		_, err := s.userBalanceClient.ProcessTransaction(ctx, order.UserID, requiredAmount, "buy", order.ID.Hex(), fmt.Sprintf("Buy %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceRes.price.MarketPrice.String()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to process transaction: %w", err)
+		}
+
+		// Actualizar holdings en el portfolio (asíncrono, no bloquea)
+		if s.portfolioClient != nil {
+			go func() {
+				_ = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "buy")
+			}()
+		}
+	} else if order.Type == models.OrderTypeSell {
+		netAmount := feeRes.totalAmount.Sub(feeRes.fee)
+		_, err := s.userBalanceClient.ProcessTransaction(ctx, order.UserID, netAmount, "sell", order.ID.Hex(), fmt.Sprintf("Sell %s %s at %s", order.Quantity.String(), order.CryptoSymbol, priceRes.price.MarketPrice.String()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to process transaction: %w", err)
+		}
+
+		// Actualizar holdings en el portfolio (asíncrono, no bloquea)
+		if s.portfolioClient != nil {
+			go func() {
+				_ = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "sell")
+			}()
+		}
+	}
+
+	// Crear resultado exitoso
 	result := &models.ExecutionResult{
 		Success:       true,
 		OrderID:       order.ID.Hex(),
-		ExecutedPrice: priceResult.MarketPrice,
-		TotalAmount:   totalAmount,
-		Fee:           fee,
+		ExecutedPrice: priceRes.price.MarketPrice,
+		TotalAmount:   feeRes.totalAmount,
+		Fee:           feeRes.fee,
 		ExecutionTime: time.Since(start),
 	}
 
