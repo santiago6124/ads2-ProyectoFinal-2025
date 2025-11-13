@@ -23,12 +23,12 @@ type Client struct {
 
 // Config represents Solr client configuration
 type Config struct {
-	BaseURL     string
-	Core        string
-	Timeout     time.Duration
-	MaxRetries  int
-	RetryDelay  time.Duration
-	MaxIdleConns int
+	BaseURL         string
+	Core            string
+	Timeout         time.Duration
+	MaxRetries      int
+	RetryDelay      time.Duration
+	MaxIdleConns    int
 	MaxConnsPerHost int
 }
 
@@ -170,11 +170,14 @@ func (c *Client) performSearch(ctx context.Context, endpoint string, params map[
 func (c *Client) Update(ctx context.Context, docs []interface{}) error {
 	endpoint := fmt.Sprintf("%s/%s/update/json/docs", c.baseURL, c.core)
 
-	updateData := map[string]interface{}{
-		"add": docs,
+	var payload interface{}
+	if len(docs) == 1 {
+		payload = docs[0]
+	} else {
+		payload = docs
 	}
 
-	return c.performUpdate(ctx, endpoint, updateData)
+	return c.performUpdate(ctx, endpoint, payload)
 }
 
 // Delete deletes documents by ID

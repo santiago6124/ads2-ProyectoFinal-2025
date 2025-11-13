@@ -351,6 +351,12 @@ func getString(doc map[string]interface{}, key string) string {
 		if str, ok := value.(string); ok {
 			return str
 		}
+		if arr, ok := value.([]interface{}); ok && len(arr) > 0 {
+			if str, ok := arr[0].(string); ok {
+				return str
+			}
+			return fmt.Sprintf("%v", arr[0])
+		}
 	}
 	return ""
 }
@@ -366,6 +372,19 @@ func getFloat64(doc map[string]interface{}, key string) float64 {
 			return float64(v)
 		case int64:
 			return float64(v)
+		case []interface{}:
+			if len(v) > 0 {
+				switch elem := v[0].(type) {
+				case float64:
+					return elem
+				case float32:
+					return float64(elem)
+				case int:
+					return float64(elem)
+				case int64:
+					return float64(elem)
+				}
+			}
 		}
 	}
 	return 0
@@ -380,6 +399,17 @@ func getInt64(doc map[string]interface{}, key string) int64 {
 			return int64(v)
 		case float64:
 			return int64(v)
+		case []interface{}:
+			if len(v) > 0 {
+				switch elem := v[0].(type) {
+				case int64:
+					return elem
+				case int:
+					return int64(elem)
+				case float64:
+					return int64(elem)
+				}
+			}
 		}
 	}
 	return 0
@@ -568,10 +598,36 @@ func docToOrderSearchResult(doc map[string]interface{}, score float64) models.Or
 		OrderKind:    getString(doc, "order_kind"),
 		CryptoSymbol: getString(doc, "crypto_symbol"),
 		CryptoName:   getString(doc, "crypto_name"),
-		Quantity:     getString(doc, "quantity_s"),
-		Price:        getString(doc, "price_s"),
-		TotalAmount:  getString(doc, "total_amount_s"),
-		Fee:          getString(doc, "fee_s"),
+		Quantity:     "",
+		Price:        "",
+		TotalAmount:  "",
+		Fee:          "",
+	}
+
+	if quantityStr := getString(doc, "quantity_display_s"); quantityStr != "" {
+		order.Quantity = quantityStr
+	} else if quantityVal := getFloat64(doc, "quantity"); quantityVal != 0 {
+		order.Quantity = strconv.FormatFloat(quantityVal, 'f', -1, 64)
+	}
+
+	if priceStr := getString(doc, "price_display_s"); priceStr != "" {
+		order.Price = priceStr
+	} else if priceVal := getFloat64(doc, "price"); priceVal != 0 {
+		order.Price = strconv.FormatFloat(priceVal, 'f', -1, 64)
+	}
+
+	if totalStr := getString(doc, "total_amount_display_s"); totalStr != "" {
+		order.TotalAmount = totalStr
+	} else if totalVal := getFloat64(doc, "total_amount_display"); totalVal != 0 {
+		order.TotalAmount = strconv.FormatFloat(totalVal, 'f', -1, 64)
+	} else if totalVal := getFloat64(doc, "total_amount_value"); totalVal != 0 {
+		order.TotalAmount = strconv.FormatFloat(totalVal, 'f', -1, 64)
+	}
+
+	if feeStr := getString(doc, "fee_display_s"); feeStr != "" {
+		order.Fee = feeStr
+	} else if feeVal := getFloat64(doc, "fee"); feeVal != 0 {
+		order.Fee = strconv.FormatFloat(feeVal, 'f', -1, 64)
 	}
 
 	// Parse dates

@@ -110,6 +110,11 @@ func (s *IndexingService) IndexOrder(ctx context.Context, order *models.Order) e
 	solrDoc := s.orderToSolrDoc(order)
 
 	// Index in SolR
+	s.logger.WithFields(logrus.Fields{
+		"order_id": order.ID,
+		"doc":      solrDoc,
+	}).Info("Prepared Solr document for indexing")
+
 	if err := s.solrRepo.IndexOrder(ctx, solrDoc); err != nil {
 		return fmt.Errorf("failed to index order in SolR: %w", err)
 	}
@@ -221,22 +226,41 @@ func (s *IndexingService) orderToSolrDoc(order *models.Order) map[string]interfa
 		totalAmountValue = 0
 	}
 
+	quantityValue, err := strconv.ParseFloat(order.Quantity, 64)
+	if err != nil {
+		quantityValue = 0
+	}
+
+	priceValue, err := strconv.ParseFloat(order.Price, 64)
+	if err != nil {
+		priceValue = 0
+	}
+
+	feeValue, err := strconv.ParseFloat(order.Fee, 64)
+	if err != nil {
+		feeValue = 0
+	}
+
 	doc := map[string]interface{}{
-		"id":             order.ID,
-		"user_id":        order.UserID,
-		"type":           order.Type,
-		"status":         order.Status,
-		"order_kind":     order.OrderKind,
-		"crypto_symbol":  order.CryptoSymbol,
-		"crypto_name":    order.CryptoName,
-		"quantity_s":     order.Quantity,
-		"price_s":        order.Price,
-		"total_amount_s": order.TotalAmount,
-		"total_amount_d": totalAmountValue,
-		"fee_s":          order.Fee,
-		"created_at":     order.CreatedAt.Format(time.RFC3339),
-		"updated_at":     order.UpdatedAt.Format(time.RFC3339),
-		"search_text":    order.SearchText,
+		"id":                     order.ID,
+		"user_id":                order.UserID,
+		"type":                   order.Type,
+		"status":                 order.Status,
+		"order_kind":             order.OrderKind,
+		"crypto_symbol":          order.CryptoSymbol,
+		"crypto_name":            order.CryptoName,
+		"quantity":               quantityValue,
+		"quantity_display_s":     order.Quantity,
+		"price":                  priceValue,
+		"price_display_s":        order.Price,
+		"total_amount_display":   totalAmountValue,
+		"total_amount_display_s": order.TotalAmount,
+		"total_amount_value":     totalAmountValue,
+		"fee":                    feeValue,
+		"fee_display_s":          order.Fee,
+		"created_at":             order.CreatedAt.Format(time.RFC3339),
+		"updated_at":             order.UpdatedAt.Format(time.RFC3339),
+		"search_text":            order.SearchText,
 	}
 
 	if order.ExecutedAt != nil {

@@ -43,13 +43,6 @@ type OrderResponse struct {
 	CancelledAt    *time.Time `json:"cancelled_at,omitempty"`
 }
 
-// APIResponse represents the standard API response wrapper
-type APIResponse struct {
-	Success bool          `json:"success"`
-	Data    OrderResponse `json:"data"`
-	Error   string       `json:"error,omitempty"`
-}
-
 // NewOrdersClient creates a new orders API client
 func NewOrdersClient(config *OrdersClientConfig) *OrdersClient {
 	if config.Timeout == 0 {
@@ -89,15 +82,10 @@ func (c *OrdersClient) GetOrderByID(ctx context.Context, orderID string) (*Order
 		return nil, fmt.Errorf("orders-api returned status %d", resp.StatusCode)
 	}
 
-	var apiResp APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	var orderResp OrderResponse
+	if err := json.NewDecoder(resp.Body).Decode(&orderResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if !apiResp.Success {
-		return nil, fmt.Errorf("orders-api error: %s", apiResp.Error)
-	}
-
-	return &apiResp.Data, nil
+	return &orderResp, nil
 }
-

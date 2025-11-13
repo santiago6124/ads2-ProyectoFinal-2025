@@ -149,8 +149,23 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
+	userRole, _ := c.Get("user_role")
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
+
+	// Internal services (e.g., search-api) can bypass ownership validation using the internal API key
+	if userRole == "internal" {
+		order, err := h.orderService.GetOrderInternal(ctx, orderID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+
+		response := h.convertToOrderResponse(order)
+		c.JSON(http.StatusOK, response)
+		return
+	}
 
 	order, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {

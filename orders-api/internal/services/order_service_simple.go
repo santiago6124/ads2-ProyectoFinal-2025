@@ -267,6 +267,15 @@ func (s *OrderServiceSimple) GetOrder(ctx context.Context, orderID string, userI
 	return order, nil
 }
 
+// GetOrderInternal obtiene una orden por ID sin validar ownership (uso interno)
+func (s *OrderServiceSimple) GetOrderInternal(ctx context.Context, orderID string) (*models.Order, error) {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("order not found: %w", err)
+	}
+	return order, nil
+}
+
 // ListUserOrders lista las órdenes de un usuario con filtros
 func (s *OrderServiceSimple) ListUserOrders(ctx context.Context, userID int, filter *dto.OrderFilterRequest) ([]models.Order, int64, *dto.OrdersSummary, error) {
 	filter.SetDefaults()
