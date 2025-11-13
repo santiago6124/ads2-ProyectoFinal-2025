@@ -87,6 +87,11 @@ type RabbitMQConfig struct {
 	OrderQueue        string `json:"order_queue"`
 	OrderRoutingKey   string `json:"order_routing_key"`
 
+	// Balance request/response messaging
+	BalanceRequestExchange  string `json:"balance_request_exchange"`
+	BalanceRequestRoutingKey string `json:"balance_request_routing_key"`
+	BalanceResponseQueue    string `json:"balance_response_queue"`
+
 	// Consumer settings
 	ConsumerTag       string `json:"consumer_tag"`
 	AutoAck          bool   `json:"auto_ack"`
@@ -267,6 +272,9 @@ func Load() *Config {
 			OrderExchange:        getEnv("RABBITMQ_ORDER_EXCHANGE", "orders"),
 			OrderQueue:           getEnv("RABBITMQ_ORDER_QUEUE", "portfolio.orders"),
 			OrderRoutingKey:      getEnv("RABBITMQ_ORDER_ROUTING_KEY", "order.executed"),
+			BalanceRequestExchange:   getEnv("RABBITMQ_BALANCE_REQUEST_EXCHANGE", "balance.request.exchange"),
+			BalanceRequestRoutingKey: getEnv("RABBITMQ_BALANCE_REQUEST_ROUTING_KEY", "balance.request"),
+			BalanceResponseQueue:     getEnv("RABBITMQ_BALANCE_RESPONSE_QUEUE", "balance.response.portfolio"),
 			ConsumerTag:          getEnv("RABBITMQ_CONSUMER_TAG", "portfolio-service"),
 			AutoAck:              getEnvBool("RABBITMQ_AUTO_ACK", false),
 			Exclusive:            getEnvBool("RABBITMQ_EXCLUSIVE", false),

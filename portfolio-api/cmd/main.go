@@ -96,8 +96,72 @@ func main() {
 		})
 	})
 
-	// Initialize portfolio controller
-	controller := controllers.NewPortfolioControllerWithClients(logger, userClient, marketClient, portfolioRepo)
+	// Initialize balance messaging components
+	var balancePublisher *messaging.BalancePublisher
+	var balanceConsumer *messaging.BalanceResponseConsumer
+
+	if cfg.RabbitMQ.Enabled {
+		logger.Info("🔌 Initializing balance messaging components...")
+
+		// Initialize balance request publisher
+		balancePublisher, err = messaging.NewBalancePublisher(
+			cfg.RabbitMQ.URL,
+			cfg.RabbitMQ.BalanceRequestExchange,
+			cfg.RabbitMQ.BalanceRequestRoutingKey,
+			logger,
+		)
+		if err != nil {
+			logger.Warnf("Failed to initialize balance publisher: %v - will use HTTP fallback", err)
+			balancePublisher = nil
+		}
+
+		// Initialize balance response consumer
+		balanceConsumer, err = messaging.NewBalanceResponseConsumer(
+			cfg.RabbitMQ.URL,
+			cfg.RabbitMQ.BalanceResponseQueue,
+			logger,
+		)
+		if err != nil {
+			logger.Warnf("Failed to initialize balance consumer: %v - will use HTTP fallback", err)
+			balanceConsumer = nil
+		} else {
+			// Start balance response consumer in background
+			ctx := context.Background()
+			go func() {
+				if err := balanceConsumer.Start(ctx); err != nil {
+					logger.Errorf("Balance consumer error: %v", err)
+				}
+			}()
+
+			// Handle graceful shutdown
+			defer func() {
+				if balanceConsumer != nil {
+					if err := balanceConsumer.Close(); err != nil {
+						logger.Errorf("Error closing balance consumer: %v", err)
+					}
+				}
+				if balancePublisher != nil {
+					if err := balancePublisher.Close(); err != nil {
+						logger.Errorf("Error closing balance publisher: %v", err)
+					}
+				}
+			}()
+		}
+
+		if balancePublisher != nil && balanceConsumer != nil {
+			logger.Info("✅ Balance messaging initialized successfully")
+		}
+	}
+
+	// Initialize portfolio controller with balance messaging support
+	controller := controllers.NewPortfolioControllerWithClientsAndMessaging(
+		logger,
+		userClient,
+		marketClient,
+		portfolioRepo,
+		balancePublisher,
+		balanceConsumer,
+	)
 
 	// API routes
 	api := router.Group("/api")

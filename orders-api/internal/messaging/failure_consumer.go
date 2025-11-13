@@ -195,7 +195,7 @@ func (c *FailureConsumer) processMessage(ctx context.Context, msg amqp.Delivery)
 		log.Printf("❌ [Order %s] Failed to get order: %v", event.OrderID, err)
 		return fmt.Errorf("failed to get order: %w", err)
 	}
-	log.Printf("✓ [Order %s] Found order: %s, current status: %s", event.OrderID, order.OrderNumber, order.Status)
+	log.Printf("✓ [Order %s] Found order, current status: %s", event.OrderID, order.Status)
 
 	// 2. Verificar si ya está en estado final
 	if order.Status == models.OrderStatusFailed {

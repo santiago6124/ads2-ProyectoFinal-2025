@@ -16,6 +16,7 @@ type Config struct {
 	JWT      models.JWTConfig
 	Redis    RedisConfig
 	Internal InternalConfig
+	RabbitMQ RabbitMQConfig
 }
 
 type ServerConfig struct {
@@ -39,6 +40,13 @@ type RedisConfig struct {
 
 type InternalConfig struct {
 	APIKey string
+}
+
+type RabbitMQConfig struct {
+	URL                  string
+	BalanceRequestQueue  string
+	BalanceResponseExchange string
+	BalanceResponseRoutingKey string
 }
 
 func LoadConfig() *Config {
@@ -81,6 +89,12 @@ func LoadConfig() *Config {
 		},
 		Internal: InternalConfig{
 			APIKey: getEnv("INTERNAL_API_KEY", "internal-secret-key"),
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:                     getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+			BalanceRequestQueue:     getEnv("RABBITMQ_BALANCE_REQUEST_QUEUE", "balance.request"),
+			BalanceResponseExchange: getEnv("RABBITMQ_BALANCE_RESPONSE_EXCHANGE", "balance.response.exchange"),
+			BalanceResponseRoutingKey: getEnv("RABBITMQ_BALANCE_RESPONSE_ROUTING_KEY", "balance.response.portfolio"),
 		},
 	}
 }

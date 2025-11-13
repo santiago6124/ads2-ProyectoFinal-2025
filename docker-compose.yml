@@ -59,6 +59,45 @@ services:
       start_period: 30s
 
   # --------------------------------------------------------------------------
+  # Users Worker - Balance Request Handler
+  # --------------------------------------------------------------------------
+  users-worker:
+    build:
+      context: ./users-api
+      dockerfile: Dockerfile.worker
+    container_name: cryptosim-users-worker
+    environment:
+      # Database
+      - DB_HOST=users-mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - DB_NAME=users_db
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
+      - RABBITMQ_BALANCE_REQUEST_QUEUE=balance.request
+      - RABBITMQ_BALANCE_RESPONSE_EXCHANGE=balance.response.exchange
+      - RABBITMQ_BALANCE_RESPONSE_ROUTING_KEY=balance.response.portfolio
+      # Server
+      - SERVER_ENV=development
+      # Logging
+      - LOG_LEVEL=info
+    depends_on:
+      users-mysql:
+        condition: service_healthy
+      shared-rabbitmq:
+        condition: service_healthy
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
   # Orders API - Gestión de órdenes de compra/venta
   # --------------------------------------------------------------------------
   orders-api:
@@ -93,8 +132,8 @@ services:
       - RABBITMQ_WORKER_COUNT=5
       # External APIs (Service Discovery)
       - USER_API_BASE_URL=http://users-api:8001
-      - USER_API_KEY=internal-secret-key
-      - ORDERS_INTERNAL_API_KEY=internal-secret-key
+      - USER_API_KEY=${INTERNAL_API_KEY:-internal-secret-key}
+      - ORDERS_INTERNAL_API_KEY=${INTERNAL_API_KEY:-internal-secret-key}
       - MARKET_API_BASE_URL=http://market-data-api:8004
       - PORTFOLIO_API_BASE_URL=http://portfolio-api:8080
       - PORTFOLIO_API_KEY=portfolio-api-key

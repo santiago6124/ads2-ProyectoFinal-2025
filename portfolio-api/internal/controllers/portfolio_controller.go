@@ -10,14 +10,17 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"portfolio-api/internal/clients"
+	"portfolio-api/internal/messaging"
 	"portfolio-api/internal/repositories"
 )
 
 type PortfolioController struct {
-	logger         *logrus.Logger
-	userClient     *clients.UserClient
-	marketClient   *clients.MarketDataClient
-	portfolioRepo  repositories.PortfolioRepository
+	logger          *logrus.Logger
+	userClient      *clients.UserClient
+	marketClient    *clients.MarketDataClient
+	portfolioRepo   repositories.PortfolioRepository
+	balancePublisher *messaging.BalancePublisher
+	balanceConsumer  *messaging.BalanceResponseConsumer
 }
 
 func NewPortfolioController(logger *logrus.Logger, userClient interface{}) *PortfolioController {
@@ -42,6 +45,24 @@ func NewPortfolioControllerWithClients(
 		userClient:    userClient,
 		marketClient:  marketClient,
 		portfolioRepo: portfolioRepo,
+	}
+}
+
+func NewPortfolioControllerWithClientsAndMessaging(
+	logger *logrus.Logger,
+	userClient *clients.UserClient,
+	marketClient *clients.MarketDataClient,
+	portfolioRepo repositories.PortfolioRepository,
+	balancePublisher *messaging.BalancePublisher,
+	balanceConsumer *messaging.BalanceResponseConsumer,
+) *PortfolioController {
+	return &PortfolioController{
+		logger:           logger,
+		userClient:       userClient,
+		marketClient:     marketClient,
+		portfolioRepo:    portfolioRepo,
+		balancePublisher: balancePublisher,
+		balanceConsumer:  balanceConsumer,
 	}
 }
 
@@ -105,12 +126,38 @@ func (c *PortfolioController) GetPortfolio(ctx *gin.Context) {
 	requestCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Get user balance
+	// Get user balance - Try RabbitMQ first, fallback to HTTP
 	var totalCash string = "100000.00" // default
-	if c.userClient != nil {
+	balanceFetched := false
+
+	// Try RabbitMQ messaging if available
+	if c.balancePublisher != nil && c.balanceConsumer != nil {
+		c.logger.Debugf("📤 Requesting balance via RabbitMQ for user %d", userID)
+		correlationID, err := c.balancePublisher.RequestBalance(requestCtx, userID)
+		if err != nil {
+			c.logger.Warnf("Failed to publish balance request: %v - falling back to HTTP", err)
+		} else {
+			// Wait for response with 5 second timeout
+			response, err := c.balanceConsumer.WaitForResponse(correlationID, 5*time.Second)
+			if err != nil {
+				c.logger.Warnf("Timeout waiting for balance response: %v - falling back to HTTP", err)
+			} else if response.Success {
+				totalCash = response.Balance
+				balanceFetched = true
+				c.logger.Debugf("✅ Received balance via RabbitMQ for user %d: %s", userID, totalCash)
+			} else {
+				c.logger.Warnf("Balance request failed: %s - falling back to HTTP", response.Error)
+			}
+		}
+	}
+
+	// Fallback to HTTP if RabbitMQ failed or not available
+	if !balanceFetched && c.userClient != nil {
+		c.logger.Debugf("⚠️ Using HTTP fallback to fetch balance for user %d", userID)
 		balance, err := c.userClient.GetUserBalance(requestCtx, userID)
 		if err == nil {
 			totalCash = balance.String()
+			c.logger.Debugf("✅ Received balance via HTTP for user %d: %s", userID, totalCash)
 		} else {
 			c.logger.Warnf("Failed to get user balance for user %d: %v", userID, err)
 		}

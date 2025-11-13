@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod tidy:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(Select-String -Pattern \"(Step |Successfully built|ERROR|failed)\")",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker exec:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker system prune:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

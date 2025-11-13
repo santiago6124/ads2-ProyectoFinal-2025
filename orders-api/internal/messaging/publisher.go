@@ -35,6 +35,32 @@ type OrderEvent struct {
 	ErrorMessage string    `json:"error_message,omitempty"`
 }
 
+// BalanceUpdateEvent evento para actualizar saldo de usuario
+type BalanceUpdateEvent struct {
+	OrderID         string    `json:"order_id"`
+	UserID          int       `json:"user_id"`
+	Amount          string    `json:"amount"`           // Total amount (price * quantity + fee)
+	TransactionType string    `json:"transaction_type"` // "buy" or "sell"
+	CryptoSymbol    string    `json:"crypto_symbol"`
+	Quantity        string    `json:"quantity"`
+	Price           string    `json:"price"`
+	Description     string    `json:"description"`
+	Timestamp       time.Time `json:"timestamp"`
+}
+
+// PortfolioUpdateEvent evento para actualizar portfolio
+type PortfolioUpdateEvent struct {
+	OrderID   string    `json:"order_id"`
+	UserID    int64     `json:"user_id"`
+	Symbol    string    `json:"symbol"`
+	Quantity  string    `json:"quantity"`
+	Price     string    `json:"price"`
+	OrderType string    `json:"order_type"` // "buy" or "sell"
+	TotalCost string    `json:"total_cost"`
+	Fee       string    `json:"fee"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // NewPublisher crea un nuevo publisher simplificado
 func NewPublisher(rabbitmqURL string) (*Publisher, error) {
 	conn, err := amqp.Dial(rabbitmqURL)
@@ -151,6 +177,85 @@ func (p *Publisher) PublishOrderFailed(ctx context.Context, order *models.Order,
 	}
 
 	return p.publish("orders.failed", event)
+}
+
+// PublishBalanceUpdate publica evento de actualización de saldo
+func (p *Publisher) PublishBalanceUpdate(ctx context.Context, order *models.Order) error {
+	// Calculate total amount including fee
+	totalAmount := order.TotalAmount.Add(order.Fee)
+
+	event := &BalanceUpdateEvent{
+		OrderID:         order.ID.Hex(),
+		UserID:          order.UserID,
+		Amount:          totalAmount.String(),
+		TransactionType: string(order.Type),
+		CryptoSymbol:    order.CryptoSymbol,
+		Quantity:        order.Quantity.String(),
+		Price:           order.Price.String(),
+		Description:     fmt.Sprintf("%s %s %s", order.Type, order.Quantity, order.CryptoSymbol),
+		Timestamp:       time.Now(),
+	}
+
+	return p.publishToExchange("balance.events", "balance.update", event)
+}
+
+// PublishPortfolioUpdate publica evento de actualización de portfolio
+func (p *Publisher) PublishPortfolioUpdate(ctx context.Context, order *models.Order) error {
+	event := &PortfolioUpdateEvent{
+		OrderID:   order.ID.Hex(),
+		UserID:    int64(order.UserID),
+		Symbol:    order.CryptoSymbol,
+		Quantity:  order.Quantity.String(),
+		Price:     order.Price.String(),
+		OrderType: string(order.Type),
+		TotalCost: order.TotalAmount.String(),
+		Fee:       order.Fee.String(),
+		Timestamp: time.Now(),
+	}
+
+	return p.publishToExchange("portfolio.events", "portfolio.update", event)
+}
+
+// publishToExchange publica un evento a un exchange específico
+func (p *Publisher) publishToExchange(exchangeName, routingKey string, event interface{}) error {
+	// Declarar exchange si no existe
+	err := p.channel.ExchangeDeclare(
+		exchangeName,
+		"topic",
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,   // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare exchange %s: %w", exchangeName, err)
+	}
+
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	err = p.channel.Publish(
+		exchangeName, // exchange
+		routingKey,   // routing key
+		false,        // mandatory
+		false,        // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent, // mensajes persistentes
+			Timestamp:    time.Now(),
+			Body:         body,
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to publish to %s: %w", exchangeName, err)
+	}
+
+	log.Printf("Published %s to %s", routingKey, exchangeName)
+	return nil
 }
 
 // publish publica un evento al exchange

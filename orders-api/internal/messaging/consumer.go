@@ -198,21 +198,21 @@ func (c *OrderConsumer) processMessage(ctx context.Context, msg amqp.Delivery) e
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
 
-	log.Printf("📋 [Order ID: %s] OrderNumber: %s", event.OrderID, event.OrderNumber)
+	log.Printf("📋 [Order ID: %s]", event.OrderID)
 	log.Printf("👤 [User ID: %d] Type: %s, Symbol: %s", event.UserID, event.Type, event.CryptoSymbol)
 
 	// Obtener orden de la BD
-	log.Printf("🔍 [Order %s] Fetching from database...", event.OrderNumber)
+	log.Printf("🔍 [Order %s] Fetching from database...", event.OrderID)
 	order, err := c.orderRepo.GetByID(ctx, event.OrderID)
 	if err != nil {
-		log.Printf("❌ [Order %s] Failed to get order: %v", event.OrderNumber, err)
+		log.Printf("❌ [Order %s] Failed to get order: %v", event.OrderID, err)
 		return fmt.Errorf("failed to get order: %w", err)
 	}
-	log.Printf("✓ [Order %s] Found in database, status: %s", event.OrderNumber, order.Status)
+	log.Printf("✓ [Order %s] Found in database, status: %s", event.OrderID, order.Status)
 
 	// Verificar que la orden está en estado pending
 	if order.Status != models.OrderStatusPending {
-		log.Printf("⚠️ [Order %s] Not pending (status: %s), skipping", event.OrderNumber, order.Status)
+		log.Printf("⚠️ [Order %s] Not pending (status: %s), skipping", event.OrderID, order.Status)
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		return nil // No es error, solo que ya fue procesada
 	}
@@ -231,13 +231,14 @@ func (c *OrderConsumer) processMessage(ctx context.Context, msg amqp.Delivery) e
 
 // executeOrder ejecuta la orden y publica eventos
 func (c *OrderConsumer) executeOrder(ctx context.Context, order *models.Order) error {
-	log.Printf("⚙️ [Order %s] Starting execution", order.OrderNumber)
+	orderID := order.ID.Hex()
+	log.Printf("⚙️ [Order %s] Starting execution", orderID)
 	log.Printf("📊 [Order %s] User: %d, Symbol: %s, Quantity: %s",
-		order.OrderNumber, order.UserID, order.CryptoSymbol, order.Quantity.String())
+		orderID, order.UserID, order.CryptoSymbol, order.Quantity.String())
 
 	// 1. Usar precio de la orden (ya validado y obtenido desde el frontend)
 	log.Printf("1️⃣ [Order %s] Using price from order: %s for %s",
-		order.OrderNumber, order.Price.String(), order.CryptoSymbol)
+		orderID, order.Price.String(), order.CryptoSymbol)
 	executedPrice := order.Price
 
 	// 2. Calcular monto total y comisión
@@ -247,54 +248,10 @@ func (c *OrderConsumer) executeOrder(ctx context.Context, order *models.Order) e
 	if fee.LessThan(minFee) {
 		fee = minFee
 	}
-	log.Printf("✓ [Order %s] Calculated: Total=%s, Fee=%s", order.OrderNumber, totalAmount.String(), fee.String())
+	log.Printf("✓ [Order %s] Calculated: Total=%s, Fee=%s", orderID, totalAmount.String(), fee.String())
 
-	// 3. Publicar evento de actualización de balance
-	log.Printf("2️⃣ [Order %s] Publishing balance update event...", order.OrderNumber)
-	balanceAmount := totalAmount.Add(fee)
-	if order.Type == models.OrderTypeSell {
-		balanceAmount = totalAmount.Sub(fee)
-	}
-
-	balanceEvent := &BalanceUpdateEvent{
-		OrderID:         order.ID.Hex(),
-		UserID:          order.UserID,
-		Amount:          balanceAmount.String(),
-		TransactionType: string(order.Type),
-		CryptoSymbol:    order.CryptoSymbol,
-		Quantity:        order.Quantity.String(),
-		Price:           executedPrice.String(),
-		Description:     fmt.Sprintf("%s %s %s at %s", order.Type, order.Quantity.String(), order.CryptoSymbol, executedPrice.String()),
-		Timestamp:       time.Now(),
-	}
-
-	if err := c.publisher.PublishBalanceUpdate(ctx, balanceEvent); err != nil {
-		log.Printf("❌ [Order %s] Failed to publish balance update: %v", order.OrderNumber, err)
-		return fmt.Errorf("failed to publish balance update: %w", err)
-	}
-	log.Printf("✓ [Order %s] Balance update event published (Amount: %s)", order.OrderNumber, balanceAmount.String())
-
-	// 4. Publicar evento de actualización de portfolio
-	log.Printf("3️⃣ [Order %s] Publishing portfolio update event...", order.OrderNumber)
-	portfolioEvent := &PortfolioUpdateEvent{
-		OrderID:   order.ID.Hex(),
-		UserID:    int64(order.UserID),
-		Symbol:    order.CryptoSymbol,
-		Quantity:  order.Quantity.String(),
-		Price:     executedPrice.String(),
-		OrderType: string(order.Type),
-		Timestamp: time.Now(),
-	}
-
-	if err := c.publisher.PublishPortfolioUpdate(ctx, portfolioEvent); err != nil {
-		// No fallar si portfolio update falla, solo log
-		log.Printf("⚠️ [Order %s] Failed to publish portfolio update: %v", order.OrderNumber, err)
-	} else {
-		log.Printf("✓ [Order %s] Portfolio update event published", order.OrderNumber)
-	}
-
-	// 5. Actualizar orden a ejecutada
-	log.Printf("4️⃣ [Order %s] Updating order status to executed...", order.OrderNumber)
+	// 3. Actualizar orden a ejecutada
+	log.Printf("2️⃣ [Order %s] Updating order status to executed...", orderID)
 	order.Status = models.OrderStatusExecuted
 	order.Price = executedPrice
 	order.TotalAmount = totalAmount
@@ -304,27 +261,44 @@ func (c *OrderConsumer) executeOrder(ctx context.Context, order *models.Order) e
 	order.UpdatedAt = now
 
 	if err := c.orderRepo.Update(ctx, order); err != nil {
-		log.Printf("❌ [Order %s] Failed to update order: %v", order.OrderNumber, err)
+		log.Printf("❌ [Order %s] Failed to update order: %v", orderID, err)
 		return fmt.Errorf("failed to update order: %w", err)
 	}
-	log.Printf("✓ [Order %s] Order updated to executed status", order.OrderNumber)
+	log.Printf("✓ [Order %s] Order updated to executed status", orderID)
 
-	// 6. Publicar evento de orden ejecutada
-	log.Printf("5️⃣ [Order %s] Publishing order executed event...", order.OrderNumber)
+	// 4. Publicar evento de orden ejecutada
+	log.Printf("3️⃣ [Order %s] Publishing order executed event...", orderID)
 	if err := c.publisher.PublishOrderExecuted(ctx, order); err != nil {
-		log.Printf("⚠️ [Order %s] Failed to publish order executed event: %v", order.OrderNumber, err)
+		log.Printf("⚠️ [Order %s] Failed to publish order executed event: %v", orderID, err)
 	} else {
-		log.Printf("✓ [Order %s] Order executed event published", order.OrderNumber)
+		log.Printf("✓ [Order %s] Order executed event published", orderID)
+	}
+
+	// 5. Publicar evento de actualización de balance
+	log.Printf("4️⃣ [Order %s] Publishing balance update event...", orderID)
+	if err := c.publisher.PublishBalanceUpdate(ctx, order); err != nil {
+		log.Printf("⚠️ [Order %s] Failed to publish balance update event: %v", orderID, err)
+	} else {
+		log.Printf("✓ [Order %s] Balance update event published to balance.events", orderID)
+	}
+
+	// 6. Publicar evento de actualización de portfolio
+	log.Printf("5️⃣ [Order %s] Publishing portfolio update event...", orderID)
+	if err := c.publisher.PublishPortfolioUpdate(ctx, order); err != nil {
+		log.Printf("⚠️ [Order %s] Failed to publish portfolio update event: %v", orderID, err)
+	} else {
+		log.Printf("✓ [Order %s] Portfolio update event published to portfolio.events", orderID)
 	}
 
 	log.Printf("✅ [Order %s] Order executed successfully (Price: %s, Total: %s, Fee: %s)",
-		order.OrderNumber, executedPrice.String(), totalAmount.String(), fee.String())
+		orderID, executedPrice.String(), totalAmount.String(), fee.String())
 	return nil
 }
 
 // handleOrderFailure maneja el fallo de una orden
 func (c *OrderConsumer) handleOrderFailure(ctx context.Context, order *models.Order, err error) error {
-	log.Printf("❌ Order %s failed: %v", order.OrderNumber, err)
+	orderID := order.ID.Hex()
+	log.Printf("❌ Order %s failed: %v", orderID, err)
 
 	// Actualizar orden a fallida
 	order.Status = models.OrderStatusFailed
