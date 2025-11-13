@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +22,7 @@ type Consumer struct {
 	config          *ConsumerConfig
 	handlers        map[string]MessageHandler
 	trendingHandler *services.TrendingEventHandler
+	indexingService *services.IndexingService
 	logger          *logrus.Logger
 	consuming       bool
 	stopChan        chan struct{}
@@ -29,17 +32,17 @@ type Consumer struct {
 
 // ConsumerConfig represents consumer configuration
 type ConsumerConfig struct {
-	URL               string
-	ExchangeName      string
-	QueueName         string
-	RoutingKeys       []string
-	ConsumerTag       string
-	PrefetchCount     int
-	AutoAck           bool
-	WorkerCount       int
-	RetryDelay        time.Duration
-	MaxRetries        int
-	DeadLetterTTL     time.Duration
+	URL           string
+	ExchangeName  string
+	QueueName     string
+	RoutingKeys   []string
+	ConsumerTag   string
+	PrefetchCount int
+	AutoAck       bool
+	WorkerCount   int
+	RetryDelay    time.Duration
+	MaxRetries    int
+	DeadLetterTTL time.Duration
 }
 
 // MessageHandler defines the interface for message handling
@@ -47,45 +50,46 @@ type MessageHandler func(ctx context.Context, message *EventMessage) error
 
 // EventMessage represents a message from the event system
 type EventMessage struct {
-	ID          string                 `json:"id"`
-	Type        string                 `json:"type"`
-	Source      string                 `json:"source"`
-	Subject     string                 `json:"subject"`
-	Data        map[string]interface{} `json:"data"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Version     string                 `json:"version"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	RetryCount  int                    `json:"retry_count"`
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	Source     string                 `json:"source"`
+	Subject    string                 `json:"subject"`
+	Data       map[string]interface{} `json:"data"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Version    string                 `json:"version"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	RetryCount int                    `json:"retry_count"`
 }
 
 // OrderEvent represents an order-related event
 type OrderEvent struct {
-	OrderID     string  `json:"order_id"`
-	UserID      int     `json:"user_id"`
-	CryptoID    string  `json:"crypto_id"`
-	Symbol      string  `json:"symbol"`
-	Type        string  `json:"type"`
-	Status      string  `json:"status"`
-	Amount      float64 `json:"amount"`
-	Price       float64 `json:"price"`
-	TotalValue  float64 `json:"total_value"`
-	ExecutedAt  string  `json:"executed_at"`
-	EventType   string  `json:"event_type"`
+	EventType    string `json:"event_type"`
+	OrderID      string `json:"order_id"`
+	UserID       int    `json:"user_id"`
+	Type         string `json:"type"`
+	Status       string `json:"status"`
+	CryptoSymbol string `json:"crypto_symbol"`
+	Quantity     string `json:"quantity"`
+	Price        string `json:"price"`
+	TotalAmount  string `json:"total_amount"`
+	Fee          string `json:"fee"`
+	Timestamp    string `json:"timestamp"`
+	ErrorMessage string `json:"error_message"`
 }
 
 // PriceEvent represents a price change event
 type PriceEvent struct {
-	CryptoID       string  `json:"crypto_id"`
-	Symbol         string  `json:"symbol"`
-	OldPrice       float64 `json:"old_price"`
-	NewPrice       float64 `json:"new_price"`
-	ChangePercent  float64 `json:"change_percent"`
-	Volume24h      float64 `json:"volume_24h"`
-	Timestamp      string  `json:"timestamp"`
+	CryptoID      string  `json:"crypto_id"`
+	Symbol        string  `json:"symbol"`
+	OldPrice      float64 `json:"old_price"`
+	NewPrice      float64 `json:"new_price"`
+	ChangePercent float64 `json:"change_percent"`
+	Volume24h     float64 `json:"volume_24h"`
+	Timestamp     string  `json:"timestamp"`
 }
 
 // NewConsumer creates a new RabbitMQ consumer
-func NewConsumer(config *ConsumerConfig, trendingHandler *services.TrendingEventHandler, logger *logrus.Logger) (*Consumer, error) {
+func NewConsumer(config *ConsumerConfig, trendingHandler *services.TrendingEventHandler, indexingService *services.IndexingService, logger *logrus.Logger) (*Consumer, error) {
 	conn, err := amqp.Dial(config.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
@@ -113,6 +117,7 @@ func NewConsumer(config *ConsumerConfig, trendingHandler *services.TrendingEvent
 		config:          config,
 		handlers:        make(map[string]MessageHandler),
 		trendingHandler: trendingHandler,
+		indexingService: indexingService,
 		logger:          logger,
 		stopChan:        make(chan struct{}),
 	}
@@ -309,6 +314,10 @@ func (c *Consumer) worker(ctx context.Context, workerID int) {
 func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, workerID int) {
 	startTime := time.Now()
 
+	// Process message with timeout
+	processCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// Parse message
 	var eventMsg EventMessage
 	if err := json.Unmarshal(delivery.Body, &eventMsg); err != nil {
@@ -323,15 +332,71 @@ func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, 
 		return
 	}
 
+	// Handle legacy/simple order events published directly by orders-api
+	var orderEvent OrderEvent
+	if err := json.Unmarshal(delivery.Body, &orderEvent); err == nil && orderEvent.OrderID != "" {
+		eventType := delivery.RoutingKey
+		if eventType == "" {
+			eventType = orderEvent.EventType
+			if eventType != "" && !strings.HasPrefix(eventType, "orders.") {
+				eventType = "orders." + eventType
+			}
+		}
+
+		if c.indexingService != nil && eventType != "" {
+			legacy := &services.LegacyOrderEvent{
+				EventType:    orderEvent.EventType,
+				OrderID:      orderEvent.OrderID,
+				UserID:       orderEvent.UserID,
+				Type:         orderEvent.Type,
+				Status:       orderEvent.Status,
+				CryptoSymbol: orderEvent.CryptoSymbol,
+				Quantity:     orderEvent.Quantity,
+				Price:        orderEvent.Price,
+				TotalAmount:  orderEvent.TotalAmount,
+				Fee:          orderEvent.Fee,
+				Timestamp:    orderEvent.Timestamp,
+				ErrorMessage: orderEvent.ErrorMessage,
+			}
+			if err := c.indexingService.SyncOrderFromEvent(processCtx, orderEvent.OrderID, eventType, legacy); err != nil {
+				c.logger.WithFields(logrus.Fields{
+					"order_id":   orderEvent.OrderID,
+					"event_type": eventType,
+					"error":      err,
+				}).Error("Failed to sync order from legacy event")
+
+				if !c.config.AutoAck {
+					delivery.Nack(false, true)
+				}
+				return
+			}
+		}
+
+		// Update trending metrics if applicable
+		if c.trendingHandler != nil && strings.HasSuffix(eventType, "orders.executed") && orderEvent.CryptoSymbol != "" {
+			if totalValue, err := parseFloat64(orderEvent.TotalAmount); err == nil {
+				c.trendingHandler.HandleOrderEvent(orderEvent.CryptoSymbol, totalValue)
+			}
+		}
+
+		c.logger.WithFields(logrus.Fields{
+			"worker":     workerID,
+			"order_id":   orderEvent.OrderID,
+			"event_type": eventType,
+			"duration":   time.Since(startTime),
+		}).Info("Order event processed via legacy flow")
+
+		if !c.config.AutoAck {
+			delivery.Ack(false)
+		}
+		return
+	}
+
 	c.logger.WithFields(logrus.Fields{
 		"worker":       workerID,
 		"message_id":   eventMsg.ID,
 		"message_type": eventMsg.Type,
 	}).Debug("Processing message")
-
-	// Process message with timeout
-	processCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 
 	err := c.handleMessage(processCtx, &eventMsg)
 	processingTime := time.Since(startTime)
@@ -407,57 +472,124 @@ func (c *Consumer) registerDefaultHandlers() {
 // Default message handlers
 
 func (c *Consumer) handleOrderExecuted(ctx context.Context, eventMsg *EventMessage) error {
-	var orderEvent OrderEvent
-	if err := c.parseEventData(eventMsg.Data, &orderEvent); err != nil {
-		return fmt.Errorf("failed to parse order event: %w", err)
+	// Extract order ID from event data
+	orderID, ok := eventMsg.Data["order_id"].(string)
+	if !ok {
+		// Try alternative field names
+		if id, ok := eventMsg.Data["id"].(string); ok {
+			orderID = id
+		} else {
+			return fmt.Errorf("order_id not found in event data")
+		}
 	}
 
-	// Update trending score based on order execution
+	// Sync order to search index by fetching complete order from orders-api
+	if c.indexingService != nil {
+		if err := c.indexingService.SyncOrderFromEvent(ctx, orderID, "orders.executed", nil); err != nil {
+			c.logger.WithFields(logrus.Fields{
+				"order_id": orderID,
+				"error":    err,
+			}).Error("Failed to sync order from event")
+			return fmt.Errorf("failed to sync order: %w", err)
+		}
+	}
+
+	// Update trending score based on order execution (if still needed)
 	if c.trendingHandler != nil {
-		c.trendingHandler.HandleOrderEvent(orderEvent.CryptoID, orderEvent.TotalValue)
+		if cryptoID, ok := eventMsg.Data["crypto_symbol"].(string); ok {
+			var totalValue float64
+			if tv, ok := eventMsg.Data["total_amount"].(string); ok {
+				// Parse string to float64 if needed
+				if parsed, err := parseFloat64(tv); err == nil {
+					totalValue = parsed
+				}
+			}
+			c.trendingHandler.HandleOrderEvent(cryptoID, totalValue)
+		}
 	}
 
 	c.logger.WithFields(logrus.Fields{
-		"order_id":    orderEvent.OrderID,
-		"crypto_id":   orderEvent.CryptoID,
-		"total_value": orderEvent.TotalValue,
-	}).Debug("Processed order executed event")
+		"order_id": orderID,
+	}).Info("Processed order executed event and synced to index")
 
 	return nil
 }
 
 func (c *Consumer) handleOrderCreated(ctx context.Context, eventMsg *EventMessage) error {
-	var orderEvent OrderEvent
-	if err := c.parseEventData(eventMsg.Data, &orderEvent); err != nil {
-		return fmt.Errorf("failed to parse order event: %w", err)
+	// Extract order ID from event data
+	orderID, ok := eventMsg.Data["order_id"].(string)
+	if !ok {
+		if id, ok := eventMsg.Data["id"].(string); ok {
+			orderID = id
+		} else {
+			return fmt.Errorf("order_id not found in event data")
+		}
 	}
 
-	// Order creation might indicate interest, but with lower weight
-	if c.trendingHandler != nil {
-		c.trendingHandler.HandleOrderEvent(orderEvent.CryptoID, orderEvent.TotalValue*0.1)
+	// Sync order to search index by fetching complete order from orders-api
+	if c.indexingService != nil {
+		if err := c.indexingService.SyncOrderFromEvent(ctx, orderID, "orders.created", nil); err != nil {
+			c.logger.WithFields(logrus.Fields{
+				"order_id": orderID,
+				"error":    err,
+			}).Error("Failed to sync order from event")
+			return fmt.Errorf("failed to sync order: %w", err)
+		}
 	}
 
-	c.logger.WithField("order_id", orderEvent.OrderID).Debug("Processed order created event")
+	c.logger.WithField("order_id", orderID).Info("Processed order created event and synced to index")
 	return nil
 }
 
 func (c *Consumer) handleOrderCancelled(ctx context.Context, eventMsg *EventMessage) error {
-	var orderEvent OrderEvent
-	if err := c.parseEventData(eventMsg.Data, &orderEvent); err != nil {
-		return fmt.Errorf("failed to parse order event: %w", err)
+	// Extract order ID from event data
+	orderID, ok := eventMsg.Data["order_id"].(string)
+	if !ok {
+		if id, ok := eventMsg.Data["id"].(string); ok {
+			orderID = id
+		} else {
+			return fmt.Errorf("order_id not found in event data")
+		}
 	}
 
-	c.logger.WithField("order_id", orderEvent.OrderID).Debug("Processed order cancelled event")
+	// Sync order to search index (will delete from index)
+	if c.indexingService != nil {
+		if err := c.indexingService.SyncOrderFromEvent(ctx, orderID, "orders.cancelled", nil); err != nil {
+			c.logger.WithFields(logrus.Fields{
+				"order_id": orderID,
+				"error":    err,
+			}).Error("Failed to sync order cancellation")
+			return fmt.Errorf("failed to sync order cancellation: %w", err)
+		}
+	}
+
+	c.logger.WithField("order_id", orderID).Info("Processed order cancelled event and synced to index")
 	return nil
 }
 
 func (c *Consumer) handleOrderFailed(ctx context.Context, eventMsg *EventMessage) error {
-	var orderEvent OrderEvent
-	if err := c.parseEventData(eventMsg.Data, &orderEvent); err != nil {
-		return fmt.Errorf("failed to parse order event: %w", err)
+	// Extract order ID from event data
+	orderID, ok := eventMsg.Data["order_id"].(string)
+	if !ok {
+		if id, ok := eventMsg.Data["id"].(string); ok {
+			orderID = id
+		} else {
+			return fmt.Errorf("order_id not found in event data")
+		}
 	}
 
-	c.logger.WithField("order_id", orderEvent.OrderID).Debug("Processed order failed event")
+	// Sync order to search index (update status but keep indexed)
+	if c.indexingService != nil {
+		if err := c.indexingService.SyncOrderFromEvent(ctx, orderID, "orders.failed", nil); err != nil {
+			c.logger.WithFields(logrus.Fields{
+				"order_id": orderID,
+				"error":    err,
+			}).Error("Failed to sync order failure")
+			return fmt.Errorf("failed to sync order failure: %w", err)
+		}
+	}
+
+	c.logger.WithField("order_id", orderID).Info("Processed order failed event and synced to index")
 	return nil
 }
 
@@ -539,6 +671,18 @@ func (c *Consumer) getRetryCount(delivery *amqp.Delivery) int {
 	}
 
 	return 0
+}
+
+// parseFloat64 parses a string to float64
+func parseFloat64(s string) (float64, error) {
+	// Remove any whitespace
+	s = strings.TrimSpace(s)
+	// Try to parse
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse float: %w", err)
+	}
+	return val, nil
 }
 
 // IsConsuming returns whether the consumer is currently consuming

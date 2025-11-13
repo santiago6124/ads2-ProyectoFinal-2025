@@ -14,6 +14,7 @@ type Config struct {
 	Solr        SolrConfig
 	Cache       CacheConfig
 	RabbitMQ    RabbitMQConfig
+	OrdersAPI   OrdersAPIConfig
 	Logging     LoggingConfig
 }
 
@@ -60,6 +61,13 @@ type RabbitMQConfig struct {
 	DeadLetterQueue string
 }
 
+// OrdersAPIConfig represents orders-api client configuration
+type OrdersAPIConfig struct {
+	BaseURL string
+	APIKey  string
+	Timeout int // in milliseconds
+}
+
 // LoggingConfig represents logging configuration
 type LoggingConfig struct {
 	Level  string
@@ -80,7 +88,7 @@ func Load() *Config {
 		},
 		Solr: SolrConfig{
 			BaseURL:    getEnv("SOLR_BASE_URL", "http://localhost:8983/solr"),
-			Collection: getEnv("SOLR_COLLECTION", "crypto_search"),
+			Collection: getEnv("SOLR_COLLECTION", "orders_search"),
 			TimeoutMs:  getEnvAsInt("SOLR_TIMEOUT_MS", 5000),
 			MaxRetries: getEnvAsInt("SOLR_MAX_RETRIES", 3),
 		},
@@ -98,13 +106,18 @@ func Load() *Config {
 		RabbitMQ: RabbitMQConfig{
 			Enabled:         getEnvAsBool("RABBITMQ_ENABLED", true),
 			URL:             getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
-			ExchangeName:    getEnv("RABBITMQ_EXCHANGE_NAME", "crypto_events"),
-			QueueName:       getEnv("RABBITMQ_QUEUE_NAME", "search_events"),
-			RoutingKeys:     getEnvAsSlice("RABBITMQ_ROUTING_KEYS", []string{"order.executed", "price.changed", "search.performed"}),
+			ExchangeName:    getEnv("RABBITMQ_EXCHANGE_NAME", "orders.events"),
+			QueueName:       getEnv("RABBITMQ_QUEUE_NAME", "search.sync"),
+			RoutingKeys:     getEnvAsSlice("RABBITMQ_ROUTING_KEYS", []string{"orders.created", "orders.executed", "orders.cancelled", "orders.failed"}),
 			WorkerPoolSize:  getEnvAsInt("RABBITMQ_WORKER_POOL_SIZE", 5),
 			RetryAttempts:   getEnvAsInt("RABBITMQ_RETRY_ATTEMPTS", 3),
 			RetryDelayMs:    getEnvAsInt("RABBITMQ_RETRY_DELAY_MS", 1000),
 			DeadLetterQueue: getEnv("RABBITMQ_DEAD_LETTER_QUEUE", "search_events_dlq"),
+		},
+		OrdersAPI: OrdersAPIConfig{
+			BaseURL: getEnv("ORDERS_API_BASE_URL", "http://orders-api:8080"),
+			APIKey:  getEnv("ORDERS_API_KEY", "internal-secret-key"),
+			Timeout: getEnvAsInt("ORDERS_API_TIMEOUT_MS", 10000),
 		},
 		Logging: LoggingConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),

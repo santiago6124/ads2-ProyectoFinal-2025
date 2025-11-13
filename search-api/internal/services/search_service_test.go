@@ -42,9 +42,9 @@ func (m *MockSearchRepository) GetByID(ctx context.Context, id string) (*models.
 	return args.Get(0).(*models.Crypto), args.Error(1)
 }
 
-func (m *MockSearchRepository) GetFacets(ctx context.Context) (*models.Filter, error) {
+func (m *MockSearchRepository) GetOrderFilters(ctx context.Context) (*models.OrderFilter, error) {
 	args := m.Called(ctx)
-	return args.Get(0).(*models.Filter), args.Error(1)
+	return args.Get(0).(*models.OrderFilter), args.Error(1)
 }
 
 func (m *MockSearchRepository) IndexCrypto(ctx context.Context, crypto *models.Crypto) error {
@@ -121,12 +121,12 @@ func (m *MockCachedSearchRepository) SetCrypto(ctx context.Context, crypto *mode
 	return args.Error(0)
 }
 
-func (m *MockCachedSearchRepository) GetFilters(ctx context.Context) (*models.Filter, bool) {
+func (m *MockCachedSearchRepository) GetFilters(ctx context.Context) (*models.OrderFilter, bool) {
 	args := m.Called(ctx)
-	return args.Get(0).(*models.Filter), args.Bool(1)
+	return args.Get(0).(*models.OrderFilter), args.Bool(1)
 }
 
-func (m *MockCachedSearchRepository) SetFilters(ctx context.Context, filters *models.Filter) error {
+func (m *MockCachedSearchRepository) SetFilters(ctx context.Context, filters *models.OrderFilter) error {
 	args := m.Called(ctx, filters)
 	return args.Error(0)
 }
@@ -515,7 +515,7 @@ func TestSearchService_GetMetrics(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, metrics)
-	assert.Equal(t, int64(185), metrics.TotalSearches) // Total requests
+	assert.Equal(t, int64(185), metrics.TotalSearches)  // Total requests
 	assert.InDelta(t, 0.81, metrics.CacheHitRate, 0.01) // Hit rate calculation
 
 	mockCacheRepo.AssertExpectations(t)

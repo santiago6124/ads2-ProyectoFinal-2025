@@ -37,6 +37,7 @@ func SetupRoutes(
 		searchGroup.GET("/trending", searchController.GetTrending)
 		searchGroup.GET("/suggestions", searchController.GetSuggestions)
 		searchGroup.GET("/crypto/:id", searchController.GetCryptoByID)
+		searchGroup.GET("/orders/:id", searchController.GetOrderByID)
 		searchGroup.GET("/filters", searchController.GetFilters)
 
 		// Health check (public)

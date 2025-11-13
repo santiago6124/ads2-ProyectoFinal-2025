@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ type AuthMiddleware struct {
 	audience        string
 	skipPaths       map[string]bool
 	publicEndpoints map[string]bool
+	internalAPIKey  string
 }
 
 type Claims struct {
@@ -33,6 +35,7 @@ type AuthConfig struct {
 	Audience        string
 	SkipPaths       []string
 	PublicEndpoints []string
+	InternalAPIKey  string
 }
 
 func NewAuthMiddleware(config *AuthConfig) *AuthMiddleware {
@@ -52,11 +55,43 @@ func NewAuthMiddleware(config *AuthConfig) *AuthMiddleware {
 		audience:        config.Audience,
 		skipPaths:       skipPaths,
 		publicEndpoints: publicEndpoints,
+		internalAPIKey:  config.InternalAPIKey,
 	}
 }
 
 func (a *AuthMiddleware) ValidateToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Allow internal service-to-service authentication using API key header
+		if a.internalAPIKey != "" {
+			internalService := c.GetHeader("X-Internal-Service")
+			internalKey := c.GetHeader("X-API-Key")
+			if internalService != "" && internalKey != "" &&
+				subtle.ConstantTimeCompare([]byte(internalKey), []byte(a.internalAPIKey)) == 1 {
+
+				claims := &Claims{
+					UserID:   0,
+					Email:    fmt.Sprintf("%s@internal.local", internalService),
+					Username: internalService,
+					Role:     "internal",
+					RegisteredClaims: jwt.RegisteredClaims{
+						Issuer:    a.issuer,
+						Audience:  jwt.ClaimStrings{a.audience},
+						ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+						IssuedAt:  jwt.NewNumericDate(time.Now()),
+					},
+				}
+
+				c.Set("user_id", claims.UserID)
+				c.Set("user_email", claims.Email)
+				c.Set("user_username", claims.Username)
+				c.Set("user_role", claims.Role)
+				c.Set("token_claims", claims)
+
+				c.Next()
+				return
+			}
+		}
+
 		// Skip authentication for certain paths
 		if a.skipPaths[c.Request.URL.Path] || a.publicEndpoints[c.Request.URL.Path] {
 			c.Next()

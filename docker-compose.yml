@@ -90,6 +90,7 @@ services:
       # External APIs (Service Discovery)
       - USER_API_BASE_URL=http://users-api:8001
       - USER_API_KEY=internal-secret-key
+      - ORDERS_INTERNAL_API_KEY=internal-secret-key
       - MARKET_API_BASE_URL=http://market-data-api:8004
       - PORTFOLIO_API_BASE_URL=http://portfolio-api:8080
       - PORTFOLIO_API_KEY=portfolio-api-key
@@ -135,10 +136,16 @@ services:
       - ENVIRONMENT=development
       - SERVER_PORT=8080
       - SOLR_BASE_URL=http://solr:8983/solr
-      - SOLR_COLLECTION=crypto_search
+      - SOLR_COLLECTION=orders_search
       - CACHE_MEMCACHED_HOSTS=memcached:11211
       - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
       - RABBITMQ_ENABLED=true
+      - RABBITMQ_EXCHANGE_NAME=orders.events
+      - RABBITMQ_QUEUE_NAME=search.sync
+      - RABBITMQ_ROUTING_KEYS=orders.created,orders.executed,orders.cancelled,orders.failed
+      - ORDERS_API_BASE_URL=http://orders-api:8080
+      - ORDERS_API_KEY=internal-secret-key
+      - ORDERS_API_TIMEOUT_MS=10000
       - LOG_LEVEL=info
     depends_on:
       solr:
@@ -389,15 +396,19 @@ services:
       - SOLR_HEAP=1g
     volumes:
       - solr-data:/var/solr
+      - ./search-api/scripts/solr-init-orders.sh:/docker-entrypoint-initdb.d/solr-init-orders.sh:ro
     networks:
       - cryptosim-network
     command: >
       bash -c "
-        solr-precreate crypto_search
+        solr-precreate orders_search &&
+        sleep 5 &&
+        chmod +x /docker-entrypoint-initdb.d/solr-init-orders.sh &&
+        /docker-entrypoint-initdb.d/solr-init-orders.sh || true
       "
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/crypto_search/admin/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/orders_search/admin/ping"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -23,7 +23,7 @@ type SearchRepository interface {
 	SearchTrending(ctx context.Context, period string, limit int) ([]models.TrendingCrypto, error)
 	GetSuggestions(ctx context.Context, query string, limit int) ([]models.Suggestion, error)
 	GetByID(ctx context.Context, id string) (*models.Crypto, error)
-	GetFacets(ctx context.Context) (*models.Filter, error)
+	GetOrderFilters(ctx context.Context) (*models.OrderFilter, error)
 	IndexCrypto(ctx context.Context, crypto *models.Crypto) error
 	IndexCryptos(ctx context.Context, cryptos []models.Crypto) error
 	UpdateTrendingScore(ctx context.Context, id string, score float32) error
@@ -31,14 +31,19 @@ type SearchRepository interface {
 	DeleteAll(ctx context.Context) error
 	GetDocumentCount(ctx context.Context) (int64, error)
 	Ping(ctx context.Context) error
+	// Order indexing methods
+	IndexOrder(ctx context.Context, orderDoc map[string]interface{}) error
+	DeleteOrderByID(ctx context.Context, orderID string) error
+	GetOrderByID(ctx context.Context, orderID string) (*models.Order, error)
 }
 
 // SearchResult represents the complete search result
+// Note: Results and Facets are interface{} to support both Crypto and Order searches
 type SearchResult struct {
-	Results    []models.SearchResult
-	Total      int64
-	Facets     models.Facets
-	QueryTime  time.Duration
+	Results   []interface{} // Can be []models.SearchResult or []models.OrderSearchResult
+	Total     int64
+	Facets    interface{} // Can be models.Facets or models.OrderFacets
+	QueryTime time.Duration
 }
 
 // NewSolrRepository creates a new Solr repository
@@ -48,7 +53,7 @@ func NewSolrRepository(client *solr.Client) SearchRepository {
 	}
 }
 
-// Search performs a search query
+// Search performs a search query for orders
 func (r *SolrRepository) Search(ctx context.Context, req *dto.SearchRequest) (*SearchResult, error) {
 	startTime := time.Now()
 
@@ -61,10 +66,10 @@ func (r *SolrRepository) Search(ctx context.Context, req *dto.SearchRequest) (*S
 		return nil, fmt.Errorf("search query failed: %w", err)
 	}
 
-	// Convert documents to search results
-	results := make([]models.SearchResult, 0, len(response.Response.Docs))
+	// Convert documents to order search results
+	results := make([]models.OrderSearchResult, 0, len(response.Response.Docs))
 	for _, doc := range response.Response.Docs {
-		result := solr.DocToSearchResult(doc, getDocScore(doc))
+		result := docToOrderSearchResult(doc, getDocScore(doc))
 
 		// Add highlighting if available
 		if response.Highlighting != nil {
@@ -79,19 +84,19 @@ func (r *SolrRepository) Search(ctx context.Context, req *dto.SearchRequest) (*S
 
 		// Determine match type for search results
 		if req.Query != "" {
-			result.MatchType = determineMatchType(req.Query, result.Symbol, result.Name)
+			result.MatchType = determineOrderMatchType(req.Query, result.CryptoSymbol, result.CryptoName)
 		}
 
 		results = append(results, result)
 	}
 
-	// Extract facets
-	facets := extractFacets(response.Facets)
+	// Extract facets for orders
+	facets := extractOrderFacets(response.Facets)
 
 	return &SearchResult{
-		Results:   results,
+		Results:   convertOrderResultsToInterface(results),
 		Total:     response.Response.NumFound,
-		Facets:    facets,
+		Facets:    convertOrderFacetsToInterface(facets),
 		QueryTime: time.Since(startTime),
 	}, nil
 }
@@ -157,27 +162,75 @@ func (r *SolrRepository) GetByID(ctx context.Context, id string) (*models.Crypto
 	return &result.Crypto, nil
 }
 
-// GetFacets gets available filters and facets
-func (r *SolrRepository) GetFacets(ctx context.Context) (*models.Filter, error) {
-	// Query with faceting enabled to get all available facets
+// GetOrderByID gets an order by ID from SolR
+func (r *SolrRepository) GetOrderByID(ctx context.Context, orderID string) (*models.Order, error) {
 	params := map[string]interface{}{
-		"q":            "*:*",
-		"rows":         0,
-		"facet":        "true",
-		"facet.field":  []string{"category", "platform"},
-		"facet.range":  []string{"current_price", "market_cap"},
-		"facet.range.start": 0,
-		"facet.range.end":   10000,
-		"facet.range.gap":   100,
-		"fq":           "is_active:true",
+		"q":    fmt.Sprintf("id:\"%s\"", orderID),
+		"rows": 1,
 	}
 
 	response, err := r.client.Search(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("facets query failed: %w", err)
+		return nil, fmt.Errorf("failed to search for order %s: %w", orderID, err)
 	}
 
-	return r.buildFiltersFromFacets(response.Facets), nil
+	if len(response.Response.Docs) == 0 {
+		return nil, fmt.Errorf("order %s not found", orderID)
+	}
+
+	result := docToOrderSearchResult(response.Response.Docs[0], 1.0)
+	return &result.Order, nil
+}
+
+// GetOrderFilters retrieves available filters for orders
+func (r *SolrRepository) GetOrderFilters(ctx context.Context) (*models.OrderFilter, error) {
+	params := map[string]interface{}{
+		"q":           "*:*",
+		"rows":        0,
+		"facet":       "true",
+		"facet.field": []string{"status", "type", "order_kind", "crypto_symbol"},
+	}
+
+	filters := models.GetDefaultOrderFilters()
+
+	response, err := r.client.Search(ctx, params)
+	if err != nil {
+		return &filters, nil
+	}
+
+	orderFacets := extractOrderFacets(response.Facets)
+
+	for i, status := range filters.Statuses {
+		if count, ok := orderFacets.Statuses[status.Value]; ok {
+			filters.Statuses[i].Count = count
+		}
+	}
+
+	for i, typ := range filters.Types {
+		if count, ok := orderFacets.Types[typ.Value]; ok {
+			filters.Types[i].Count = count
+		}
+	}
+
+	for i, kind := range filters.OrderKinds {
+		if count, ok := orderFacets.OrderKinds[kind.Value]; ok {
+			filters.OrderKinds[i].Count = count
+		}
+	}
+
+	filters.CryptoSymbols = make([]models.CryptoSymbolFilter, 0, len(orderFacets.CryptoSymbols))
+	for symbol, count := range orderFacets.CryptoSymbols {
+		filters.CryptoSymbols = append(filters.CryptoSymbols, models.CryptoSymbolFilter{
+			Value: symbol,
+			Label: strings.ToUpper(symbol),
+			Count: count,
+		})
+		if len(filters.CryptoSymbols) >= 10 {
+			break
+		}
+	}
+
+	return &filters, nil
 }
 
 // IndexCrypto indexes a single cryptocurrency
@@ -262,6 +315,26 @@ func (r *SolrRepository) Ping(ctx context.Context) error {
 	return r.client.Ping(ctx)
 }
 
+// IndexOrder indexes an order document in SolR
+func (r *SolrRepository) IndexOrder(ctx context.Context, orderDoc map[string]interface{}) error {
+	docs := []interface{}{orderDoc}
+
+	if err := r.client.Update(ctx, docs); err != nil {
+		return fmt.Errorf("failed to index order %v: %w", orderDoc["id"], err)
+	}
+
+	return r.client.Commit(ctx)
+}
+
+// DeleteOrderByID deletes an order from SolR by ID
+func (r *SolrRepository) DeleteOrderByID(ctx context.Context, orderID string) error {
+	if err := r.client.Delete(ctx, []string{orderID}); err != nil {
+		return fmt.Errorf("failed to delete order %s: %w", orderID, err)
+	}
+
+	return r.client.Commit(ctx)
+}
+
 // Helper functions
 
 func getDocScore(doc map[string]interface{}) float64 {
@@ -326,10 +399,13 @@ func convertHighlighting(highlight map[string]interface{}) map[string][]string {
 	return result
 }
 
-func extractFacets(facetsData interface{}) models.Facets {
-	facets := models.Facets{
-		Categories:  make(map[string]int64),
-		PriceRanges: make(map[string]int64),
+// extractOrderFacets extracts facets for orders
+func extractOrderFacets(facetsData interface{}) models.OrderFacets {
+	facets := models.OrderFacets{
+		Statuses:      make(map[string]int64),
+		Types:         make(map[string]int64),
+		OrderKinds:    make(map[string]int64),
+		CryptoSymbols: make(map[string]int64),
 	}
 
 	if facetsData == nil {
@@ -344,35 +420,53 @@ func extractFacets(facetsData interface{}) models.Facets {
 	// Extract field facets
 	if facetFields, exists := facetsMap["facet_fields"]; exists {
 		if fieldsMap, ok := facetFields.(map[string]interface{}); ok {
-			// Category facets
-			if categoryData, exists := fieldsMap["category"]; exists {
-				if categoryList, ok := categoryData.([]interface{}); ok {
-					for i := 0; i < len(categoryList); i += 2 {
-						if i+1 < len(categoryList) {
-							category := fmt.Sprintf("%v", categoryList[i])
-							count, _ := strconv.ParseInt(fmt.Sprintf("%v", categoryList[i+1]), 10, 64)
-							facets.Categories[category] = count
+			// Status facets
+			if statusData, exists := fieldsMap["status"]; exists {
+				if statusList, ok := statusData.([]interface{}); ok {
+					for i := 0; i < len(statusList); i += 2 {
+						if i+1 < len(statusList) {
+							status := fmt.Sprintf("%v", statusList[i])
+							count, _ := strconv.ParseInt(fmt.Sprintf("%v", statusList[i+1]), 10, 64)
+							facets.Statuses[status] = count
 						}
 					}
 				}
 			}
-		}
-	}
 
-	// Extract range facets
-	if facetRanges, exists := facetsMap["facet_ranges"]; exists {
-		if rangesMap, ok := facetRanges.(map[string]interface{}); ok {
-			if priceData, exists := rangesMap["current_price"]; exists {
-				if priceMap, ok := priceData.(map[string]interface{}); ok {
-					if counts, exists := priceMap["counts"]; exists {
-						if countsList, ok := counts.([]interface{}); ok {
-							for i := 0; i < len(countsList); i += 2 {
-								if i+1 < len(countsList) {
-									priceRange := fmt.Sprintf("%v", countsList[i])
-									count, _ := strconv.ParseInt(fmt.Sprintf("%v", countsList[i+1]), 10, 64)
-									facets.PriceRanges[priceRange] = count
-								}
-							}
+			// Type facets (buy/sell)
+			if typeData, exists := fieldsMap["type"]; exists {
+				if typeList, ok := typeData.([]interface{}); ok {
+					for i := 0; i < len(typeList); i += 2 {
+						if i+1 < len(typeList) {
+							orderType := fmt.Sprintf("%v", typeList[i])
+							count, _ := strconv.ParseInt(fmt.Sprintf("%v", typeList[i+1]), 10, 64)
+							facets.Types[orderType] = count
+						}
+					}
+				}
+			}
+
+			// Order kind facets (market/limit)
+			if kindData, exists := fieldsMap["order_kind"]; exists {
+				if kindList, ok := kindData.([]interface{}); ok {
+					for i := 0; i < len(kindList); i += 2 {
+						if i+1 < len(kindList) {
+							kind := fmt.Sprintf("%v", kindList[i])
+							count, _ := strconv.ParseInt(fmt.Sprintf("%v", kindList[i+1]), 10, 64)
+							facets.OrderKinds[kind] = count
+						}
+					}
+				}
+			}
+
+			// Crypto symbol facets
+			if symbolData, exists := fieldsMap["crypto_symbol"]; exists {
+				if symbolList, ok := symbolData.([]interface{}); ok {
+					for i := 0; i < len(symbolList); i += 2 {
+						if i+1 < len(symbolList) {
+							symbol := fmt.Sprintf("%v", symbolList[i])
+							count, _ := strconv.ParseInt(fmt.Sprintf("%v", symbolList[i+1]), 10, 64)
+							facets.CryptoSymbols[symbol] = count
 						}
 					}
 				}
@@ -383,53 +477,33 @@ func extractFacets(facetsData interface{}) models.Facets {
 	return facets
 }
 
-func (r *SolrRepository) buildFiltersFromFacets(facetsData interface{}) *models.Filter {
-	filters := models.GetDefaultFilters()
-
-	if facetsData == nil {
-		return &filters
-	}
-
-	// Extract counts from facets and update the default filters
-	facets := extractFacets(facetsData)
-
-	// Update category counts
-	for i, categoryFilter := range filters.Categories {
-		if count, exists := facets.Categories[categoryFilter.Value]; exists {
-			filters.Categories[i].Count = count
-		}
-	}
-
-	return &filters
-}
-
 func cryptoToSolrDoc(crypto *models.Crypto) map[string]interface{} {
 	doc := map[string]interface{}{
-		"id":                  crypto.ID,
-		"symbol":              crypto.Symbol,
-		"name":                crypto.Name,
-		"description":         crypto.Description,
-		"current_price":       crypto.CurrentPrice,
-		"market_cap":          crypto.MarketCap,
-		"market_cap_rank":     crypto.MarketCapRank,
-		"volume_24h":          crypto.Volume24h,
-		"price_change_24h":    crypto.PriceChange24h,
-		"price_change_7d":     crypto.PriceChange7d,
-		"price_change_30d":    crypto.PriceChange30d,
-		"circulating_supply":  crypto.CirculatingSupply,
-		"trending_score":      crypto.TrendingScore,
-		"popularity_score":    crypto.PopularityScore,
-		"category":            crypto.Category,
-		"tags":                crypto.Tags,
-		"platform":            crypto.Platform,
-		"ath":                 crypto.ATH,
-		"ath_date":            crypto.ATHDate.Format(time.RFC3339),
-		"atl":                 crypto.ATL,
-		"atl_date":            crypto.ATLDate.Format(time.RFC3339),
-		"is_active":           crypto.IsActive,
-		"is_trending":         crypto.IsTrending,
-		"last_updated":        crypto.LastUpdated.Format(time.RFC3339),
-		"indexed_at":          crypto.IndexedAt.Format(time.RFC3339),
+		"id":                 crypto.ID,
+		"symbol":             crypto.Symbol,
+		"name":               crypto.Name,
+		"description":        crypto.Description,
+		"current_price":      crypto.CurrentPrice,
+		"market_cap":         crypto.MarketCap,
+		"market_cap_rank":    crypto.MarketCapRank,
+		"volume_24h":         crypto.Volume24h,
+		"price_change_24h":   crypto.PriceChange24h,
+		"price_change_7d":    crypto.PriceChange7d,
+		"price_change_30d":   crypto.PriceChange30d,
+		"circulating_supply": crypto.CirculatingSupply,
+		"trending_score":     crypto.TrendingScore,
+		"popularity_score":   crypto.PopularityScore,
+		"category":           crypto.Category,
+		"tags":               crypto.Tags,
+		"platform":           crypto.Platform,
+		"ath":                crypto.ATH,
+		"ath_date":           crypto.ATHDate.Format(time.RFC3339),
+		"atl":                crypto.ATL,
+		"atl_date":           crypto.ATLDate.Format(time.RFC3339),
+		"is_active":          crypto.IsActive,
+		"is_trending":        crypto.IsTrending,
+		"last_updated":       crypto.LastUpdated.Format(time.RFC3339),
+		"indexed_at":         crypto.IndexedAt.Format(time.RFC3339),
 	}
 
 	// Handle nullable fields
@@ -460,7 +534,102 @@ func determineMatchType(query, symbol, name string) string {
 	if strings.Contains(nameLower, queryLower) {
 		return "name_partial"
 	}
-	return "other"
+	return "partial"
+}
+
+// determineOrderMatchType determines match type for order search results
+func determineOrderMatchType(query, cryptoSymbol, cryptoName string) string {
+	queryLower := strings.ToLower(query)
+	symbolLower := strings.ToLower(cryptoSymbol)
+	nameLower := strings.ToLower(cryptoName)
+
+	if strings.HasPrefix(symbolLower, queryLower) {
+		return "crypto_symbol"
+	}
+	if strings.HasPrefix(nameLower, queryLower) {
+		return "crypto_name"
+	}
+	if strings.Contains(symbolLower, queryLower) {
+		return "crypto_symbol_partial"
+	}
+	if strings.Contains(nameLower, queryLower) {
+		return "crypto_name_partial"
+	}
+	return "partial"
+}
+
+// docToOrderSearchResult converts a SolR document to OrderSearchResult
+func docToOrderSearchResult(doc map[string]interface{}, score float64) models.OrderSearchResult {
+	order := models.Order{
+		ID:           getString(doc, "id"),
+		UserID:       int(getInt64(doc, "user_id")),
+		Type:         getString(doc, "type"),
+		Status:       getString(doc, "status"),
+		OrderKind:    getString(doc, "order_kind"),
+		CryptoSymbol: getString(doc, "crypto_symbol"),
+		CryptoName:   getString(doc, "crypto_name"),
+		Quantity:     getString(doc, "quantity_s"),
+		Price:        getString(doc, "price_s"),
+		TotalAmount:  getString(doc, "total_amount_s"),
+		Fee:          getString(doc, "fee_s"),
+	}
+
+	// Parse dates
+	if createdStr := getString(doc, "created_at"); createdStr != "" {
+		if created, err := time.Parse(time.RFC3339, createdStr); err == nil {
+			order.CreatedAt = created
+		} else {
+			order.CreatedAt = time.Now() // Fallback
+		}
+	} else {
+		order.CreatedAt = time.Now()
+	}
+
+	if updatedStr := getString(doc, "updated_at"); updatedStr != "" {
+		if updated, err := time.Parse(time.RFC3339, updatedStr); err == nil {
+			order.UpdatedAt = updated
+		} else {
+			order.UpdatedAt = time.Now() // Fallback
+		}
+	} else {
+		order.UpdatedAt = time.Now()
+	}
+
+	if executedStr := getString(doc, "executed_at"); executedStr != "" {
+		if executed, err := time.Parse(time.RFC3339, executedStr); err == nil {
+			order.ExecutedAt = &executed
+		}
+	}
+
+	if cancelledStr := getString(doc, "cancelled_at"); cancelledStr != "" {
+		if cancelled, err := time.Parse(time.RFC3339, cancelledStr); err == nil {
+			order.CancelledAt = &cancelled
+		}
+	}
+
+	if errorMsg := getString(doc, "error_message"); errorMsg != "" {
+		order.ErrorMessage = errorMsg
+	}
+
+	return models.OrderSearchResult{
+		Order:     order,
+		Score:     score,
+		MatchType: "",
+	}
+}
+
+// convertOrderResultsToInterface converts []OrderSearchResult to []interface{}
+func convertOrderResultsToInterface(results []models.OrderSearchResult) []interface{} {
+	interfaces := make([]interface{}, len(results))
+	for i, r := range results {
+		interfaces[i] = r
+	}
+	return interfaces
+}
+
+// convertOrderFacetsToInterface converts OrderFacets to interface{}
+func convertOrderFacetsToInterface(facets models.OrderFacets) interface{} {
+	return facets
 }
 
 func calculateSearchVolumeIncrease(trendingScore float64) string {

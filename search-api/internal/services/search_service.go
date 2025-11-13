@@ -14,10 +14,10 @@ import (
 
 // SearchService handles search business logic with caching
 type SearchService struct {
-	solrRepo      repositories.SearchRepository
-	cacheRepo     repositories.CachedSearchRepository
+	solrRepo        repositories.SearchRepository
+	cacheRepo       repositories.CachedSearchRepository
 	trendingService *TrendingService
-	logger        *logrus.Logger
+	logger          *logrus.Logger
 }
 
 // NewSearchService creates a new search service
@@ -28,10 +28,10 @@ func NewSearchService(
 	logger *logrus.Logger,
 ) *SearchService {
 	return &SearchService{
-		solrRepo:      solrRepo,
-		cacheRepo:     cacheRepo,
+		solrRepo:        solrRepo,
+		cacheRepo:       cacheRepo,
 		trendingService: trendingService,
-		logger:        logger,
+		logger:          logger,
 	}
 }
 
@@ -208,8 +208,19 @@ func (s *SearchService) GetCryptoByID(ctx context.Context, id string) (*models.C
 	return crypto, nil
 }
 
+// GetOrderByID gets a single order by ID from SolR
+func (s *SearchService) GetOrderByID(ctx context.Context, orderID string) (*models.Order, error) {
+	// Get from Solr (orders are typically not cached individually, only search results)
+	order, err := s.solrRepo.GetOrderByID(ctx, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get order %s: %w", orderID, err)
+	}
+
+	return order, nil
+}
+
 // GetFilters gets available search filters with caching
-func (s *SearchService) GetFilters(ctx context.Context) (*models.Filter, error) {
+func (s *SearchService) GetFilters(ctx context.Context) (*models.OrderFilter, error) {
 	// Try cache first
 	if filters, found := s.cacheRepo.GetFilters(ctx); found {
 		s.logger.WithField("cache", "hit").Debug("Filters cache hit")
@@ -217,7 +228,7 @@ func (s *SearchService) GetFilters(ctx context.Context) (*models.Filter, error) 
 	}
 
 	// Get from Solr
-	filters, err := s.solrRepo.GetFacets(ctx)
+	filters, err := s.solrRepo.GetOrderFilters(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get filters: %w", err)
 	}
@@ -286,7 +297,7 @@ func (s *SearchService) buildSearchResponse(result *repositories.SearchResult, r
 	hasNext := int64(req.Page) < totalPages
 	hasPrev := req.Page > 1
 
-	pagination := models.Pagination{
+	pagination := models.OrderPagination{
 		Total:      result.Total,
 		Page:       req.Page,
 		Limit:      req.Limit,
@@ -295,17 +306,33 @@ func (s *SearchService) buildSearchResponse(result *repositories.SearchResult, r
 		HasPrev:    hasPrev,
 	}
 
-	queryInfo := models.QueryInfo{
+	queryInfo := models.OrderQueryInfo{
 		Query:           req.Query,
 		ExecutionTimeMS: executionTime.Milliseconds(),
 		CacheHit:        cacheHit,
 		TotalFound:      result.Total,
 	}
 
+	// Convert results to OrderSearchResult models
+	orderResults := make([]models.OrderSearchResult, 0, len(result.Results))
+	for _, r := range result.Results {
+		if or, ok := r.(models.OrderSearchResult); ok {
+			orderResults = append(orderResults, or)
+		}
+	}
+
+	// Extract facets for orders
+	var facets models.OrderFacets
+	if result.Facets != nil {
+		if f, ok := result.Facets.(models.OrderFacets); ok {
+			facets = f
+		}
+	}
+
 	return &dto.SearchResponse{
-		Results:    result.Results,
+		Results:    orderResults,
 		Pagination: pagination,
-		Facets:     result.Facets,
+		Facets:     facets,
 		QueryInfo:  queryInfo,
 	}
 }
@@ -350,7 +377,7 @@ func (s *SearchService) GetMetrics(ctx context.Context) (*SearchMetrics, error) 
 	cacheStats := s.cacheRepo.GetStats()
 
 	totalRequests := cacheStats.LocalHits + cacheStats.LocalMisses +
-					cacheStats.DistributedHits + cacheStats.DistributedMisses
+		cacheStats.DistributedHits + cacheStats.DistributedMisses
 
 	var hitRate float64
 	if totalRequests > 0 {
@@ -361,9 +388,9 @@ func (s *SearchService) GetMetrics(ctx context.Context) (*SearchMetrics, error) 
 	return &SearchMetrics{
 		TotalSearches:       totalRequests,
 		CacheHitRate:        hitRate,
-		AverageResponseTime: 0, // Would be tracked by middleware
+		AverageResponseTime: 0,          // Would be tracked by middleware
 		PopularQueries:      []string{}, // Would be tracked by analytics
-		ErrorRate:           0, // Would be tracked by error monitoring
+		ErrorRate:           0,          // Would be tracked by error monitoring
 	}, nil
 }
 

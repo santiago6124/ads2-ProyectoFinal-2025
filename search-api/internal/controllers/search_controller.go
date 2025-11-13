@@ -89,13 +89,13 @@ func (sc *SearchController) Search(c *gin.Context) {
 
 	// Log successful search
 	sc.logger.WithFields(logrus.Fields{
-		"query":        req.Query,
-		"results":      len(response.Results),
-		"total":        response.Pagination.Total,
-		"time":         time.Since(startTime),
-		"cache_hit":    response.QueryInfo.CacheHit,
-		"user_agent":   c.GetHeader("User-Agent"),
-		"ip":           c.ClientIP(),
+		"query":      req.Query,
+		"results":    len(response.Results),
+		"total":      response.Pagination.Total,
+		"time":       time.Since(startTime),
+		"cache_hit":  response.QueryInfo.CacheHit,
+		"user_agent": c.GetHeader("User-Agent"),
+		"ip":         c.ClientIP(),
 	}).Info("Search completed")
 
 	c.JSON(http.StatusOK, response)
@@ -303,6 +303,57 @@ func (sc *SearchController) GetCryptoByID(c *gin.Context) {
 	})
 }
 
+// GetOrderByID handles GET /api/v1/orders/:id
+func (sc *SearchController) GetOrderByID(c *gin.Context) {
+	startTime := time.Now()
+
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, dto.NewErrorResponse(
+			"MISSING_PARAMETER",
+			"Order ID is required",
+			nil,
+		))
+		return
+	}
+
+	// Execute order lookup
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	order, err := sc.searchService.GetOrderByID(ctx, id)
+	if err != nil {
+		sc.logger.WithFields(logrus.Fields{
+			"error":    err,
+			"order_id": id,
+			"time":     time.Since(startTime),
+		}).Error("Order lookup failed")
+
+		c.JSON(http.StatusNotFound, dto.NewErrorResponse(
+			"ORDER_NOT_FOUND",
+			"Order not found",
+			map[string]interface{}{
+				"id": id,
+			},
+		))
+		return
+	}
+
+	sc.logger.WithFields(logrus.Fields{
+		"order_id": id,
+		"status":   order.Status,
+		"time":     time.Since(startTime),
+	}).Debug("Order lookup completed")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    order,
+		"meta": gin.H{
+			"execution_time_ms": time.Since(startTime).Milliseconds(),
+		},
+	})
+}
+
 // GetFilters handles GET /api/v1/filters
 func (sc *SearchController) GetFilters(c *gin.Context) {
 	startTime := time.Now()
@@ -327,8 +378,10 @@ func (sc *SearchController) GetFilters(c *gin.Context) {
 	}
 
 	sc.logger.WithFields(logrus.Fields{
-		"categories": len(filters.Categories),
-		"time":       time.Since(startTime),
+		"statuses": len(filters.Statuses),
+		"types":    len(filters.Types),
+		"symbols":  len(filters.CryptoSymbols),
+		"time":     time.Since(startTime),
 	}).Debug("Filters lookup completed")
 
 	c.JSON(http.StatusOK, gin.H{

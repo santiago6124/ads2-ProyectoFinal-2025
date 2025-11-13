@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"search-api/internal/cache"
+	"search-api/internal/clients"
 	"search-api/internal/config"
 	"search-api/internal/messaging"
 	"search-api/internal/repositories"
@@ -54,14 +55,18 @@ func main() {
 		RetryDelay: time.Second,
 	})
 
-	// Test Solr connection
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := solrClient.Ping(ctx); err != nil {
+	// Test Solr connection with a short-lived context
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer pingCancel()
+	if err := solrClient.Ping(pingCtx); err != nil {
 		logger.WithError(err).Warn("Solr connection test failed - service will start but may not function properly")
 	} else {
 		logger.Info("Solr connection successful")
 	}
+
+	// Create application-wide context for background workers
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
 
 	// Initialize cache manager
 	cacheConfig := &cache.Config{
@@ -79,7 +84,7 @@ func main() {
 	cacheManager := cache.NewCacheManager(cacheConfig, logger)
 
 	// Test cache connection
-	if err := cacheManager.Ping(ctx); err != nil {
+	if err := cacheManager.Ping(pingCtx); err != nil {
 		logger.WithError(err).Warn("Cache connection test failed - service will continue with local cache only")
 	} else {
 		logger.Info("Cache connection successful")
@@ -89,13 +94,24 @@ func main() {
 	solrRepo := repositories.NewSolrRepository(solrClient)
 	cacheRepo := repositories.NewCacheRepository(cacheManager)
 
+	// Initialize orders-api client
+	ordersClientConfig := &clients.OrdersClientConfig{
+		BaseURL: cfg.OrdersAPI.BaseURL,
+		APIKey:  cfg.OrdersAPI.APIKey,
+		Timeout: time.Duration(cfg.OrdersAPI.Timeout) * time.Millisecond,
+	}
+	ordersClient := clients.NewOrdersClient(ordersClientConfig)
+
+	// Initialize indexing service
+	indexingService := services.NewIndexingService(ordersClient, solrRepo, logger)
+
 	// Initialize trending service
 	trendingConfig := services.DefaultTrendingConfig()
 	trendingService := services.NewTrendingService(solrRepo, trendingConfig, logger)
 
 	// Start trending service
 	go func() {
-		if err := trendingService.Start(ctx); err != nil {
+		if err := trendingService.Start(appCtx); err != nil {
 			logger.WithError(err).Error("Failed to start trending service")
 		}
 	}()
@@ -133,7 +149,7 @@ func main() {
 
 		trendingEventHandler := services.NewTrendingEventHandler(trendingService, logger)
 		var err error
-		consumer, err = messaging.NewConsumer(rabbitConfig, trendingEventHandler, logger)
+		consumer, err = messaging.NewConsumer(rabbitConfig, trendingEventHandler, indexingService, logger)
 		if err != nil {
 			logger.WithError(err).Error("Failed to create RabbitMQ consumer")
 			consumer = nil
@@ -142,7 +158,7 @@ func main() {
 		// Start RabbitMQ consumer
 		if consumer != nil {
 			go func() {
-				if err := consumer.Start(ctx); err != nil {
+				if err := consumer.Start(appCtx); err != nil {
 					logger.WithError(err).Error("Failed to start RabbitMQ consumer")
 				}
 			}()

@@ -1,27 +1,27 @@
 package dto
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// SearchRequest represents a search request with all possible parameters
+// SearchRequest represents a search request for orders with all possible parameters
 type SearchRequest struct {
-	Query           string    `form:"q" json:"query"`
-	Page            int       `form:"page" json:"page" binding:"min=1"`
-	Limit           int       `form:"limit" json:"limit" binding:"min=1,max=100"`
-	Sort            string    `form:"sort" json:"sort"`
-	Category        []string  `form:"category" json:"category"`
-	MinPrice        *float64  `form:"min_price" json:"min_price" binding:"omitempty,min=0"`
-	MaxPrice        *float64  `form:"max_price" json:"max_price" binding:"omitempty,min=0"`
-	MinMarketCap    *int64    `form:"min_market_cap" json:"min_market_cap" binding:"omitempty,min=0"`
-	MaxMarketCap    *int64    `form:"max_market_cap" json:"max_market_cap" binding:"omitempty,min=0"`
-	PriceChange24h  string    `form:"price_change_24h" json:"price_change_24h"`
-	IsTrending      *bool     `form:"is_trending" json:"is_trending"`
-	Platform        string    `form:"platform" json:"platform"`
-	Tags            []string  `form:"tags" json:"tags"`
-	IsActive        *bool     `form:"is_active" json:"is_active"`
+	Query          string   `form:"q" json:"query"`
+	Page           int      `form:"page" json:"page" binding:"min=1"`
+	Limit          int      `form:"limit" json:"limit" binding:"min=1,max=100"`
+	Sort           string   `form:"sort" json:"sort"`
+	Status         []string `form:"status" json:"status"`               // pending, executed, cancelled, failed
+	Type           []string `form:"type" json:"type"`                   // buy, sell
+	OrderKind      []string `form:"order_kind" json:"order_kind"`       // market, limit
+	CryptoSymbol   []string `form:"crypto_symbol" json:"crypto_symbol"` // BTC, ETH, etc
+	UserID         *int     `form:"user_id" json:"user_id"`             // Filter by user ID
+	MinTotalAmount *float64 `form:"min_total_amount" json:"min_total_amount" binding:"omitempty,min=0"`
+	MaxTotalAmount *float64 `form:"max_total_amount" json:"max_total_amount" binding:"omitempty,min=0"`
+	DateFrom       string   `form:"date_from" json:"date_from"` // ISO 8601 date
+	DateTo         string   `form:"date_to" json:"date_to"`     // ISO 8601 date
 }
 
 // TrendingRequest represents a request for trending cryptocurrencies
@@ -55,11 +55,7 @@ func (r *SearchRequest) SetDefaults() {
 		r.Limit = 100
 	}
 	if r.Sort == "" {
-		r.Sort = "market_cap_desc"
-	}
-	if r.IsActive == nil {
-		defaultActive := true
-		r.IsActive = &defaultActive
+		r.Sort = "created_at_desc" // Default: newest first
 	}
 }
 
@@ -115,46 +111,67 @@ func (r *ReindexRequest) SetDefaults() {
 	}
 }
 
-// Validate validates the search request
+// Validate validates the search request for orders
 func (r *SearchRequest) Validate() error {
-	// Validate price range
-	if r.MinPrice != nil && r.MaxPrice != nil && *r.MinPrice > *r.MaxPrice {
-		return NewValidationError("min_price cannot be greater than max_price")
+	// Validate total amount range
+	if r.MinTotalAmount != nil && r.MaxTotalAmount != nil && *r.MinTotalAmount > *r.MaxTotalAmount {
+		return NewValidationError("min_total_amount cannot be greater than max_total_amount")
 	}
 
-	// Validate market cap range
-	if r.MinMarketCap != nil && r.MaxMarketCap != nil && *r.MinMarketCap > *r.MaxMarketCap {
-		return NewValidationError("min_market_cap cannot be greater than max_market_cap")
+	// Validate status
+	validStatuses := map[string]bool{
+		"pending": true, "executed": true, "cancelled": true, "failed": true,
+	}
+	for _, status := range r.Status {
+		if !validStatuses[status] {
+			return NewValidationError("invalid status: " + status)
+		}
 	}
 
-	// Validate price change filter
-	if r.PriceChange24h != "" && r.PriceChange24h != "positive" && r.PriceChange24h != "negative" {
-		return NewValidationError("price_change_24h must be 'positive' or 'negative'")
+	// Validate type
+	validTypes := map[string]bool{
+		"buy": true, "sell": true,
+	}
+	for _, t := range r.Type {
+		if !validTypes[t] {
+			return NewValidationError("invalid type: " + t)
+		}
 	}
 
-	// Validate category
-	validCategories := map[string]bool{
-		"DeFi": true, "NFT": true, "Gaming": true, "Layer1": true, "Layer2": true,
-		"Metaverse": true, "Web3": true, "AI": true, "Infrastructure": true,
-		"Privacy": true, "Oracle": true, "Exchange": true,
+	// Validate order kind
+	validOrderKinds := map[string]bool{
+		"market": true, "limit": true,
 	}
-
-	for _, cat := range r.Category {
-		if !validCategories[cat] {
-			return NewValidationError("invalid category: " + cat)
+	for _, kind := range r.OrderKind {
+		if !validOrderKinds[kind] {
+			return NewValidationError("invalid order_kind: " + kind)
 		}
 	}
 
 	// Validate sort
 	validSorts := map[string]bool{
-		"": true, "price_asc": true, "price_desc": true, "market_cap_desc": true,
-		"market_cap_asc": true, "trending_desc": true, "trending_asc": true,
-		"name_asc": true, "name_desc": true, "volume_desc": true, "volume_asc": true,
-		"change_desc": true, "change_asc": true,
+		"": true, "created_at_desc": true, "created_at_asc": true,
+		"updated_at_desc": true, "updated_at_asc": true,
+		"executed_at_desc": true, "executed_at_asc": true,
+		"total_amount_desc": true, "total_amount_asc": true,
+		"price_desc": true, "price_asc": true,
+		"quantity_desc": true, "quantity_asc": true,
 	}
 
 	if !validSorts[r.Sort] {
 		return NewValidationError("invalid sort option: " + r.Sort)
+	}
+
+	// Validate date range
+	if r.DateFrom != "" && r.DateTo != "" {
+		dateFrom, err1 := time.Parse(time.RFC3339, r.DateFrom)
+		dateTo, err2 := time.Parse(time.RFC3339, r.DateTo)
+		if err1 != nil || err2 != nil {
+			return NewValidationError("date_from and date_to must be in ISO 8601 format")
+		}
+		if dateFrom.After(dateTo) {
+			return NewValidationError("date_from cannot be after date_to")
+		}
 	}
 
 	return nil
@@ -173,11 +190,10 @@ func (r *SearchRequest) ToSolrQuery() map[string]interface{} {
 	if r.Query == "" {
 		params["q"] = "*:*"
 	} else {
-		// Use dismax parser for better relevance
 		params["q"] = r.Query
 		params["defType"] = "edismax"
-		params["qf"] = "name^10 symbol^8 search_text^2"
-		params["pf"] = "name^20 symbol^15"
+		params["qf"] = "crypto_name^10 crypto_symbol^8 search_text^2"
+		params["pf"] = "crypto_name^15 crypto_symbol^10"
 		params["ps"] = "2"
 		params["qs"] = "1"
 	}
@@ -185,76 +201,55 @@ func (r *SearchRequest) ToSolrQuery() map[string]interface{} {
 	// Filters
 	filters := make([]string, 0)
 
-	// Active filter
-	if r.IsActive != nil {
-		filters = append(filters, "is_active:"+strconv.FormatBool(*r.IsActive))
+	// Status filter
+	if len(r.Status) > 0 {
+		filters = append(filters, fmt.Sprintf("status:(%s)", strings.Join(r.Status, " OR ")))
 	}
 
-	// Price filters
-	if r.MinPrice != nil || r.MaxPrice != nil {
-		priceFilter := "current_price:["
-		if r.MinPrice != nil {
-			priceFilter += strconv.FormatFloat(*r.MinPrice, 'f', -1, 64)
-		} else {
-			priceFilter += "*"
+	// Type filter
+	if len(r.Type) > 0 {
+		filters = append(filters, fmt.Sprintf("type:(%s)", strings.Join(r.Type, " OR ")))
+	}
+
+	// Order kind filter
+	if len(r.OrderKind) > 0 {
+		filters = append(filters, fmt.Sprintf("order_kind:(%s)", strings.Join(r.OrderKind, " OR ")))
+	}
+
+	// Crypto symbol filter
+	if len(r.CryptoSymbol) > 0 {
+		filters = append(filters, fmt.Sprintf("crypto_symbol:(%s)", strings.Join(r.CryptoSymbol, " OR ")))
+	}
+
+	// User ID filter
+	if r.UserID != nil {
+		filters = append(filters, fmt.Sprintf("user_id:%d", *r.UserID))
+	}
+
+	// Total amount filters
+	if r.MinTotalAmount != nil || r.MaxTotalAmount != nil {
+		minVal := "*"
+		maxVal := "*"
+		if r.MinTotalAmount != nil {
+			minVal = strconv.FormatFloat(*r.MinTotalAmount, 'f', -1, 64)
 		}
-		priceFilter += " TO "
-		if r.MaxPrice != nil {
-			priceFilter += strconv.FormatFloat(*r.MaxPrice, 'f', -1, 64)
-		} else {
-			priceFilter += "*"
+		if r.MaxTotalAmount != nil {
+			maxVal = strconv.FormatFloat(*r.MaxTotalAmount, 'f', -1, 64)
 		}
-		priceFilter += "]"
-		filters = append(filters, priceFilter)
+		filters = append(filters, fmt.Sprintf("total_amount_d:[%s TO %s]", minVal, maxVal))
 	}
 
-	// Market cap filters
-	if r.MinMarketCap != nil || r.MaxMarketCap != nil {
-		mcFilter := "market_cap:["
-		if r.MinMarketCap != nil {
-			mcFilter += strconv.FormatInt(*r.MinMarketCap, 10)
-		} else {
-			mcFilter += "*"
+	// Date range filter (created_at)
+	if r.DateFrom != "" || r.DateTo != "" {
+		from := "*"
+		to := "*"
+		if r.DateFrom != "" {
+			from = r.DateFrom
 		}
-		mcFilter += " TO "
-		if r.MaxMarketCap != nil {
-			mcFilter += strconv.FormatInt(*r.MaxMarketCap, 10)
-		} else {
-			mcFilter += "*"
+		if r.DateTo != "" {
+			to = r.DateTo
 		}
-		mcFilter += "]"
-		filters = append(filters, mcFilter)
-	}
-
-	// Category filter
-	if len(r.Category) > 0 {
-		categoryFilter := "category:(" + strings.Join(r.Category, " OR ") + ")"
-		filters = append(filters, categoryFilter)
-	}
-
-	// Tags filter
-	if len(r.Tags) > 0 {
-		tagsFilter := "tags:(" + strings.Join(r.Tags, " OR ") + ")"
-		filters = append(filters, tagsFilter)
-	}
-
-	// Platform filter
-	if r.Platform != "" {
-		filters = append(filters, "platform:\""+r.Platform+"\"")
-	}
-
-	// Price change filter
-	if r.PriceChange24h != "" {
-		if r.PriceChange24h == "positive" {
-			filters = append(filters, "price_change_24h:[0 TO *]")
-		} else if r.PriceChange24h == "negative" {
-			filters = append(filters, "price_change_24h:[* TO 0]")
-		}
-	}
-
-	// Trending filter
-	if r.IsTrending != nil {
-		filters = append(filters, "is_trending:"+strconv.FormatBool(*r.IsTrending))
+		filters = append(filters, fmt.Sprintf("created_at:[%s TO %s]", from, to))
 	}
 
 	if len(filters) > 0 {
@@ -262,54 +257,19 @@ func (r *SearchRequest) ToSolrQuery() map[string]interface{} {
 	}
 
 	// Sorting
-	if r.Sort != "" && r.Sort != "relevance" {
-		sortMap := map[string]string{
-			"price_asc":       "current_price asc",
-			"price_desc":      "current_price desc",
-			"market_cap_desc": "market_cap desc",
-			"market_cap_asc":  "market_cap asc",
-			"trending_desc":   "trending_score desc",
-			"trending_asc":    "trending_score asc",
-			"name_asc":        "name_exact asc",
-			"name_desc":       "name_exact desc",
-			"volume_desc":     "volume_24h desc",
-			"volume_asc":      "volume_24h asc",
-			"change_desc":     "price_change_24h desc",
-			"change_asc":      "price_change_24h asc",
-		}
-
-		if solrSort, exists := sortMap[r.Sort]; exists {
-			params["sort"] = solrSort
-		}
+	if r.Sort != "" {
+		params["sort"] = convertOrderSortParam(r.Sort)
+	} else {
+		params["sort"] = "created_at desc"
 	}
 
 	// Pagination
 	params["start"] = r.GetOffset()
 	params["rows"] = r.Limit
 
-	// Faceting
+	// Faceting for orders
 	params["facet"] = "true"
-	params["facet.field"] = []string{"category", "platform"}
-	params["facet.range"] = []string{"current_price", "market_cap"}
-
-	// Price range facets
-	params["facet.range.start"] = 0
-	params["facet.range.end"] = 10000
-	params["facet.range.gap"] = 100
-
-	// Highlighting
-	if r.Query != "" {
-		params["hl"] = "true"
-		params["hl.fl"] = "name,description"
-		params["hl.simple.pre"] = "<mark>"
-		params["hl.simple.post"] = "</mark>"
-		params["hl.fragsize"] = 100
-		params["hl.maxAnalyzedChars"] = 500
-	}
-
-	// Response format
-	params["wt"] = "json"
-	params["indent"] = "true"
+	params["facet.field"] = []string{"status", "type", "order_kind", "crypto_symbol"}
 
 	return params
 }
@@ -324,20 +284,32 @@ func (r *SearchRequest) ToCacheKey() string {
 		"sort:" + r.Sort,
 	}
 
-	if len(r.Category) > 0 {
-		parts = append(parts, "cat:"+strings.Join(r.Category, ","))
+	if len(r.Status) > 0 {
+		parts = append(parts, "status:"+strings.Join(r.Status, ","))
 	}
-
-	if r.MinPrice != nil {
-		parts = append(parts, "minp:"+strconv.FormatFloat(*r.MinPrice, 'f', -1, 64))
+	if len(r.Type) > 0 {
+		parts = append(parts, "type:"+strings.Join(r.Type, ","))
 	}
-
-	if r.MaxPrice != nil {
-		parts = append(parts, "maxp:"+strconv.FormatFloat(*r.MaxPrice, 'f', -1, 64))
+	if len(r.OrderKind) > 0 {
+		parts = append(parts, "kind:"+strings.Join(r.OrderKind, ","))
 	}
-
-	if r.IsTrending != nil {
-		parts = append(parts, "trending:"+strconv.FormatBool(*r.IsTrending))
+	if len(r.CryptoSymbol) > 0 {
+		parts = append(parts, "symbol:"+strings.Join(r.CryptoSymbol, ","))
+	}
+	if r.UserID != nil {
+		parts = append(parts, "user:"+strconv.Itoa(*r.UserID))
+	}
+	if r.MinTotalAmount != nil {
+		parts = append(parts, "min_total:"+strconv.FormatFloat(*r.MinTotalAmount, 'f', -1, 64))
+	}
+	if r.MaxTotalAmount != nil {
+		parts = append(parts, "max_total:"+strconv.FormatFloat(*r.MaxTotalAmount, 'f', -1, 64))
+	}
+	if r.DateFrom != "" {
+		parts = append(parts, "from:"+r.DateFrom)
+	}
+	if r.DateTo != "" {
+		parts = append(parts, "to:"+r.DateTo)
 	}
 
 	return strings.Join(parts, ":")
@@ -360,21 +332,21 @@ func NewValidationError(message string) *ValidationError {
 // IsEmpty checks if the search request is empty (no filters applied)
 func (r *SearchRequest) IsEmpty() bool {
 	return r.Query == "" &&
-		len(r.Category) == 0 &&
-		r.MinPrice == nil &&
-		r.MaxPrice == nil &&
-		r.MinMarketCap == nil &&
-		r.MaxMarketCap == nil &&
-		r.PriceChange24h == "" &&
-		r.IsTrending == nil &&
-		r.Platform == "" &&
-		len(r.Tags) == 0
+		len(r.Status) == 0 &&
+		len(r.Type) == 0 &&
+		len(r.OrderKind) == 0 &&
+		len(r.CryptoSymbol) == 0 &&
+		r.UserID == nil &&
+		r.MinTotalAmount == nil &&
+		r.MaxTotalAmount == nil &&
+		r.DateFrom == "" &&
+		r.DateTo == ""
 }
 
 // GetCacheTTL returns the appropriate cache TTL based on request type
 func (r *SearchRequest) GetCacheTTL() time.Duration {
-	// Popular searches (empty query, trending) get longer cache
-	if r.IsEmpty() || (r.IsTrending != nil && *r.IsTrending) {
+	// Broader searches (empty filters) get a longer cache
+	if r.IsEmpty() {
 		return 10 * time.Minute
 	}
 
@@ -385,4 +357,36 @@ func (r *SearchRequest) GetCacheTTL() time.Duration {
 
 	// Default cache duration
 	return 3 * time.Minute
+}
+
+// convertOrderSortParam converts order sort values to Solr sort syntax
+func convertOrderSortParam(sort string) string {
+	switch sort {
+	case "created_at_desc":
+		return "created_at desc"
+	case "created_at_asc":
+		return "created_at asc"
+	case "updated_at_desc":
+		return "updated_at desc"
+	case "updated_at_asc":
+		return "updated_at asc"
+	case "executed_at_desc":
+		return "executed_at desc"
+	case "executed_at_asc":
+		return "executed_at asc"
+	case "total_amount_desc":
+		return "total_amount_d desc"
+	case "total_amount_asc":
+		return "total_amount_d asc"
+	case "price_desc":
+		return "price desc"
+	case "price_asc":
+		return "price asc"
+	case "quantity_desc":
+		return "quantity desc"
+	case "quantity_asc":
+		return "quantity asc"
+	default:
+		return "created_at desc"
+	}
 }

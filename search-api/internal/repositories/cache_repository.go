@@ -26,8 +26,8 @@ type CachedSearchRepository interface {
 	SetSuggestions(ctx context.Context, query string, limit int, suggestions []models.Suggestion) error
 	GetCrypto(ctx context.Context, id string) (*models.Crypto, bool)
 	SetCrypto(ctx context.Context, crypto *models.Crypto) error
-	GetFilters(ctx context.Context) (*models.Filter, bool)
-	SetFilters(ctx context.Context, filters *models.Filter) error
+	GetFilters(ctx context.Context) (*models.OrderFilter, bool)
+	SetFilters(ctx context.Context, filters *models.OrderFilter) error
 	InvalidateSearch(ctx context.Context, pattern string) error
 	InvalidateAll(ctx context.Context) error
 	GetStats() *cache.CacheStats
@@ -127,11 +127,11 @@ func (r *CacheRepository) SetCrypto(ctx context.Context, crypto *models.Crypto) 
 }
 
 // GetFilters retrieves filter data from cache
-func (r *CacheRepository) GetFilters(ctx context.Context) (*models.Filter, bool) {
+func (r *CacheRepository) GetFilters(ctx context.Context) (*models.OrderFilter, bool) {
 	key := r.keyBuilder.FiltersKey()
 
 	if value, found := r.cacheManager.Get(ctx, key); found {
-		if filters, ok := value.(*models.Filter); ok {
+		if filters, ok := value.(*models.OrderFilter); ok {
 			return filters, true
 		}
 	}
@@ -140,7 +140,7 @@ func (r *CacheRepository) GetFilters(ctx context.Context) (*models.Filter, bool)
 }
 
 // SetFilters stores filter data in cache
-func (r *CacheRepository) SetFilters(ctx context.Context, filters *models.Filter) error {
+func (r *CacheRepository) SetFilters(ctx context.Context, filters *models.OrderFilter) error {
 	key := r.keyBuilder.FiltersKey()
 	ttl := 10 * time.Minute // Longer TTL for filter data
 
@@ -176,69 +176,58 @@ func (r *CacheRepository) buildSearchKey(req *dto.SearchRequest) string {
 		filters["sort"] = req.Sort
 	}
 
-	if len(req.Category) > 0 {
-		filters["category"] = req.Category
+	if len(req.Status) > 0 {
+		filters["status"] = req.Status
 	}
 
-	if req.MinPrice != nil {
-		filters["min_price"] = *req.MinPrice
+	if len(req.Type) > 0 {
+		filters["type"] = req.Type
 	}
 
-	if req.MaxPrice != nil {
-		filters["max_price"] = *req.MaxPrice
+	if len(req.OrderKind) > 0 {
+		filters["order_kind"] = req.OrderKind
 	}
 
-	if req.MinMarketCap != nil {
-		filters["min_mc"] = *req.MinMarketCap
+	if len(req.CryptoSymbol) > 0 {
+		filters["crypto_symbol"] = req.CryptoSymbol
 	}
 
-	if req.MaxMarketCap != nil {
-		filters["max_mc"] = *req.MaxMarketCap
+	if req.UserID != nil {
+		filters["user_id"] = *req.UserID
 	}
 
-	if req.PriceChange24h != "" {
-		filters["change"] = req.PriceChange24h
+	if req.MinTotalAmount != nil {
+		filters["min_total_amount"] = *req.MinTotalAmount
 	}
 
-	if req.IsTrending != nil {
-		filters["trending"] = *req.IsTrending
+	if req.MaxTotalAmount != nil {
+		filters["max_total_amount"] = *req.MaxTotalAmount
 	}
 
-	if req.Platform != "" {
-		filters["platform"] = req.Platform
+	if req.DateFrom != "" {
+		filters["date_from"] = req.DateFrom
 	}
 
-	if len(req.Tags) > 0 {
-		filters["tags"] = req.Tags
+	if req.DateTo != "" {
+		filters["date_to"] = req.DateTo
 	}
 
 	return r.keyBuilder.SearchKey(req.Query, req.Page, req.Limit, filters)
 }
 
 func (r *CacheRepository) getSearchCacheTTL(req *dto.SearchRequest) time.Duration {
-	// Dynamic TTL based on search characteristics
-
-	// Empty queries (homepage) get longer cache
-	if req.Query == "" && len(req.Category) == 0 {
+	if req.IsEmpty() {
 		return 10 * time.Minute
 	}
 
-	// Trending searches get medium cache
-	if req.IsTrending != nil && *req.IsTrending {
+	if req.Query != "" {
 		return 5 * time.Minute
 	}
 
-	// Specific searches get shorter cache
-	if req.Query != "" {
+	if r.hasFilters(req) {
 		return 3 * time.Minute
 	}
 
-	// Filtered searches get shortest cache
-	if r.hasFilters(req) {
-		return 2 * time.Minute
-	}
-
-	// Default cache duration
 	return 5 * time.Minute
 }
 
@@ -258,20 +247,21 @@ func (r *CacheRepository) getTrendingCacheTTL(period string) time.Duration {
 }
 
 func (r *CacheRepository) hasFilters(req *dto.SearchRequest) bool {
-	return len(req.Category) > 0 ||
-		req.MinPrice != nil ||
-		req.MaxPrice != nil ||
-		req.MinMarketCap != nil ||
-		req.MaxMarketCap != nil ||
-		req.PriceChange24h != "" ||
-		req.Platform != "" ||
-		len(req.Tags) > 0
+	return len(req.Status) > 0 ||
+		len(req.Type) > 0 ||
+		len(req.OrderKind) > 0 ||
+		len(req.CryptoSymbol) > 0 ||
+		req.UserID != nil ||
+		req.MinTotalAmount != nil ||
+		req.MaxTotalAmount != nil ||
+		req.DateFrom != "" ||
+		req.DateTo != ""
 }
 
 // CacheWarmer provides cache warming functionality
 type CacheWarmer struct {
-	cacheRepo   CachedSearchRepository
-	searchRepo  SearchRepository
+	cacheRepo  CachedSearchRepository
+	searchRepo SearchRepository
 }
 
 // NewCacheWarmer creates a new cache warmer
@@ -285,7 +275,7 @@ func NewCacheWarmer(cacheRepo CachedSearchRepository, searchRepo SearchRepositor
 // WarmPopularSearches pre-loads popular search queries into cache
 func (cw *CacheWarmer) WarmPopularSearches(ctx context.Context) error {
 	popularQueries := []string{
-		"",           // Empty query (homepage)
+		"", // Empty query (homepage)
 		"bitcoin",
 		"ethereum",
 		"dogecoin",
@@ -365,7 +355,7 @@ func (cw *CacheWarmer) WarmFilters(ctx context.Context) error {
 	}
 
 	// Execute filters query and cache result
-	filters, err := cw.searchRepo.GetFacets(ctx)
+	filters, err := cw.searchRepo.GetOrderFilters(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to warm filters cache: %w", err)
 	}

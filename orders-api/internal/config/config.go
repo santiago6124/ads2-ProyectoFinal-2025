@@ -35,24 +35,25 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	URI                string        `json:"uri"`
-	Database           string        `json:"database"`
-	Collection         string        `json:"collection"`
-	MaxPoolSize        uint64        `json:"max_pool_size"`
-	MinPoolSize        uint64        `json:"min_pool_size"`
-	MaxConnIdleTime    time.Duration `json:"max_conn_idle_time"`
-	ConnectionTimeout  time.Duration `json:"connection_timeout"`
-	SocketTimeout      time.Duration `json:"socket_timeout"`
+	URI                    string        `json:"uri"`
+	Database               string        `json:"database"`
+	Collection             string        `json:"collection"`
+	MaxPoolSize            uint64        `json:"max_pool_size"`
+	MinPoolSize            uint64        `json:"min_pool_size"`
+	MaxConnIdleTime        time.Duration `json:"max_conn_idle_time"`
+	ConnectionTimeout      time.Duration `json:"connection_timeout"`
+	SocketTimeout          time.Duration `json:"socket_timeout"`
 	ServerSelectionTimeout time.Duration `json:"server_selection_timeout"`
 }
 
 type AuthConfig struct {
-	SecretKey       string   `json:"secret_key"`
-	Issuer          string   `json:"issuer"`
-	Audience        string   `json:"audience"`
+	SecretKey       string        `json:"secret_key"`
+	Issuer          string        `json:"issuer"`
+	Audience        string        `json:"audience"`
 	TokenExpiry     time.Duration `json:"token_expiry"`
-	SkipPaths       []string `json:"skip_paths"`
-	PublicEndpoints []string `json:"public_endpoints"`
+	SkipPaths       []string      `json:"skip_paths"`
+	PublicEndpoints []string      `json:"public_endpoints"`
+	InternalAPIKey  string        `json:"internal_api_key"`
 }
 
 type LoggingConfig struct {
@@ -112,11 +113,11 @@ type FeeConfig struct {
 }
 
 type WorkerConfig struct {
-	PoolSize    int           `json:"pool_size"`
-	QueueSize   int           `json:"queue_size"`
-	Timeout     time.Duration `json:"timeout"`
-	MaxRetries  int           `json:"max_retries"`
-	RetryDelay  time.Duration `json:"retry_delay"`
+	PoolSize   int           `json:"pool_size"`
+	QueueSize  int           `json:"queue_size"`
+	Timeout    time.Duration `json:"timeout"`
+	MaxRetries int           `json:"max_retries"`
+	RetryDelay time.Duration `json:"retry_delay"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -166,10 +167,11 @@ func loadDatabaseConfig() *DatabaseConfig {
 
 func loadAuthConfig() *AuthConfig {
 	return &AuthConfig{
-		SecretKey:   getEnv("JWT_SECRET_KEY", "your-super-secret-key-change-this-in-production"),
-		Issuer:      getEnv("JWT_ISSUER", "orders-api"),
-		Audience:    getEnv("JWT_AUDIENCE", "cryptosim"),
-		TokenExpiry: getEnvAsDuration("JWT_TOKEN_EXPIRY", 24*time.Hour),
+		SecretKey:      getEnv("JWT_SECRET_KEY", "your-super-secret-key-change-this-in-production"),
+		Issuer:         getEnv("JWT_ISSUER", "orders-api"),
+		Audience:       getEnv("JWT_AUDIENCE", "cryptosim"),
+		TokenExpiry:    getEnvAsDuration("JWT_TOKEN_EXPIRY", 24*time.Hour),
+		InternalAPIKey: getEnv("ORDERS_INTERNAL_API_KEY", ""),
 		SkipPaths: getEnvAsSlice("AUTH_SKIP_PATHS", []string{
 			"/health",
 			"/health/live",
@@ -322,6 +324,7 @@ func (c *Config) ToAuthConfig() *middleware.AuthConfig {
 		Audience:        c.Auth.Audience,
 		SkipPaths:       c.Auth.SkipPaths,
 		PublicEndpoints: c.Auth.PublicEndpoints,
+		InternalAPIKey:  c.Auth.InternalAPIKey,
 	}
 }
 
@@ -370,7 +373,6 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 	return defaultValue
 }
 
-
 func getEnvAsInt64(key string, defaultValue int64) int64 {
 	if value, exists := os.LookupEnv(key); exists {
 		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
@@ -388,7 +390,6 @@ func getEnvAsUint64(key string, defaultValue uint64) uint64 {
 	}
 	return defaultValue
 }
-
 
 func getEnvAsDecimal(key string, defaultValue decimal.Decimal) decimal.Decimal {
 	if value, exists := os.LookupEnv(key); exists {
@@ -427,4 +428,3 @@ func (c *Config) Validate() error {
 
 	return nil
 }
-

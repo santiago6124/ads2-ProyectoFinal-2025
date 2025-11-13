@@ -2,8 +2,8 @@ package dto
 
 import (
 	"fmt"
-	"time"
 	"search-api/internal/models"
+	"time"
 )
 
 // APIResponse represents the standard API response format
@@ -28,12 +28,12 @@ type Meta struct {
 	Version   string    `json:"version,omitempty"`
 }
 
-// SearchResponse represents the search API response
+// SearchResponse represents the search API response for orders
 type SearchResponse struct {
-	Results    []models.SearchResult `json:"results"`
-	Pagination models.Pagination     `json:"pagination"`
-	Facets     models.Facets         `json:"facets"`
-	QueryInfo  models.QueryInfo      `json:"query_info"`
+	Results    []models.OrderSearchResult `json:"results"`
+	Pagination models.OrderPagination      `json:"pagination"`
+	Facets     models.OrderFacets          `json:"facets"`
+	QueryInfo  models.OrderQueryInfo       `json:"query_info"`
 }
 
 // TrendingResponse represents the trending API response
@@ -58,7 +58,7 @@ type CryptoDetailsResponse struct {
 
 // FiltersResponse represents the filters API response
 type FiltersResponse struct {
-	Filters models.Filter `json:"filters"`
+	Filters models.OrderFilter `json:"filters"`
 }
 
 // ReindexResponse represents the reindex job response
@@ -228,14 +228,14 @@ func (r *APIResponse) WithRequestID(requestID string) *APIResponse {
 	return r
 }
 
-// BuildSearchResponse builds a search response with pagination and facets
-func BuildSearchResponse(results []models.SearchResult, request *SearchRequest, total int64, facets models.Facets, queryInfo models.QueryInfo) *SearchResponse {
+// BuildSearchResponse builds a search response with pagination and facets for orders
+func BuildSearchResponse(results []models.OrderSearchResult, request *SearchRequest, total int64, facets models.OrderFacets, queryInfo models.OrderQueryInfo) *SearchResponse {
 	// Calculate pagination
 	totalPages := (total + int64(request.Limit) - 1) / int64(request.Limit)
 	hasNext := int64(request.Page) < totalPages
 	hasPrev := request.Page > 1
 
-	pagination := models.Pagination{
+	pagination := models.OrderPagination{
 		Total:      total,
 		Page:       request.Page,
 		Limit:      request.Limit,

@@ -11,14 +11,14 @@ import (
 
 // QueryBuilder helps build complex Solr queries
 type QueryBuilder struct {
-	query    string
-	filters  []string
-	sort     string
-	facets   []FacetConfig
-	fields   []string
-	start    int
-	rows     int
-	params   map[string]interface{}
+	query   string
+	filters []string
+	sort    string
+	facets  []FacetConfig
+	fields  []string
+	start   int
+	rows    int
+	params  map[string]interface{}
 }
 
 // FacetConfig represents a facet configuration
@@ -213,95 +213,94 @@ func (qb *QueryBuilder) Build() map[string]interface{} {
 	return params
 }
 
-// BuildFromRequest builds a query from SearchRequest
+// BuildFromRequest builds a query from SearchRequest for orders
 func BuildFromRequest(req *dto.SearchRequest) map[string]interface{} {
 	qb := NewQueryBuilder()
 
 	// Main query
 	if req.Query != "" {
 		qb.SetQuery(req.Query)
-		qb.EnableDisMax("name^10 symbol^8 search_text^2", "name^20 symbol^15")
-		qb.EnableHighlighting("name", "description")
+		qb.EnableDisMax("crypto_name^10 crypto_symbol^8 search_text^2", "crypto_name^20 crypto_symbol^15")
+		qb.EnableHighlighting("crypto_name", "crypto_symbol")
 	} else {
 		qb.SetQuery("*:*")
 	}
 
-	// Active filter (default to true)
-	if req.IsActive != nil {
-		qb.AddFilter(fmt.Sprintf("is_active:%t", *req.IsActive))
-	} else {
-		qb.AddFilter("is_active:true")
+	// Status filter
+	if len(req.Status) > 0 {
+		statusFilter := fmt.Sprintf("status:(%s)", strings.Join(req.Status, " OR "))
+		qb.AddFilter(statusFilter)
 	}
 
-	// Price filters
-	if req.MinPrice != nil || req.MaxPrice != nil {
-		priceFilter := buildRangeFilter("current_price", req.MinPrice, req.MaxPrice)
-		qb.AddFilter(priceFilter)
+	// Type filter (buy/sell)
+	if len(req.Type) > 0 {
+		typeFilter := fmt.Sprintf("type:(%s)", strings.Join(req.Type, " OR "))
+		qb.AddFilter(typeFilter)
 	}
 
-	// Market cap filters
-	if req.MinMarketCap != nil || req.MaxMarketCap != nil {
-		mcFilter := buildRangeFilterInt("market_cap", req.MinMarketCap, req.MaxMarketCap)
-		qb.AddFilter(mcFilter)
+	// Order kind filter (market/limit)
+	if len(req.OrderKind) > 0 {
+		kindFilter := fmt.Sprintf("order_kind:(%s)", strings.Join(req.OrderKind, " OR "))
+		qb.AddFilter(kindFilter)
 	}
 
-	// Category filter
-	if len(req.Category) > 0 {
-		categoryFilter := fmt.Sprintf("category:(%s)", strings.Join(req.Category, " OR "))
-		qb.AddFilter(categoryFilter)
+	// Crypto symbol filter
+	if len(req.CryptoSymbol) > 0 {
+		symbolFilter := fmt.Sprintf("crypto_symbol:(%s)", strings.Join(req.CryptoSymbol, " OR "))
+		qb.AddFilter(symbolFilter)
 	}
 
-	// Tags filter
-	if len(req.Tags) > 0 {
-		tagsFilter := fmt.Sprintf("tags:(%s)", strings.Join(req.Tags, " OR "))
-		qb.AddFilter(tagsFilter)
+	// User ID filter
+	if req.UserID != nil {
+		qb.AddFilter(fmt.Sprintf("user_id:%d", *req.UserID))
 	}
 
-	// Platform filter
-	if req.Platform != "" {
-		qb.AddFilter(fmt.Sprintf("platform:\"%s\"", req.Platform))
+	// Total amount filters
+	if req.MinTotalAmount != nil || req.MaxTotalAmount != nil {
+		amountFilter := buildRangeFilter("total_amount_d", req.MinTotalAmount, req.MaxTotalAmount)
+		qb.AddFilter(amountFilter)
 	}
 
-	// Price change filter
-	if req.PriceChange24h != "" {
-		switch req.PriceChange24h {
-		case "positive":
-			qb.AddFilter("price_change_24h:[0 TO *]")
-		case "negative":
-			qb.AddFilter("price_change_24h:[* TO 0}")
+	// Date range filters
+	if req.DateFrom != "" || req.DateTo != "" {
+		dateFilter := buildDateRangeFilter("created_at", req.DateFrom, req.DateTo)
+		if dateFilter != "" {
+			qb.AddFilter(dateFilter)
 		}
-	}
-
-	// Trending filter
-	if req.IsTrending != nil {
-		qb.AddFilter(fmt.Sprintf("is_trending:%t", *req.IsTrending))
 	}
 
 	// Sort
 	if req.Sort != "" {
-		solrSort := convertSortParam(req.Sort)
+		solrSort := convertOrderSortParam(req.Sort)
 		qb.SetSort(solrSort)
+	} else {
+		// Default sort: newest first
+		qb.SetSort("created_at desc")
 	}
 
 	// Pagination
 	qb.SetPagination(req.GetOffset(), req.Limit)
 
 	// Add facets for filtering
-	qb.AddFieldFacet("category", map[string]interface{}{
-		"mincount": 1,
-		"limit":    20,
-	})
-
-	qb.AddFieldFacet("platform", map[string]interface{}{
+	qb.AddFieldFacet("status", map[string]interface{}{
 		"mincount": 1,
 		"limit":    10,
 	})
 
-	// Add price range facets
-	qb.AddRangeFacet("current_price", 0, 10000, 10)
+	qb.AddFieldFacet("type", map[string]interface{}{
+		"mincount": 1,
+		"limit":    10,
+	})
 
-	// Add market cap range facets
-	qb.AddRangeFacet("market_cap", 0, 10000000000, 1000000000)
+	qb.AddFieldFacet("order_kind", map[string]interface{}{
+		"mincount": 1,
+		"limit":    10,
+	})
+
+	qb.AddFieldFacet("crypto_symbol", map[string]interface{}{
+		"mincount": 1,
+		"limit":    20,
+	})
 
 	return qb.Build()
 }
@@ -411,6 +410,49 @@ func convertSortParam(sort string) string {
 	}
 
 	return ""
+}
+
+// convertOrderSortParam converts order sort parameters to Solr sort syntax
+func convertOrderSortParam(sort string) string {
+	sortMap := map[string]string{
+		"created_at_desc":   "created_at desc",
+		"created_at_asc":    "created_at asc",
+		"updated_at_desc":   "updated_at desc",
+		"updated_at_asc":    "updated_at asc",
+		"executed_at_desc":  "executed_at desc",
+		"executed_at_asc":   "executed_at asc",
+		"total_amount_desc": "total_amount_d desc",
+		"total_amount_asc":  "total_amount_d asc",
+		"price_desc":        "price desc",
+		"price_asc":         "price asc",
+		"quantity_desc":     "quantity desc",
+		"quantity_asc":      "quantity asc",
+	}
+
+	if solrSort, exists := sortMap[sort]; exists {
+		return solrSort
+	}
+
+	return "created_at desc" // Default sort
+}
+
+// buildDateRangeFilter builds a date range filter for Solr
+func buildDateRangeFilter(field, dateFrom, dateTo string) string {
+	fromStr := "*"
+	toStr := "*"
+
+	if dateFrom != "" {
+		fromStr = dateFrom
+	}
+	if dateTo != "" {
+		toStr = dateTo
+	}
+
+	if fromStr == "*" && toStr == "*" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:[%s TO %s]", field, fromStr, toStr)
 }
 
 func escapeQueryChars(query string) string {
