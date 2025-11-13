@@ -1,6 +1,6 @@
 # 📈 Market Data API - CryptoSim Platform
 
-Microservicio de datos de mercado en tiempo real con integración a APIs externas (CoinGecko, Binance).
+Microservicio de datos de mercado en tiempo real con integración a CoinGecko API.
 
 ## 🚀 Quick Start (Recommended)
 
@@ -29,8 +29,7 @@ make logs-market
 - **Redis 7** (`shared-redis`) - Cache de precios con TTL corto (30s)
 
 ### APIs Externas:
-- **CoinGecko API** - Precios y datos de mercado
-- **Binance API** - Precios en tiempo real (opcional)
+- **CoinGecko API** - Precios y datos de mercado en tiempo real (19,000+ criptomonedas)
 
 ### Es consumido por:
 - Orders API (verificación de precios)
@@ -41,58 +40,70 @@ make logs-market
 
 ## ⚡ Características
 
-- **Precios en Tiempo Real**: Actualización cada 30 segundos
-- **Cache Inteligente**: Redis con TTL automático
-- **WebSockets** (planeado): Stream de precios en tiempo real
-- **Históricos**: Datos históricos de precios
-- **Múltiples Fuentes**: Failover entre CoinGecko y Binance
+- **Precios en Tiempo Real**: Integración directa con CoinGecko API
+- **Cache en Memoria**: Cache local con TTL configurable (30 segundos por defecto)
+- **Históricos**: Datos históricos de precios con múltiples intervalos (1m, 5m, 15m, 1h, 4h, 1d, 1w)
+- **Rate Limiting**: Control de límites de la API (50 requests/minuto en free tier)
+- **Soporte Amplio**: Más de 50 criptomonedas populares mapeadas
 
 ## 📊 Endpoints Principales
 
 ### Obtener Precio de una Cripto
 ```http
-GET /api/market/price/:symbol
+GET /api/v1/prices/:symbol
 ```
 
 Ejemplo:
 ```bash
-curl http://localhost:8004/api/market/price/BTC
+curl http://localhost:8004/api/v1/prices/BTC
 ```
 
 Respuesta:
 ```json
 {
   "symbol": "BTC",
-  "price": 45000.50,
-  "timestamp": 1699123456,
+  "name": "BTC",
+  "price": 110356.09,
+  "change_24h": 1.41,
+  "market_cap": 2096765764086.71,
+  "volume": 288465858972.93,
+  "timestamp": 1763047843,
   "source": "coingecko"
 }
 ```
 
 ### Obtener Múltiples Precios
 ```http
-GET /api/market/prices?symbols=BTC,ETH,USDT
+GET /api/v1/prices?symbols=BTC,ETH,SOL
 ```
+
+### Obtener Todos los Precios Populares
+```http
+GET /api/v1/prices
+```
+Retorna las 10 criptomonedas más populares por defecto.
 
 ### Histórico de Precios
 ```http
-GET /api/market/history/:symbol?interval=1h&from=1699000000&to=1699123456
+GET /api/v1/history/:symbol?interval=1h&limit=24
 ```
+
+**Intervalos soportados:** `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`
 
 ### Estadísticas de Mercado
 ```http
-GET /api/market/stats/:symbol
+GET /api/v1/market/stats
 ```
 
 Respuesta:
 ```json
 {
-  "symbol": "BTC",
-  "high_24h": 46000.00,
-  "low_24h": 44000.00,
-  "volume_24h": 987654321,
-  "market_cap": 876543210000,
-  "price_change_24h": 2.5
+  "totalMarketCap": 35642757098220.65,
+  "totalVolume24h": 2487980016320.79,
+  "btcDominance": 5.90,
+  "ethDominance": 1.32,
+  "activeCryptos": 10,
+  "timestamp": 1763047937
 }
 ```
 
@@ -103,9 +114,11 @@ SERVER_PORT=8004
 REDIS_URL=redis://shared-redis:6379
 ENVIRONMENT=development
 
-# API Keys (opcional)
+# CoinGecko API (opcional - funciona sin API key en free tier)
 COINGECKO_API_KEY=your-api-key
-BINANCE_API_KEY=your-api-key
+COINGECKO_BASE_URL=https://api.coingecko.com/api/v3
+COINGECKO_RATE_LIMIT=50
+COINGECKO_TIMEOUT=10s
 ```
 
 ## 🧪 Testing
@@ -124,9 +137,10 @@ docker-compose restart shared-redis
 ```
 
 ### API externa no responde
-- Verificar API keys en `.env`
+- Verificar API key de CoinGecko en `.env` (opcional, funciona sin API key en free tier)
 - Ver logs: `make logs-market`
-- Revisar rate limits de CoinGecko/Binance
+- Revisar rate limits de CoinGecko (50 requests/minuto en free tier)
+- Verificar conexión a internet
 
 ## 📚 Documentación
 

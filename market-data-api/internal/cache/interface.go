@@ -156,35 +156,35 @@ type CacheConfig struct {
 	ClusterNodes  []string `json:"cluster_nodes"`
 
 	// SSL/TLS
-	EnableTLS        bool   `json:"enable_tls"`
-	TLSCertFile      string `json:"tls_cert_file"`
-	TLSKeyFile       string `json:"tls_key_file"`
-	TLSCAFile        string `json:"tls_ca_file"`
-	TLSSkipVerify    bool   `json:"tls_skip_verify"`
+	EnableTLS     bool   `json:"enable_tls"`
+	TLSCertFile   string `json:"tls_cert_file"`
+	TLSKeyFile    string `json:"tls_key_file"`
+	TLSCAFile     string `json:"tls_ca_file"`
+	TLSSkipVerify bool   `json:"tls_skip_verify"`
 
 	// Performance tuning
 	EnablePipelining bool `json:"enable_pipelining"`
 	PipelineSize     int  `json:"pipeline_size"`
 
 	// Monitoring
-	EnableMetrics    bool          `json:"enable_metrics"`
-	MetricsInterval  time.Duration `json:"metrics_interval"`
+	EnableMetrics   bool          `json:"enable_metrics"`
+	MetricsInterval time.Duration `json:"metrics_interval"`
 }
 
 // CacheMetrics represents cache performance metrics
 type CacheMetrics struct {
 	// Operation counts
-	GetCount    int64 `json:"get_count"`
-	SetCount    int64 `json:"set_count"`
-	DelCount    int64 `json:"del_count"`
-	HitCount    int64 `json:"hit_count"`
-	MissCount   int64 `json:"miss_count"`
-	ErrorCount  int64 `json:"error_count"`
+	GetCount   int64 `json:"get_count"`
+	SetCount   int64 `json:"set_count"`
+	DelCount   int64 `json:"del_count"`
+	HitCount   int64 `json:"hit_count"`
+	MissCount  int64 `json:"miss_count"`
+	ErrorCount int64 `json:"error_count"`
 
 	// Performance metrics
-	AvgLatency    time.Duration `json:"avg_latency"`
-	MaxLatency    time.Duration `json:"max_latency"`
-	MinLatency    time.Duration `json:"min_latency"`
+	AvgLatency time.Duration `json:"avg_latency"`
+	MaxLatency time.Duration `json:"max_latency"`
+	MinLatency time.Duration `json:"min_latency"`
 
 	// Connection metrics
 	ActiveConnections int `json:"active_connections"`
@@ -192,13 +192,13 @@ type CacheMetrics struct {
 	TotalConnections  int `json:"total_connections"`
 
 	// Memory usage
-	UsedMemory    int64   `json:"used_memory"`
-	MaxMemory     int64   `json:"max_memory"`
-	MemoryUsage   float64 `json:"memory_usage_percent"`
+	UsedMemory  int64   `json:"used_memory"`
+	MaxMemory   int64   `json:"max_memory"`
+	MemoryUsage float64 `json:"memory_usage_percent"`
 
 	// Cache effectiveness
-	HitRatio      float64   `json:"hit_ratio"`
-	LastUpdated   time.Time `json:"last_updated"`
+	HitRatio    float64   `json:"hit_ratio"`
+	LastUpdated time.Time `json:"last_updated"`
 }
 
 // SpecializedCache interfaces for specific data types
@@ -225,9 +225,9 @@ type PriceCache interface {
 	SetOrderBook(ctx context.Context, symbol string, orderBook *models.OrderBook, ttl time.Duration) error
 	GetOrderBook(ctx context.Context, symbol string) (*models.OrderBook, error)
 
-	// Statistical data operations
-	SetStatistics(ctx context.Context, symbol string, stats *models.StatisticalData, ttl time.Duration) error
-	GetStatistics(ctx context.Context, symbol string) (*models.StatisticalData, error)
+	// Statistical data operations (commented out - StatisticalData not implemented)
+	// SetStatistics(ctx context.Context, symbol string, stats *models.StatisticalData, ttl time.Duration) error
+	// GetStatistics(ctx context.Context, symbol string) (*models.StatisticalData, error)
 
 	// Technical indicators operations
 	SetTechnicalIndicators(ctx context.Context, symbol string, indicators *models.TechnicalIndicators, ttl time.Duration) error
@@ -273,10 +273,10 @@ type AggregatedPoint struct {
 
 // TimeSeriesInfo provides metadata about time-series data
 type TimeSeriesInfo struct {
-	Key         string    `json:"key"`
-	FirstTS     time.Time `json:"first_timestamp"`
-	LastTS      time.Time `json:"last_timestamp"`
-	TotalPoints int64     `json:"total_points"`
+	Key         string        `json:"key"`
+	FirstTS     time.Time     `json:"first_timestamp"`
+	LastTS      time.Time     `json:"last_timestamp"`
+	TotalPoints int64         `json:"total_points"`
 	Retention   time.Duration `json:"retention"`
 }
 
@@ -334,12 +334,12 @@ func (e *CacheError) Error() string {
 
 // Common error codes
 const (
-	ErrCodeKeyNotFound     = "KEY_NOT_FOUND"
+	ErrCodeKeyNotFound      = "KEY_NOT_FOUND"
 	ErrCodeConnectionFailed = "CONNECTION_FAILED"
-	ErrCodeTimeout         = "TIMEOUT"
-	ErrCodeSerialization   = "SERIALIZATION_ERROR"
-	ErrCodeInvalidKey      = "INVALID_KEY"
-	ErrCodeCacheFullَ       = "CACHE_FULL"
+	ErrCodeTimeout          = "TIMEOUT"
+	ErrCodeSerialization    = "SERIALIZATION_ERROR"
+	ErrCodeInvalidKey       = "INVALID_KEY"
+	ErrCodeCacheFull        = "CACHE_FULL"
 )
 
 // NewCacheError creates a new cache error

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -269,7 +268,6 @@ func (pc *RedisPriceCache) SetOrderBook(ctx context.Context, symbol string, orde
 	metadata := map[string]interface{}{
 		"symbol":    orderBook.Symbol,
 		"timestamp": orderBook.Timestamp.Unix(),
-		"source":    orderBook.Source,
 	}
 	metadataData, _ := json.Marshal(metadata)
 	pipe.HSet(key, "metadata", metadataData)
@@ -311,9 +309,7 @@ func (pc *RedisPriceCache) GetOrderBook(ctx context.Context, symbol string) (*mo
 			if timestamp, ok := metadata["timestamp"].(float64); ok {
 				orderBook.Timestamp = time.Unix(int64(timestamp), 0)
 			}
-			if source, ok := metadata["source"].(string); ok {
-				orderBook.Source = source
-			}
+			// Source field removed - OrderBook doesn't have Source field
 		}
 	}
 
@@ -336,34 +332,28 @@ func (pc *RedisPriceCache) GetOrderBook(ctx context.Context, symbol string) (*mo
 	return orderBook, nil
 }
 
-// Statistical data operations
-
-func (pc *RedisPriceCache) SetStatistics(ctx context.Context, symbol string, stats *models.StatisticalData, ttl time.Duration) error {
-	key := pc.statisticsKey(symbol)
-
-	data, err := json.Marshal(stats)
-	if err != nil {
-		return NewCacheError("set_statistics", key, ErrCodeSerialization, err)
-	}
-
-	return pc.cache.Set(ctx, key, data, ttl)
-}
-
-func (pc *RedisPriceCache) GetStatistics(ctx context.Context, symbol string) (*models.StatisticalData, error) {
-	key := pc.statisticsKey(symbol)
-
-	data, err := pc.cache.Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-
-	var stats models.StatisticalData
-	if err := json.Unmarshal(data, &stats); err != nil {
-		return nil, NewCacheError("get_statistics", key, ErrCodeSerialization, err)
-	}
-
-	return &stats, nil
-}
+// Statistical data operations (commented out - StatisticalData not implemented)
+// func (pc *RedisPriceCache) SetStatistics(ctx context.Context, symbol string, stats *models.StatisticalData, ttl time.Duration) error {
+// 	key := pc.statisticsKey(symbol)
+// 	data, err := json.Marshal(stats)
+// 	if err != nil {
+// 		return NewCacheError("set_statistics", key, ErrCodeSerialization, err)
+// 	}
+// 	return pc.cache.Set(ctx, key, data, ttl)
+// }
+//
+// func (pc *RedisPriceCache) GetStatistics(ctx context.Context, symbol string) (*models.StatisticalData, error) {
+// 	key := pc.statisticsKey(symbol)
+// 	data, err := pc.cache.Get(ctx, key)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var stats models.StatisticalData
+// 	if err := json.Unmarshal(data, &stats); err != nil {
+// 		return nil, NewCacheError("get_statistics", key, ErrCodeSerialization, err)
+// 	}
+// 	return &stats, nil
+// }
 
 // Technical indicators operations
 
@@ -439,7 +429,7 @@ func (pc *RedisPriceCache) SetPriceWithMetrics(ctx context.Context, symbol strin
 	priceData := map[string]interface{}{
 		"price":      price.Price.InexactFloat64(),
 		"confidence": price.Confidence,
-		"volume":     price.Volume.InexactFloat64(),
+		"volume_24h": price.Volume24h.InexactFloat64(),
 		"providers":  len(price.ProviderPrices),
 	}
 

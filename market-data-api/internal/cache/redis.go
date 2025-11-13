@@ -40,7 +40,6 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 			ReadTimeout:  config.ReadTimeout,
 			WriteTimeout: config.WriteTimeout,
 			PoolTimeout:  config.PoolTimeout,
-			IdleTimeout:  config.IdleTimeout,
 		})
 	} else {
 		client = redis.NewClient(&redis.Options{
@@ -54,7 +53,6 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 			ReadTimeout:  config.ReadTimeout,
 			WriteTimeout: config.WriteTimeout,
 			PoolTimeout:  config.PoolTimeout,
-			IdleTimeout:  config.IdleTimeout,
 		})
 	}
 

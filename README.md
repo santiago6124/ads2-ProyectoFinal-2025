@@ -222,21 +222,23 @@ GET    /api/v1/filters                - Filtros disponibles (status, type, order
 
 ### Market Data API (Puerto 8004)
 
-Datos de mercado en tiempo real.
+Datos de mercado en tiempo real desde CoinGecko API.
 
 **Endpoints principales:**
 ```
-GET    /api/market/price/:symbol  - Precio actual
-GET    /api/market/prices         - Múltiples precios
-GET    /api/market/history/:symbol - Histórico
-GET    /api/market/stats/:symbol  - Estadísticas
-WS     /api/market/stream         - Stream en tiempo real
+GET    /api/v1/prices/:symbol     - Precio actual de una criptomoneda
+GET    /api/v1/prices?symbols=... - Múltiples precios
+GET    /api/v1/prices             - Precios de criptomonedas populares
+GET    /api/v1/history/:symbol    - Histórico de precios
+GET    /api/v1/market/stats       - Estadísticas del mercado
 ```
 
 **Características:**
-- Integración con CoinGecko y Binance
-- Cache en Redis con TTL corto
-- WebSockets para updates en tiempo real
+- Integración directa con CoinGecko API (19,000+ criptomonedas)
+- Cache en memoria con TTL configurable (30 segundos)
+- Rate limiting integrado (50 requests/minuto free tier)
+- Soporte para más de 50 criptomonedas populares
+- Datos históricos con múltiples intervalos
 
 ### Portfolio API (Puerto 8005)
 
