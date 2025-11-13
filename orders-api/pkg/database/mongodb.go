@@ -99,12 +99,6 @@ func (d *Database) CreateIndexes() error {
 		},
 		{
 			Keys: bson.D{
-				{"order_number", 1},
-			},
-			Options: options.Index().SetUnique(true).SetName("order_number_unique_idx"),
-		},
-		{
-			Keys: bson.D{
 				{"crypto_symbol", 1},
 				{"created_at", -1},
 			},

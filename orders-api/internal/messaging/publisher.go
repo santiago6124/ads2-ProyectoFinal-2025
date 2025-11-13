@@ -7,8 +7,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/streadway/amqp"
 	"orders-api/internal/models"
+
+	"github.com/streadway/amqp"
 )
 
 // Publisher simplificado para eventos de órdenes
@@ -20,19 +21,18 @@ type Publisher struct {
 
 // OrderEvent evento simplificado de orden
 type OrderEvent struct {
-	EventType     string    `json:"event_type"` // created, executed, cancelled, failed
-	OrderID       string    `json:"order_id"`
-	OrderNumber   string    `json:"order_number"`
-	UserID        int       `json:"user_id"`
-	Type          string    `json:"type"`   // buy, sell
-	Status        string    `json:"status"` // pending, executed, cancelled, failed
-	CryptoSymbol  string    `json:"crypto_symbol"`
-	Quantity      string    `json:"quantity"`
-	Price         string    `json:"price"`
-	TotalAmount   string    `json:"total_amount"`
-	Fee           string    `json:"fee"`
-	Timestamp     time.Time `json:"timestamp"`
-	ErrorMessage  string    `json:"error_message,omitempty"`
+	EventType    string    `json:"event_type"` // created, executed, cancelled, failed
+	OrderID      string    `json:"order_id"`
+	UserID       int       `json:"user_id"`
+	Type         string    `json:"type"`   // buy, sell
+	Status       string    `json:"status"` // pending, executed, cancelled, failed
+	CryptoSymbol string    `json:"crypto_symbol"`
+	Quantity     string    `json:"quantity"`
+	Price        string    `json:"price"`
+	TotalAmount  string    `json:"total_amount"`
+	Fee          string    `json:"fee"`
+	Timestamp    time.Time `json:"timestamp"`
+	ErrorMessage string    `json:"error_message,omitempty"`
 }
 
 // NewPublisher crea un nuevo publisher simplificado
@@ -80,7 +80,6 @@ func (p *Publisher) PublishOrderCreated(ctx context.Context, order *models.Order
 	event := &OrderEvent{
 		EventType:    "created",
 		OrderID:      order.ID.Hex(),
-		OrderNumber:  order.OrderNumber,
 		UserID:       order.UserID,
 		Type:         string(order.Type),
 		Status:       string(order.Status),
@@ -100,7 +99,6 @@ func (p *Publisher) PublishOrderExecuted(ctx context.Context, order *models.Orde
 	event := &OrderEvent{
 		EventType:    "executed",
 		OrderID:      order.ID.Hex(),
-		OrderNumber:  order.OrderNumber,
 		UserID:       order.UserID,
 		Type:         string(order.Type),
 		Status:       string(order.Status),
@@ -120,7 +118,6 @@ func (p *Publisher) PublishOrderCancelled(ctx context.Context, order *models.Ord
 	event := &OrderEvent{
 		EventType:    "cancelled",
 		OrderID:      order.ID.Hex(),
-		OrderNumber:  order.OrderNumber,
 		UserID:       order.UserID,
 		Type:         string(order.Type),
 		Status:       string(order.Status),
@@ -141,7 +138,6 @@ func (p *Publisher) PublishOrderFailed(ctx context.Context, order *models.Order,
 	event := &OrderEvent{
 		EventType:    "failed",
 		OrderID:      order.ID.Hex(),
-		OrderNumber:  order.OrderNumber,
 		UserID:       order.UserID,
 		Type:         string(order.Type),
 		Status:       string(order.Status),
@@ -165,10 +161,10 @@ func (p *Publisher) publish(routingKey string, event *OrderEvent) error {
 	}
 
 	err = p.channel.Publish(
-		p.exchange,  // exchange
-		routingKey,  // routing key
-		false,       // mandatory
-		false,       // immediate
+		p.exchange, // exchange
+		routingKey, // routing key
+		false,      // mandatory
+		false,      // immediate
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent, // mensajes persistentes

@@ -34,8 +34,7 @@ const (
 
 // Order representa una orden de compra/venta simplificada
 type Order struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	OrderNumber  string             `bson:"order_number" json:"order_number"` // Ej: ORD-2025-a1b2c3d4
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"` // ID único generado por MongoDB
 	UserID       int                `bson:"user_id" json:"user_id"`
 	Type         OrderType          `bson:"type" json:"type"`                 // buy o sell
 	Status       OrderStatus        `bson:"status" json:"status"`             // pending, executed, cancelled, failed
@@ -72,11 +71,6 @@ func (o *Order) IsFinal() bool {
 // CalculateTotalWithFee calcula el total incluyendo la comisión
 func (o *Order) CalculateTotalWithFee() decimal.Decimal {
 	return o.TotalAmount.Add(o.Fee)
-}
-
-// NewOrderNumber genera un número de orden único
-func NewOrderNumber() string {
-	return "ORD-" + time.Now().Format("20060102") + "-" + primitive.NewObjectID().Hex()[:8]
 }
 
 // CryptoInfo información básica de una criptomoneda

@@ -65,7 +65,9 @@ func (c *UserClient) VerifyUser(ctx context.Context, userID int) (*models.Valida
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	// El endpoint /verify requiere headers internos, no Bearer token
+	req.Header.Set("X-Internal-Service", "orders-api")
+	req.Header.Set("X-API-Key", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -81,29 +83,36 @@ func (c *UserClient) VerifyUser(ctx context.Context, userID int) (*models.Valida
 		}, nil
 	}
 
-	var userResp UserResponse
-	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
+	// El endpoint /verify retorna UserVerificationResponse, no UserResponse
+	var verificationResp struct {
+		Exists   bool   `json:"exists"`
+		UserID   int32  `json:"user_id"`
+		Role     string `json:"role"`
+		IsActive bool   `json:"is_active"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&verificationResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if userResp.Error != "" {
-		return &models.ValidationResult{
-			IsValid: false,
-			Message: userResp.Error,
-		}, nil
-	}
-
-	if userResp.User == nil {
+	if !verificationResp.Exists {
 		return &models.ValidationResult{
 			IsValid: false,
 			Message: "user not found",
 		}, nil
 	}
 
+	if !verificationResp.IsActive {
+		return &models.ValidationResult{
+			IsValid: false,
+			Message: "user account is deactivated",
+		}, nil
+	}
+
 	validationResult := &models.ValidationResult{
-		IsValid: c.validateUserStatus(userResp.User),
-		UserID:  userResp.User.ID,
-		Message: c.getValidationMessage(userResp.User),
+		IsValid: true,
+		UserID:  int(verificationResp.UserID),
+		Message: "user is valid",
 	}
 
 	return validationResult, nil
@@ -117,7 +126,15 @@ func (c *UserClient) GetUserProfile(ctx context.Context, userID int) (*UserData,
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	// Usar el token del usuario del contexto si está disponible, sino usar apiKey interno
+	authToken := c.apiKey
+	if userToken := ctx.Value("user_token"); userToken != nil {
+		if tokenStr, ok := userToken.(string); ok && tokenStr != "" {
+			authToken = tokenStr
+		}
+	}
+
+	req.Header.Set("Authorization", "Bearer "+authToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)

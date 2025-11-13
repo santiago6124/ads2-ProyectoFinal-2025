@@ -263,6 +263,16 @@ func (h *HealthHandler) checkMarketAPI(ctx context.Context) ServiceHealth {
 func (h *HealthHandler) checkRabbitMQPublisher() ServiceHealth {
 	start := time.Now()
 
+	// Verificar si el publisher está disponible
+	if h.publisher == nil {
+		return ServiceHealth{
+			Status:       "unhealthy",
+			ResponseTime: time.Since(start),
+			Error:        "RabbitMQ publisher not initialized",
+			LastCheck:    time.Now(),
+		}
+	}
+
 	err := h.publisher.HealthCheck()
 	responseTime := time.Since(start)
 

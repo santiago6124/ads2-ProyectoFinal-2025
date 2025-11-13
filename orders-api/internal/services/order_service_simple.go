@@ -170,10 +170,9 @@ func (s *OrderServiceSimple) CreateOrder(ctx context.Context, req *dto.CreateOrd
 		fee = minFee
 	}
 
-	// Crear orden
+	// Crear orden - dejar que MongoDB genere el ID automáticamente
 	order := &models.Order{
-		ID:           primitive.NewObjectID(),
-		OrderNumber:  models.NewOrderNumber(),
+		ID:           primitive.NilObjectID, // MongoDB generará el ID automáticamente
 		UserID:       userID,
 		Type:         req.Type,
 		Status:       models.OrderStatusPending,

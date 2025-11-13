@@ -41,7 +41,6 @@ type UpdateOrderRequest struct {
 
 type OrderResponse struct {
 	ID             string     `json:"id"`
-	OrderNumber    string     `json:"order_number"`
 	UserID         int        `json:"user_id"`
 	Type           string     `json:"type"`
 	OrderKind      string     `json:"order_kind"`
@@ -262,6 +261,11 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
+	// Extract user token from context if available
+	if userToken, exists := c.Get("user_token"); exists {
+		ctx = context.WithValue(ctx, "user_token", userToken)
+	}
+
 	existingOrder, err := h.orderService.GetOrder(ctx, orderID, userID.(int))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
@@ -331,6 +335,11 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
+	// Extract user token from context if available
+	if userToken, exists := c.Get("user_token"); exists {
+		ctx = context.WithValue(ctx, "user_token", userToken)
+	}
+
 	err := h.orderService.CancelOrder(ctx, orderID, userID.(int), reason)
 	if err != nil {
 		if err.Error() == "order not found" {
@@ -364,6 +373,11 @@ func (h *OrderHandler) DeleteOrder(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
+
+	// Extract user token from context if available
+	if userToken, exists := c.Get("user_token"); exists {
+		ctx = context.WithValue(ctx, "user_token", userToken)
+	}
 
 	err := h.orderService.DeleteOrder(ctx, orderID, userID.(int))
 	if err != nil {
@@ -425,7 +439,6 @@ func (h *OrderHandler) ExecuteOrder(c *gin.Context) {
 func (h *OrderHandler) convertToOrderResponse(order *models.Order) *OrderResponse {
 	response := &OrderResponse{
 		ID:            order.ID.Hex(),
-		OrderNumber:   order.OrderNumber,
 		UserID:        order.UserID,
 		Type:          string(order.Type),
 		OrderKind:     string(order.OrderKind),

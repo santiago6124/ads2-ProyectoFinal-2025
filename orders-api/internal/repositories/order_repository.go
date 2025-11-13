@@ -20,7 +20,6 @@ import (
 type OrderRepository interface {
 	Create(ctx context.Context, order *models.Order) error
 	GetByID(ctx context.Context, id string) (*models.Order, error)
-	GetByOrderNumber(ctx context.Context, orderNumber string) (*models.Order, error)
 	Update(ctx context.Context, order *models.Order) error
 	Delete(ctx context.Context, id string) error
 	ListByUser(ctx context.Context, userID int, filter *dto.OrderFilterRequest) ([]models.Order, int64, error)
@@ -45,6 +44,7 @@ func NewOrderRepository(db *database.Database) OrderRepository {
 }
 
 func (r *orderRepository) Create(ctx context.Context, order *models.Order) error {
+	// MongoDB generará el ID automáticamente si está vacío
 	if order.ID.IsZero() {
 		order.ID = primitive.NewObjectID()
 	}
@@ -52,15 +52,8 @@ func (r *orderRepository) Create(ctx context.Context, order *models.Order) error
 	order.CreatedAt = time.Now()
 	order.UpdatedAt = time.Now()
 
-	if order.OrderNumber == "" {
-		order.OrderNumber = models.NewOrderNumber()
-	}
-
 	_, err := r.collection.InsertOne(ctx, order)
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return fmt.Errorf("order with number %s already exists", order.OrderNumber)
-		}
 		return fmt.Errorf("failed to create order: %w", err)
 	}
 
@@ -77,21 +70,6 @@ func (r *orderRepository) GetByID(ctx context.Context, id string) (*models.Order
 	filter := bson.M{"_id": objectID}
 
 	err = r.collection.FindOne(ctx, filter).Decode(&order)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("order not found")
-		}
-		return nil, fmt.Errorf("failed to get order: %w", err)
-	}
-
-	return &order, nil
-}
-
-func (r *orderRepository) GetByOrderNumber(ctx context.Context, orderNumber string) (*models.Order, error) {
-	var order models.Order
-	filter := bson.M{"order_number": orderNumber}
-
-	err := r.collection.FindOne(ctx, filter).Decode(&order)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("order not found")
