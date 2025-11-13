@@ -258,6 +258,51 @@ services:
       retries: 3
       start_period: 60s
 
+  # --------------------------------------------------------------------------
+  # Frontend - Next.js Application
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./crypto-trading-app
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8001
+        - NEXT_PUBLIC_ORDERS_API_URL=http://localhost:8002
+        - NEXT_PUBLIC_MARKET_API_URL=http://localhost:8004
+        - NEXT_PUBLIC_PORTFOLIO_API_URL=http://localhost:8005
+        - NEXT_PUBLIC_SEARCH_API_URL=http://localhost:8003
+    container_name: cryptosim-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Runtime environment variables (Next.js will use these)
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
+      - NEXT_PUBLIC_ORDERS_API_URL=http://localhost:8002
+      - NEXT_PUBLIC_MARKET_API_URL=http://localhost:8004
+      - NEXT_PUBLIC_PORTFOLIO_API_URL=http://localhost:8005
+      - NEXT_PUBLIC_SEARCH_API_URL=http://localhost:8003
+      - NODE_ENV=production
+    depends_on:
+      users-api:
+        condition: service_started
+      orders-api:
+        condition: service_started
+      market-data-api:
+        condition: service_started
+      portfolio-api:
+        condition: service_started
+      search-api:
+        condition: service_started
+    networks:
+      - cryptosim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # ==========================================================================
   # BASES DE DATOS (SEPARADAS POR SERVICIO)
   # ==========================================================================
