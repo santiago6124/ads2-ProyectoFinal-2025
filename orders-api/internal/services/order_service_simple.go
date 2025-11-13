@@ -21,12 +21,7 @@ type OrderServiceSimple struct {
 	executionService *ExecutionService
 	marketService    MarketService
 	publisher        EventPublisher
-	userClient       UserClient // Para validar owner contra API de usuarios
-}
-
-// UserClient interface para validar usuarios contra la API de usuarios
-type UserClient interface {
-	GetUserProfile(ctx context.Context, userID int) (interface{}, error)
+	userClient       UserClient // Para validar owner contra API de usuarios (usa la interfaz de ExecutionService)
 }
 
 // MarketService interface para servicios de mercado

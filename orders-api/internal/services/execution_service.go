@@ -18,9 +18,11 @@ type ExecutionService struct {
 	portfolioClient   PortfolioClient
 }
 
-// UserClient interface para validar usuarios
+// UserClient interface para validar usuarios y obtener perfil
+// Nota: GetUserProfile puede retornar cualquier tipo que represente un usuario
 type UserClient interface {
 	VerifyUser(ctx context.Context, userID int) (*models.ValidationResult, error)
+	GetUserProfile(ctx context.Context, userID int) (interface{}, error) // Retorna interface{} para flexibilidad
 }
 
 // UserBalanceClient interface para verificar saldos

@@ -96,9 +96,12 @@ func main() {
 		Timeout: 10 * time.Second,
 	})
 
+	// Create user client adapter para convertir tipos de retorno
+	userClientAdapter := &userClientAdapter{userClient: userClient}
+
 	// Create execution service (simplified - no concurrency)
 	executionService := services.NewExecutionService(
-		userClient,
+		userClientAdapter,
 		userBalanceClient,
 		marketClient,
 		nil, // No necesitamos fee calculator separado
@@ -124,7 +127,7 @@ func main() {
 		executionService,
 		marketService,
 		eventPublisher,
-		userClient, // Agregado para validación de owner contra API de usuarios
+		userClientAdapter, // Agregado para validación de owner contra API de usuarios
 	)
 
 	logger.Info("✅ Business services initialized with concurrent processing (goroutines, channels, WaitGroup)")
@@ -373,6 +376,24 @@ func (m *marketServiceAdapter) getCryptoName(symbol string) string {
 		return name
 	}
 	return symbol
+}
+
+// userClientAdapter adapts clients.UserClient to services.UserClient interface
+type userClientAdapter struct {
+	userClient *clients.UserClient
+}
+
+func (u *userClientAdapter) VerifyUser(ctx context.Context, userID int) (*models.ValidationResult, error) {
+	return u.userClient.VerifyUser(ctx, userID)
+}
+
+func (u *userClientAdapter) GetUserProfile(ctx context.Context, userID int) (interface{}, error) {
+	// El método real retorna *clients.UserData, lo convertimos a interface{}
+	userData, err := u.userClient.GetUserProfile(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return userData, nil // *clients.UserData es compatible con interface{}
 }
 
 // eventPublisherAdapter adapts messaging.Publisher to EventPublisher interface
