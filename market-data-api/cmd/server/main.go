@@ -17,14 +17,13 @@ import (
 	// "market-data-api/internal/cache" // Cache disabled for now
 	"market-data-api/internal/config"
 	"market-data-api/internal/models"
-	"market-data-api/internal/providers/coingecko"
 )
 
 // Server holds all dependencies
 type Server struct {
 	router    *gin.Engine
 	port      int
-	coingecko *coingecko.Client
+	coingecko *FreeCryptoClient
 	config    *config.Config
 }
 
@@ -46,17 +45,9 @@ func main() {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	// Initialize CoinGecko provider
-	coingeckoConfig := &coingecko.Config{
-		APIKey:        cfg.Providers.CoinGecko.APIKey,
-		BaseURL:       cfg.Providers.CoinGecko.BaseURL,
-		Timeout:       cfg.Providers.CoinGecko.Timeout,
-		RateLimit:     cfg.Providers.CoinGecko.RateLimit,
-		Weight:        cfg.Providers.CoinGecko.Weight,
-		RetryAttempts: 3,
-		RetryDelay:    time.Second,
-	}
-	coingeckoClient := coingecko.NewClient(coingeckoConfig)
+	// Initialize FreeCrypto provider
+	apiKey := "ir4h8w22gcaa9nfgijoc" // FreeCryptoAPI key
+	coingeckoClient := NewFreeCryptoClient(apiKey)
 
 	// Cache disabled for now - will be implemented later if needed
 	// var cacheManager *cache.Manager
@@ -75,7 +66,7 @@ func main() {
 	// Start HTTP server
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	log.Printf("Market Data API starting on %s (environment: %s)", addr, env)
-	log.Printf("Using CoinGecko API: %s", cfg.Providers.CoinGecko.BaseURL)
+	log.Printf("Using FreeCryptoAPI")
 
 	httpServer := &http.Server{
 		Addr:         addr,
@@ -186,12 +177,20 @@ func (s *Server) handleGetPrices(c *gin.Context) {
 	// Convert to response format
 	response := make([]gin.H, 0, len(prices))
 	for _, price := range prices {
-		response = append(response, priceToResponse(price))
+		response = append(response, gin.H{
+			"symbol":     price.Symbol,
+			"name":       price.Name,
+			"price":      price.Price,
+			"change_24h": price.Change24h,
+			"market_cap": price.MarketCap,
+			"volume":     price.Volume,
+			"timestamp":  price.Timestamp,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":   response,
-		"source": "coingecko",
+		"source": "freecryptoapi",
 		"count":  len(response),
 	})
 }
@@ -216,7 +215,15 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 
 	// Cache the price (will be implemented later if needed)
 
-	c.JSON(http.StatusOK, priceToResponse(price))
+	c.JSON(http.StatusOK, gin.H{
+		"symbol":     price.Symbol,
+		"name":       price.Name,
+		"price":      price.Price,
+		"change_24h": price.Change24h,
+		"market_cap": price.MarketCap,
+		"volume":     price.Volume,
+		"timestamp":  price.Timestamp,
+	})
 }
 
 func (s *Server) handleGetPriceHistory(c *gin.Context) {
@@ -283,8 +290,8 @@ func (s *Server) handleGetPriceHistory(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	// Fetch historical data from CoinGecko
-	candles, err := s.coingecko.GetHistoricalData(ctx, symbol, interval, from, to, limit)
+	// Fetch historical data from FreeCryptoAPI
+	candles, err := s.coingecko.GetHistoricalData(ctx, symbol, from, to)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to fetch historical data",
@@ -297,12 +304,12 @@ func (s *Server) handleGetPriceHistory(c *gin.Context) {
 	history := make([]gin.H, 0, len(candles))
 	for _, candle := range candles {
 		history = append(history, gin.H{
-			"timestamp": candle.Timestamp.Unix(),
-			"price":     candle.Close.String(),
-			"open":      candle.Open.String(),
-			"high":      candle.High.String(),
-			"low":       candle.Low.String(),
-			"volume":    candle.Volume.String(),
+			"timestamp": candle.Timestamp,
+			"price":     candle.Close,
+			"open":      candle.Open,
+			"high":      candle.High,
+			"low":       candle.Low,
+			"volume":    candle.Volume,
 		})
 	}
 
@@ -331,17 +338,17 @@ func (s *Server) handleGetMarketStats(c *gin.Context) {
 	}
 
 	// Calculate market statistics
-	totalMarketCap := decimal.Zero
-	totalVolume := decimal.Zero
-	btcMarketCap := decimal.Zero
-	ethMarketCap := decimal.Zero
+	var totalMarketCap float64
+	var totalVolume float64
+	var btcMarketCap float64
+	var ethMarketCap float64
 
 	for symbol, price := range prices {
-		if price.MarketCap.GreaterThan(decimal.Zero) {
-			totalMarketCap = totalMarketCap.Add(price.MarketCap)
+		if price.MarketCap > 0 {
+			totalMarketCap += price.MarketCap
 		}
-		if price.Volume24h.GreaterThan(decimal.Zero) {
-			totalVolume = totalVolume.Add(price.Volume24h)
+		if price.Volume > 0 {
+			totalVolume += price.Volume
 		}
 		if symbol == "BTC" {
 			btcMarketCap = price.MarketCap
@@ -351,21 +358,21 @@ func (s *Server) handleGetMarketStats(c *gin.Context) {
 		}
 	}
 
-	btcDominance := decimal.Zero
-	ethDominance := decimal.Zero
-	if totalMarketCap.GreaterThan(decimal.Zero) {
-		btcDominance = btcMarketCap.Div(totalMarketCap).Mul(decimal.NewFromInt(100))
-		ethDominance = ethMarketCap.Div(totalMarketCap).Mul(decimal.NewFromInt(100))
+	var btcDominance float64
+	var ethDominance float64
+	if totalMarketCap > 0 {
+		btcDominance = (btcMarketCap / totalMarketCap) * 100
+		ethDominance = (ethMarketCap / totalMarketCap) * 100
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"totalMarketCap": totalMarketCap.String(),
-		"totalVolume24h": totalVolume.String(),
-		"btcDominance":   btcDominance.String(),
-		"ethDominance":   ethDominance.String(),
+		"totalMarketCap": totalMarketCap,
+		"totalVolume24h": totalVolume,
+		"btcDominance":   btcDominance,
+		"ethDominance":   ethDominance,
 		"activeCryptos":  len(prices),
 		"timestamp":      time.Now().Unix(),
-		"source":         "coingecko",
+		"source":         "freecryptoapi",
 	})
 }
 

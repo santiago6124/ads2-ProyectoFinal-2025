@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-
-	"portfolio-api/internal/config"
 )
 
 type OrdersClient struct {
@@ -21,15 +19,19 @@ type OrdersClient struct {
 	retries    int
 }
 
-func NewOrdersClient(cfg config.ExternalAPIsConfig) *OrdersClient {
+type OrdersClientConfig struct {
+	BaseURL string
+	Timeout time.Duration
+}
+
+func NewOrdersClient(cfg *OrdersClientConfig) *OrdersClient {
 	return &OrdersClient{
-		baseURL: cfg.OrdersAPI.URL,
+		baseURL: cfg.BaseURL,
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
-		apiKey:  cfg.OrdersAPI.APIKey,
 		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		retries: 3,
 	}
 }
 

@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-
-	"portfolio-api/internal/config"
 )
 
 type MarketDataClient struct {
@@ -21,15 +19,19 @@ type MarketDataClient struct {
 	retries    int
 }
 
-func NewMarketDataClient(cfg config.ExternalAPIsConfig) *MarketDataClient {
+type MarketDataClientConfig struct {
+	BaseURL string
+	Timeout time.Duration
+}
+
+func NewMarketDataClient(cfg *MarketDataClientConfig) *MarketDataClient {
 	return &MarketDataClient{
-		baseURL: cfg.MarketDataAPI.URL,
+		baseURL: cfg.BaseURL,
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
-		apiKey:  cfg.MarketDataAPI.APIKey,
 		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		retries: 3,
 	}
 }
 

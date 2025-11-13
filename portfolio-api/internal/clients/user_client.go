@@ -31,6 +31,7 @@ type UserResponse struct {
 	LastName       *string `json:"last_name"`
 	Role           string  `json:"role"`
 	InitialBalance float64 `json:"initial_balance"`
+	CurrentBalance float64 `json:"current_balance"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
 	LastLogin      *string `json:"last_login"`
@@ -88,7 +89,7 @@ func (c *UserClient) GetUserBalance(ctx context.Context, userID int64) (decimal.
 		return decimal.Zero, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	return decimal.NewFromFloat(user.InitialBalance), nil
+	return decimal.NewFromFloat(user.CurrentBalance), nil
 }
 
 // HealthCheck verifica la conectividad con Users API

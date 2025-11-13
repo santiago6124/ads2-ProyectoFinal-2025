@@ -37,12 +37,16 @@ services:
       # Redis
       - REDIS_HOST=shared-redis
       - REDIS_PORT=6379
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
       # Internal API
       - INTERNAL_API_KEY=${INTERNAL_API_KEY:-internal-secret-key}
     depends_on:
       users-mysql:
         condition: service_healthy
       shared-redis:
+        condition: service_healthy
+      shared-rabbitmq:
         condition: service_healthy
     networks:
       - cryptosim-network
@@ -209,10 +213,10 @@ services:
       - SERVER_HOST=0.0.0.0
       - GIN_MODE=release
       # Database
-      - DB_URI=mongodb://portfolio-mongo:27017/portfolio_db
-      - DB_NAME=portfolio_db
-      - DB_MAX_POOL_SIZE=100
-      - DB_MIN_POOL_SIZE=10
+      - MONGODB_URI=mongodb://admin:${MONGO_PASSWORD:-password}@portfolio-mongo:27017/portfolio_db?authSource=admin
+      - MONGODB_DATABASE=portfolio_db
+      - MONGODB_MAX_POOL_SIZE=100
+      - MONGODB_MIN_POOL_SIZE=10
       # Redis
       - REDIS_HOST=shared-redis
       - REDIS_PORT=6379
@@ -227,6 +231,7 @@ services:
       - MARKET_DATA_API_URL=http://market-data-api:8004
       - ORDERS_API_URL=http://orders-api:8080
       - USERS_API_URL=http://users-api:8001
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-internal-secret-key}
       - API_TIMEOUT=30s
       # JWT
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}

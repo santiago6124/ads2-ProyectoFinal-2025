@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"portfolio-api/internal/config"
 )
 
 type UsersClient struct {
@@ -19,15 +17,19 @@ type UsersClient struct {
 	retries    int
 }
 
-func NewUsersClient(cfg config.ExternalAPIsConfig) *UsersClient {
+type UsersClientConfig struct {
+	BaseURL string
+	Timeout time.Duration
+}
+
+func NewUsersClient(cfg *UsersClientConfig) *UsersClient {
 	return &UsersClient{
-		baseURL: cfg.UsersAPI.URL,
+		baseURL: cfg.BaseURL,
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
-		apiKey:  cfg.UsersAPI.APIKey,
 		timeout: cfg.Timeout,
-		retries: cfg.RetryCount,
+		retries: 3,
 	}
 }
 
@@ -201,18 +203,15 @@ type SecuritySettings struct {
 
 // GetUser retrieves user information by ID
 func (uc *UsersClient) GetUser(ctx context.Context, userID int64) (*User, error) {
-	url := fmt.Sprintf("%s/users/%d", uc.baseURL, userID)
+	url := fmt.Sprintf("%s/api/internal/users/%d", uc.baseURL, userID)
 
-	var response struct {
-		Data User `json:"data"`
-	}
-
-	err := uc.makeRequest(ctx, "GET", url, nil, &response)
+	var user User
+	err := uc.makeRequest(ctx, "GET", url, nil, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user %d: %w", userID, err)
 	}
 
-	return &response.Data, nil
+	return &user, nil
 }
 
 // GetUserProfile retrieves detailed user profile

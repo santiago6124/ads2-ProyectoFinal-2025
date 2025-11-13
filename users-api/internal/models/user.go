@@ -16,6 +16,7 @@ type User struct {
 	LastName       *string        `json:"last_name" gorm:"size:50"`
 	Role           UserRole       `json:"role" gorm:"type:enum('normal','admin');default:'normal'"`
 	InitialBalance float64        `json:"initial_balance" gorm:"type:decimal(15,2);default:100000.00"`
+	CurrentBalance float64        `json:"current_balance" gorm:"-"` // Calculated field, not stored in DB
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`

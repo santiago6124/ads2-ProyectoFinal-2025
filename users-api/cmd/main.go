@@ -50,9 +50,10 @@ func main() {
 	userRepo := repositories.NewUserRepository(db.DB)
 	refreshTokenRepo := repositories.NewRefreshTokenRepository(db.DB)
 	loginAttemptRepo := repositories.NewLoginAttemptRepository(db.DB)
+	balanceTransactionRepo := repositories.NewBalanceTransactionRepository(db.DB)
 
 	tokenService := services.NewTokenService(&cfg.JWT, refreshTokenRepo)
-	userService := services.NewUserService(userRepo)
+	userService := services.NewUserServiceWithBalance(userRepo, balanceTransactionRepo)
 	authService := services.NewAuthService(userRepo, loginAttemptRepo, tokenService)
 
 	authController := controllers.NewAuthController(authService, userService)

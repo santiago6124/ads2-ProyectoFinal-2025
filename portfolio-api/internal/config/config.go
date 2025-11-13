@@ -284,7 +284,7 @@ func Load() *Config {
 			JWTExpiration:     getEnvDuration("JWT_EXPIRATION", 24*time.Hour),
 			RefreshExpiration: getEnvDuration("JWT_REFRESH_EXPIRATION", 7*24*time.Hour),
 			RequireAuth:       getEnvBool("REQUIRE_AUTH", true),
-			AdminSecret:       getEnv("ADMIN_SECRET", "admin-secret-key"),
+			AdminSecret:       getEnv("INTERNAL_API_KEY", getEnv("ADMIN_SECRET", "admin-secret-key")),
 			EnableAPIKey:      getEnvBool("ENABLE_API_KEY", false),
 			APIKeyHeader:      getEnv("API_KEY_HEADER", "X-API-Key"),
 		},

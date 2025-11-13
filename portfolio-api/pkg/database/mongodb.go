@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -113,20 +114,20 @@ func createIndexes(ctx context.Context, db *mongo.Database) error {
 	portfolioCollection := db.Collection("portfolios")
 	portfolioIndexes := []mongo.IndexModel{
 		{
-			Keys:    map[string]interface{}{"user_id": 1},
+			Keys:    bson.D{{Key: "user_id", Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
 		{
-			Keys: map[string]interface{}{"updated_at": -1},
+			Keys: bson.D{{Key: "updated_at", Value: -1}},
 		},
 		{
-			Keys: map[string]interface{}{"metadata.needs_recalculation": 1},
+			Keys: bson.D{{Key: "metadata.needs_recalculation", Value: 1}},
 		},
 		{
-			Keys: map[string]interface{}{"metadata.last_calculated": -1},
+			Keys: bson.D{{Key: "metadata.last_calculated", Value: -1}},
 		},
 		{
-			Keys: map[string]interface{}{"total_value": -1},
+			Keys: bson.D{{Key: "total_value", Value: -1}},
 		},
 	}
 
@@ -138,20 +139,20 @@ func createIndexes(ctx context.Context, db *mongo.Database) error {
 	snapshotCollection := db.Collection("portfolio_snapshots")
 	snapshotIndexes := []mongo.IndexModel{
 		{
-			Keys: map[string]interface{}{"user_id": 1, "timestamp": -1},
+			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "timestamp", Value: -1}},
 		},
 		{
-			Keys: map[string]interface{}{"portfolio_id": 1, "interval": 1, "timestamp": -1},
+			Keys: bson.D{{Key: "portfolio_id", Value: 1}, {Key: "interval", Value: 1}, {Key: "timestamp", Value: -1}},
 		},
 		{
-			Keys:    map[string]interface{}{"timestamp": -1},
+			Keys:    bson.D{{Key: "timestamp", Value: -1}},
 			Options: options.Index().SetExpireAfterSeconds(7776000), // 90 days
 		},
 		{
-			Keys: map[string]interface{}{"interval": 1, "timestamp": -1},
+			Keys: bson.D{{Key: "interval", Value: 1}, {Key: "timestamp", Value: -1}},
 		},
 		{
-			Keys: map[string]interface{}{"tags": 1},
+			Keys: bson.D{{Key: "tags", Value: 1}},
 		},
 	}
 

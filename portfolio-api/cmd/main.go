@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,9 +9,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/mongo"
 
+	"portfolio-api/internal/clients"
 	"portfolio-api/internal/config"
 	"portfolio-api/internal/controllers"
+	"portfolio-api/internal/messaging"
+	"portfolio-api/internal/repositories"
+	repomongo "portfolio-api/internal/repositories/mongo"
+	"portfolio-api/pkg/database"
 )
 
 func main() {
@@ -24,10 +31,61 @@ func main() {
 
 	logger.WithField("service", "portfolio-api").Info("Starting Portfolio API service...")
 
+	// Connect to MongoDB
+	logger.Info("Connecting to MongoDB...")
+	mongodb, err := database.NewMongoDB(cfg.Database)
+	var db *mongo.Database
+	if err != nil {
+		logger.Warnf("Failed to connect to MongoDB: %v - running without database", err)
+		mongodb = nil
+		db = nil
+	} else {
+		logger.Info("✅ Connected to MongoDB")
+		db = mongodb.GetDatabase()
+	}
+
+	// Initialize API clients
+	logger.Info("Initializing API clients...")
+	userClient := clients.NewUserClient(&clients.UserClientConfig{
+		BaseURL: cfg.ExternalAPIs.UsersAPI.BaseURL,
+		APIKey:  cfg.Auth.AdminSecret, // Use admin secret as internal API key
+		Timeout: 10 * time.Second,
+	})
+	logger.Info("✅ User API client initialized")
+
+	marketClient := clients.NewMarketDataClient(&clients.MarketDataClientConfig{
+		BaseURL: cfg.ExternalAPIs.MarketDataAPI.BaseURL,
+		Timeout: 10 * time.Second,
+	})
+	logger.Info("✅ Market Data API client initialized")
+
+	// Initialize repositories if database is available
+	var portfolioRepo repositories.PortfolioRepository
+	if db != nil {
+		logger.Info("Initializing repositories...")
+		portfolioRepo = repomongo.NewPortfolioRepository(db)
+		logger.Info("✅ Repositories initialized")
+	}
+
 	// Setup HTTP server
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	// CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -39,15 +97,39 @@ func main() {
 	})
 
 	// Initialize portfolio controller
-	// Note: This is a simplified implementation - in production, you would initialize
-	// all dependencies (database, services, etc.)
-	controller := controllers.NewPortfolioController(logger, nil) // nil for now
-	
+	controller := controllers.NewPortfolioControllerWithClients(logger, userClient, marketClient, portfolioRepo)
+
 	// API routes
 	api := router.Group("/api")
 	{
-		portfolio := api.Group("/portfolio")
-		controller.RegisterRoutes(portfolio)
+		portfolios := api.Group("/portfolios")
+		controller.RegisterRoutes(portfolios)
+	}
+
+	// Initialize and start RabbitMQ consumer for portfolio updates
+	if portfolioRepo != nil && cfg.RabbitMQ.Enabled {
+		logger.Info("Initializing RabbitMQ consumer...")
+		consumer, err := messaging.NewConsumer(cfg.RabbitMQ.URL, portfolioRepo, logger)
+		if err != nil {
+			logger.Warnf("Failed to initialize RabbitMQ consumer: %v - running without portfolio updates", err)
+		} else {
+			logger.Info("✅ RabbitMQ consumer initialized")
+
+			// Start consumer in a goroutine
+			ctx := context.Background()
+			go func() {
+				if err := consumer.Start(ctx); err != nil {
+					logger.Errorf("Portfolio consumer error: %v", err)
+				}
+			}()
+
+			// Handle graceful shutdown
+			defer func() {
+				if err := consumer.Stop(); err != nil {
+					logger.Errorf("Error stopping consumer: %v", err)
+				}
+			}()
+		}
 	}
 
 	port := cfg.Server.Port
@@ -60,7 +142,7 @@ func main() {
 		Handler: router,
 	}
 
-	logger.WithField("port", port).Info("HTTP server started")
+	logger.WithField("port", port).Info("🚀 HTTP server started")
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal("Failed to start server: ", err)
 		os.Exit(1)

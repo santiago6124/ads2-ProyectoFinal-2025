@@ -23,12 +23,20 @@ type UserService interface {
 }
 
 type userService struct {
-	userRepo repositories.UserRepository
+	userRepo        repositories.UserRepository
+	balanceRepo     repositories.BalanceTransactionRepository
 }
 
 func NewUserService(userRepo repositories.UserRepository) UserService {
 	return &userService{
 		userRepo: userRepo,
+	}
+}
+
+func NewUserServiceWithBalance(userRepo repositories.UserRepository, balanceRepo repositories.BalanceTransactionRepository) UserService {
+	return &userService{
+		userRepo:    userRepo,
+		balanceRepo: balanceRepo,
 	}
 }
 
@@ -97,6 +105,20 @@ func (s *userService) GetUserByID(id int32) (*models.User, error) {
 
 	if !user.IsActive {
 		return nil, fmt.Errorf("user account is deactivated")
+	}
+
+	// Calculate current balance from latest transaction
+	if s.balanceRepo != nil {
+		latestTx, err := s.balanceRepo.GetLatestByUserID(id)
+		if err == nil && latestTx != nil {
+			user.CurrentBalance = latestTx.NewBalance
+		} else {
+			// No transactions yet, use initial balance
+			user.CurrentBalance = user.InitialBalance
+		}
+	} else {
+		// Fallback to initial balance if balanceRepo is nil
+		user.CurrentBalance = user.InitialBalance
 	}
 
 	return user, nil

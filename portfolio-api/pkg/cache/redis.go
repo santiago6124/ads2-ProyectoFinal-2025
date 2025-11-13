@@ -27,15 +27,15 @@ func NewRedisClient(cfg config.CacheConfig) (*RedisClient, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password:     cfg.Password,
-		DB:           cfg.DB,
-		MaxRetries:   cfg.MaxRetries,
-		PoolSize:     cfg.PoolSize,
-		MinIdleConns: cfg.MinIdleConnections,
-		DialTimeout:  cfg.DialTimeout,
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		PoolTimeout:  cfg.PoolTimeout,
-		IdleTimeout:  cfg.IdleTimeout,
+		DB:              cfg.DB,
+		MaxRetries:      cfg.MaxRetries,
+		PoolSize:        cfg.PoolSize,
+		MinIdleConns:    cfg.MinIdleConnections,
+		DialTimeout:     cfg.DialTimeout,
+		ReadTimeout:     cfg.ReadTimeout,
+		WriteTimeout:    cfg.WriteTimeout,
+		PoolTimeout:     cfg.PoolTimeout,
+		ConnMaxIdleTime: cfg.IdleTimeout,
 	})
 
 	// Test connection
