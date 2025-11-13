@@ -19,68 +19,84 @@ export function AssetAllocation() {
   const [assets, setAssets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchHoldings = async () => {
-      if (!user?.id) return
+  // Fetch holdings data
+  const fetchHoldings = async () => {
+    if (!user?.id) return
 
-      try {
-        // Get complete portfolio data from portfolio-api (includes current prices, percentages, etc.)
-        const portfolio = await getPortfolio(user.id)
+    try {
+      // Get complete portfolio data from portfolio-api (includes current prices, percentages, etc.)
+      const portfolio = await getPortfolio(user.id)
 
-        if (portfolio.holdings && portfolio.holdings.length > 0) {
-          // Use pre-calculated holdings from backend
-          const holdingsArray = portfolio.holdings.map((holding, index) => ({
-            name: holding.symbol,
-            quantity: parseFloat(holding.quantity),
-            value: parseFloat(holding.current_value),
-            percentage: parseFloat(holding.percentage_of_portfolio) * 100, // Convert to percentage
-            color: COLORS[index % COLORS.length]
-          }))
+      if (portfolio.holdings && portfolio.holdings.length > 0) {
+        // Use pre-calculated holdings from backend
+        const holdingsArray = portfolio.holdings.map((holding, index) => ({
+          name: holding.symbol,
+          quantity: parseFloat(holding.quantity),
+          value: parseFloat(holding.current_value),
+          percentage: parseFloat(holding.percentage_of_portfolio) * 100, // Convert to percentage
+          color: COLORS[index % COLORS.length]
+        }))
 
-          // Add cash allocation
-          const totalValue = parseFloat(portfolio.total_value) || 0
-          const cash = parseFloat(portfolio.total_cash) || 0
-          const cashPercentage = totalValue > 0 ? (cash / totalValue) * 100 : 100
+        // Add cash allocation
+        const totalValue = parseFloat(portfolio.total_value) || 0
+        const cash = parseFloat(portfolio.total_cash) || 0
+        const cashPercentage = totalValue > 0 ? (cash / totalValue) * 100 : 100
 
-          if (cashPercentage > 0.01) { // Only show if > 0.01%
-            holdingsArray.push({
-              name: 'Cash',
-              quantity: cash,
-              value: cash,
-              percentage: cashPercentage,
-              color: COLORS[holdingsArray.length % COLORS.length]
-            })
-          }
-
-          setAssets(holdingsArray.sort((a, b) => b.value - a.value))
-        } else {
-          // No holdings, show only cash
-          const cash = parseFloat(portfolio.total_cash) || user.initial_balance || 0
-          setAssets([{
+        if (cashPercentage > 0.01) { // Only show if > 0.01%
+          holdingsArray.push({
             name: 'Cash',
             quantity: cash,
             value: cash,
-            percentage: 100,
-            color: COLORS[0]
-          }])
+            percentage: cashPercentage,
+            color: COLORS[holdingsArray.length % COLORS.length]
+          })
         }
-      } catch (error) {
-        console.error('Error fetching holdings:', error)
-        // Fallback to cash only
-        const fallbackCash = user.initial_balance || 0
+
+        setAssets(holdingsArray.sort((a, b) => b.value - a.value))
+      } else {
+        // No holdings, show only cash
+        const cash = parseFloat(portfolio.total_cash) || user.initial_balance || 0
         setAssets([{
           name: 'Cash',
-          quantity: fallbackCash,
-          value: fallbackCash,
+          quantity: cash,
+          value: cash,
           percentage: 100,
           color: COLORS[0]
         }])
-      } finally {
-        setLoading(false)
       }
+    } catch (error) {
+      console.error('Error fetching holdings:', error)
+      // Fallback to cash only
+      const fallbackCash = user.initial_balance || 0
+      setAssets([{
+        name: 'Cash',
+        quantity: fallbackCash,
+        value: fallbackCash,
+        percentage: 100,
+        color: COLORS[0]
+      }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial fetch
+  useEffect(() => {
+    fetchHoldings()
+  }, [user])
+
+  // Listen for portfolio refresh events
+  useEffect(() => {
+    const handlePortfolioRefresh = () => {
+      console.log('AssetAllocation: portfolio-refresh event received, refetching data...')
+      fetchHoldings()
     }
 
-    fetchHoldings()
+    window.addEventListener('portfolio-refresh', handlePortfolioRefresh)
+
+    return () => {
+      window.removeEventListener('portfolio-refresh', handlePortfolioRefresh)
+    }
   }, [user])
 
   if (loading) {

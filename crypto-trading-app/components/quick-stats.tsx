@@ -1,12 +1,17 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { useAuth } from "@/lib/auth-context"
+import { getPortfolio } from "@/lib/portfolio-api"
 
 export function QuickStats() {
   const { user } = useAuth()
-  
+  const [portfolioValue, setPortfolioValue] = useState(0)
+  const [availableBalance, setAvailableBalance] = useState(0)
+  const [loading, setLoading] = useState(true)
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -15,10 +20,51 @@ export function QuickStats() {
     }).format(amount)
   }
 
+  // Fetch real portfolio data
+  const fetchPortfolioData = async () => {
+    if (!user?.id) return
+
+    try {
+      const portfolio = await getPortfolio(user.id)
+      const totalValue = parseFloat(portfolio.total_value) || 0
+      const cash = parseFloat(portfolio.total_cash) || 0
+
+      setPortfolioValue(totalValue)
+      setAvailableBalance(cash)
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error)
+      // Fallback to user initial balance
+      const fallback = user.initial_balance || 0
+      setPortfolioValue(fallback)
+      setAvailableBalance(fallback)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPortfolioData()
+  }, [user])
+
+  // Listen for portfolio refresh events
+  useEffect(() => {
+    const handlePortfolioRefresh = () => {
+      console.log('QuickStats: portfolio-refresh event received, refetching data...')
+      fetchPortfolioData()
+    }
+
+    window.addEventListener('portfolio-refresh', handlePortfolioRefresh)
+
+    return () => {
+      window.removeEventListener('portfolio-refresh', handlePortfolioRefresh)
+    }
+  }, [user])
+
   const stats = [
     {
       name: "Portfolio Value",
-      value: formatCurrency(user?.initial_balance || 0),
+      value: formatCurrency(portfolioValue),
       change: "+12.5%",
       trend: "up",
       icon: DollarSign,
@@ -39,7 +85,7 @@ export function QuickStats() {
     },
     {
       name: "Available Balance",
-      value: formatCurrency(user?.initial_balance || 0),
+      value: formatCurrency(availableBalance),
       change: "0%",
       trend: "neutral",
       icon: DollarSign,

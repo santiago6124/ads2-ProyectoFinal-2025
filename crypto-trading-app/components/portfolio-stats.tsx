@@ -12,32 +12,48 @@ export function PortfolioStats() {
   const [totalBalance, setTotalBalance] = useState(0)
   const [loading, setLoading] = useState(true)
 
+  // Fetch portfolio data
+  const fetchPortfolioData = async () => {
+    if (!user?.id) return
+
+    try {
+      // Get complete portfolio data from portfolio-api (includes current prices, P&L, etc.)
+      const portfolio = await getPortfolio(user.id)
+
+      // Use pre-calculated values from backend
+      const totalValue = parseFloat(portfolio.total_value) || 0
+      const cash = parseFloat(portfolio.total_cash) || 0
+
+      setTotalBalance(totalValue)
+      setAvailableCash(cash)
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error)
+      // On error, try to fallback to user balance
+      const fallbackCash = user.initial_balance || 0
+      setAvailableCash(fallbackCash)
+      setTotalBalance(fallbackCash)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial fetch
   useEffect(() => {
-    const fetchPortfolioData = async () => {
-      if (!user?.id) return
+    fetchPortfolioData()
+  }, [user])
 
-      try {
-        // Get complete portfolio data from portfolio-api (includes current prices, P&L, etc.)
-        const portfolio = await getPortfolio(user.id)
-
-        // Use pre-calculated values from backend
-        const totalValue = parseFloat(portfolio.total_value) || 0
-        const cash = parseFloat(portfolio.total_cash) || 0
-
-        setTotalBalance(totalValue)
-        setAvailableCash(cash)
-      } catch (error) {
-        console.error('Error fetching portfolio data:', error)
-        // On error, try to fallback to user balance
-        const fallbackCash = user.initial_balance || 0
-        setAvailableCash(fallbackCash)
-        setTotalBalance(fallbackCash)
-      } finally {
-        setLoading(false)
-      }
+  // Listen for portfolio refresh events
+  useEffect(() => {
+    const handlePortfolioRefresh = () => {
+      console.log('PortfolioStats: portfolio-refresh event received, refetching data...')
+      fetchPortfolioData()
     }
 
-    fetchPortfolioData()
+    window.addEventListener('portfolio-refresh', handlePortfolioRefresh)
+
+    return () => {
+      window.removeEventListener('portfolio-refresh', handlePortfolioRefresh)
+    }
   }, [user])
 
   if (loading) {

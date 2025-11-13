@@ -104,11 +104,21 @@ function TradeContent() {
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
         console.log('Order created successfully:', orderResponse)
-        
+
         toast({
           title: "Buy Order Placed",
-          description: `Buy order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+          description: `Processing your buy order for ${qty} ${selectedCrypto.symbol}...`,
         })
+
+        // Show success toast immediately
+        toast({
+          title: "Order Complete!",
+          description: `Successfully purchased ${qty} ${selectedCrypto.symbol}`,
+        })
+
+        // Wait for backend to process order and update balance/portfolio
+        // This gives time for: order execution → balance update → portfolio update
+        await new Promise(resolve => setTimeout(resolve, 1500))
 
         // Refresh user data to get updated balance
         if (user) {
@@ -117,6 +127,11 @@ function TradeContent() {
             try {
               const updatedUser = await apiService.getUserProfile(user.id, accessToken)
               updateUser(updatedUser)
+
+              // Trigger portfolio refresh event for other components
+              window.dispatchEvent(new CustomEvent('portfolio-refresh', {
+                detail: { userId: user.id, action: 'buy', symbol: selectedCrypto.symbol }
+              }))
             } catch (error) {
               console.error('Error refreshing user data:', error)
             }
@@ -181,11 +196,21 @@ function TradeContent() {
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
         console.log('Order created successfully:', orderResponse)
-        
+
         toast({
           title: "Sell Order Placed",
-          description: `Sell order for ${qty} ${selectedCrypto.symbol} at $${selectedCrypto.price.toFixed(2)}`,
+          description: `Processing your sell order for ${qty} ${selectedCrypto.symbol}...`,
         })
+
+        // Show success toast immediately
+        toast({
+          title: "Order Complete!",
+          description: `Successfully sold ${qty} ${selectedCrypto.symbol}`,
+        })
+
+        // Wait for backend to process order and update balance/portfolio
+        // This gives time for: order execution → balance update → portfolio update
+        await new Promise(resolve => setTimeout(resolve, 1500))
 
         // Refresh user data to get updated balance
         if (user) {
@@ -194,6 +219,11 @@ function TradeContent() {
             try {
               const updatedUser = await apiService.getUserProfile(user.id, accessToken)
               updateUser(updatedUser)
+
+              // Trigger portfolio refresh event for other components
+              window.dispatchEvent(new CustomEvent('portfolio-refresh', {
+                detail: { userId: user.id, action: 'sell', symbol: selectedCrypto.symbol }
+              }))
             } catch (error) {
               console.error('Error refreshing user data:', error)
             }
