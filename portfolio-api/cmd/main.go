@@ -166,8 +166,15 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
+		// Plural route: /api/portfolios
 		portfolios := api.Group("/portfolios")
 		controller.RegisterRoutes(portfolios)
+
+		// Singular route for orders-api compatibility: /api/portfolio
+		portfolio := api.Group("/portfolio")
+		{
+			portfolio.POST("/:userId/holdings", controller.UpdateHoldings)
+		}
 	}
 
 	// Initialize and start RabbitMQ consumer for portfolio updates

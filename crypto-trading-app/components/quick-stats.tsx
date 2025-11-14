@@ -10,6 +10,10 @@ export function QuickStats() {
   const { user } = useAuth()
   const [portfolioValue, setPortfolioValue] = useState(0)
   const [availableBalance, setAvailableBalance] = useState(0)
+  const [dailyChange, setDailyChange] = useState(0)
+  const [dailyChangePercent, setDailyChangePercent] = useState(0)
+  const [totalProfit, setTotalProfit] = useState(0)
+  const [totalProfitPercent, setTotalProfitPercent] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const formatCurrency = (amount: number) => {
@@ -18,6 +22,11 @@ export function QuickStats() {
       currency: 'USD',
       minimumFractionDigits: 2,
     }).format(amount)
+  }
+
+  const formatPercent = (percent: number) => {
+    const sign = percent >= 0 ? '+' : ''
+    return `${sign}${percent.toFixed(2)}%`
   }
 
   // Fetch real portfolio data
@@ -29,14 +38,28 @@ export function QuickStats() {
       const totalValue = parseFloat(portfolio.total_value) || 0
       const cash = parseFloat(portfolio.total_cash) || 0
 
+      // Use real performance metrics from backend
+      const daily24h = parseFloat(portfolio.performance?.daily_change || '0')
+      const daily24hPercent = parseFloat(portfolio.performance?.daily_change_percentage || '0')
+      const profit = parseFloat(portfolio.profit_loss || '0')
+      const profitPercent = parseFloat(portfolio.profit_loss_percentage || '0')
+
       setPortfolioValue(totalValue)
       setAvailableBalance(cash)
+      setDailyChange(daily24h)
+      setDailyChangePercent(daily24hPercent)
+      setTotalProfit(profit)
+      setTotalProfitPercent(profitPercent)
     } catch (error) {
       console.error('Error fetching portfolio data:', error)
       // Fallback to user initial balance
       const fallback = user.initial_balance || 0
       setPortfolioValue(fallback)
       setAvailableBalance(fallback)
+      setDailyChange(0)
+      setDailyChangePercent(0)
+      setTotalProfit(0)
+      setTotalProfitPercent(0)
     } finally {
       setLoading(false)
     }
@@ -65,28 +88,28 @@ export function QuickStats() {
     {
       name: "Portfolio Value",
       value: formatCurrency(portfolioValue),
-      change: "+12.5%",
-      trend: "up",
+      change: formatPercent(totalProfitPercent),
+      trend: totalProfitPercent >= 0 ? "up" : "down",
       icon: DollarSign,
     },
     {
       name: "24h Change",
-      value: "+$1,234.56",
-      change: "+5.3%",
-      trend: "up",
-      icon: TrendingUp,
+      value: formatCurrency(dailyChange),
+      change: formatPercent(dailyChangePercent),
+      trend: dailyChangePercent >= 0 ? "up" : "down",
+      icon: dailyChangePercent >= 0 ? TrendingUp : TrendingDown,
     },
     {
       name: "Total Profit",
-      value: "$8,945.23",
-      change: "+23.1%",
-      trend: "up",
+      value: formatCurrency(totalProfit),
+      change: formatPercent(totalProfitPercent),
+      trend: totalProfit >= 0 ? "up" : "down",
       icon: Activity,
     },
     {
       name: "Available Balance",
       value: formatCurrency(availableBalance),
-      change: "0%",
+      change: "Cash",
       trend: "neutral",
       icon: DollarSign,
     },

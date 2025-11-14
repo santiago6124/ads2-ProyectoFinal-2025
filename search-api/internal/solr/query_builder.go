@@ -292,10 +292,11 @@ func BuildFromRequest(req *dto.SearchRequest) map[string]interface{} {
 		"limit":    10,
 	})
 
-	qb.AddFieldFacet("order_kind", map[string]interface{}{
-		"mincount": 1,
-		"limit":    10,
-	})
+	// NOTE: order_kind field doesn't exist in Solr schema, removed to fix 400 errors
+	// qb.AddFieldFacet("order_kind", map[string]interface{}{
+	// 	"mincount": 1,
+	// 	"limit":    10,
+	// })
 
 	qb.AddFieldFacet("crypto_symbol", map[string]interface{}{
 		"mincount": 1,

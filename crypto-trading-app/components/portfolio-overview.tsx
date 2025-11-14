@@ -4,34 +4,49 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useAuth } from "@/lib/auth-context"
 import { getPortfolio, formatCrypto, formatUSD, formatPercentage, getTrend, type Portfolio } from "@/lib/portfolio-api"
 
 export function PortfolioOverview() {
+  const { user } = useAuth()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Get user ID from session/auth - for now using hardcoded value
-  // TODO: Replace with actual user ID from authentication
-  const userId = 1
+  const fetchPortfolio = async () => {
+    if (!user?.id) return
 
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await getPortfolio(user.id)
+      setPortfolio(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load portfolio')
+      console.error('Error loading portfolio:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial fetch
   useEffect(() => {
-    const fetchPortfolio = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await getPortfolio(userId)
-        setPortfolio(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load portfolio')
-        console.error('Error loading portfolio:', err)
-      } finally {
-        setLoading(false)
-      }
+    fetchPortfolio()
+  }, [user])
+
+  // Listen for portfolio refresh events
+  useEffect(() => {
+    const handlePortfolioRefresh = () => {
+      console.log('PortfolioOverview: portfolio-refresh event received, refetching data...')
+      fetchPortfolio()
     }
 
-    fetchPortfolio()
-  }, [userId])
+    window.addEventListener('portfolio-refresh', handlePortfolioRefresh)
+
+    return () => {
+      window.removeEventListener('portfolio-refresh', handlePortfolioRefresh)
+    }
+  }, [user])
 
   if (loading) {
     return (

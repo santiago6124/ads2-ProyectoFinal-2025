@@ -7,9 +7,10 @@ export interface Holding {
   average_buy_price: string
   current_price: string
   current_value: string
+  total_value: string
   profit_loss: string
   profit_loss_percentage: string
-  percentage_of_portfolio: string
+  allocation_percentage: string
 }
 
 export interface Portfolio {
@@ -53,6 +54,10 @@ export async function getPortfolio(userId: number): Promise<Portfolio> {
     }
 
     const data: Portfolio = await response.json()
+    console.log('getPortfolio DEBUG: Full response', data)
+    if (data.holdings && data.holdings.length > 0) {
+      console.log('getPortfolio DEBUG: First holding', data.holdings[0])
+    }
     return data
   } catch (error) {
     console.error('Error fetching portfolio:', error)
@@ -92,12 +97,13 @@ export function formatUSD(value: string | number): string {
 
 /**
  * Format percentage (2 decimal places with + or - sign)
+ * Note: API already returns percentage values (e.g., "3.28" = 3.28%), no need to multiply by 100
  */
 export function formatPercentage(value: string | number): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
   if (isNaN(num)) return '0.00%'
 
-  const formatted = (num * 100).toFixed(2)
+  const formatted = num.toFixed(2)
   const sign = num >= 0 ? '+' : ''
   return `${sign}${formatted}%`
 }

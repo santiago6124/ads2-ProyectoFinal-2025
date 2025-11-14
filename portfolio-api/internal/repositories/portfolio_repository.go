@@ -48,6 +48,9 @@ type PortfolioRepository interface {
 
 	// BulkUpdate updates multiple portfolios
 	BulkUpdate(ctx context.Context, portfolios []*models.Portfolio) error
+
+	// UpdateHoldingsFromOrder updates portfolio holdings based on an order
+	UpdateHoldingsFromOrder(ctx context.Context, userID int64, symbol string, quantity, price float64, orderType string) error
 }
 
 // PortfolioStats represents portfolio statistics

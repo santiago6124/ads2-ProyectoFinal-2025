@@ -28,14 +28,22 @@ export function AssetAllocation() {
       const portfolio = await getPortfolio(user.id)
 
       if (portfolio.holdings && portfolio.holdings.length > 0) {
-        // Use pre-calculated holdings from backend
-        const holdingsArray = portfolio.holdings.map((holding, index) => ({
-          name: holding.symbol,
-          quantity: parseFloat(holding.quantity),
-          value: parseFloat(holding.current_value),
-          percentage: parseFloat(holding.percentage_of_portfolio) * 100, // Convert to percentage
-          color: COLORS[index % COLORS.length]
-        }))
+        // Use pre-calculated holdings from backend (already in percentage format)
+        const holdingsArray = portfolio.holdings.map((holding, index) => {
+          const percentage = parseFloat(holding.allocation_percentage)
+          console.log(`AssetAllocation DEBUG: ${holding.symbol}`, {
+            allocation_percentage_raw: holding.allocation_percentage,
+            percentage_parsed: percentage,
+            isNaN: isNaN(percentage)
+          })
+          return {
+            name: holding.symbol,
+            quantity: parseFloat(holding.quantity),
+            value: parseFloat(holding.total_value || holding.current_value),
+            percentage: percentage, // API already returns as percentage
+            color: COLORS[index % COLORS.length]
+          }
+        })
 
         // Add cash allocation
         const totalValue = parseFloat(portfolio.total_value) || 0

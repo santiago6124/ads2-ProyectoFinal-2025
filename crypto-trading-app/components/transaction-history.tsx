@@ -1,98 +1,95 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ArrowUpRight, ArrowDownRight, Search, Download } from "lucide-react"
+import { ArrowUpRight, ArrowDownRight, Search, Download, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-
-const transactions = [
-  {
-    id: "1",
-    type: "buy",
-    coin: "BTC",
-    coinName: "Bitcoin",
-    amount: "0.0234",
-    value: "$1,234.56",
-    price: "$52,756.41",
-    status: "completed",
-    date: "2024-01-15",
-    time: "14:32:15",
-  },
-  {
-    id: "2",
-    type: "sell",
-    coin: "ETH",
-    coinName: "Ethereum",
-    amount: "0.5",
-    value: "$1,281.56",
-    price: "$2,563.12",
-    status: "completed",
-    date: "2024-01-14",
-    time: "09:15:42",
-  },
-  {
-    id: "3",
-    type: "buy",
-    coin: "SOL",
-    coinName: "Solana",
-    amount: "10",
-    value: "$1,243.20",
-    price: "$124.32",
-    status: "completed",
-    date: "2024-01-13",
-    time: "16:45:23",
-  },
-  {
-    id: "4",
-    type: "buy",
-    coin: "ADA",
-    coinName: "Cardano",
-    amount: "500",
-    value: "$945.00",
-    price: "$1.89",
-    status: "completed",
-    date: "2024-01-12",
-    time: "11:20:08",
-  },
-  {
-    id: "5",
-    type: "sell",
-    coin: "BTC",
-    coinName: "Bitcoin",
-    amount: "0.0156",
-    value: "$823.45",
-    price: "$52,785.90",
-    status: "completed",
-    date: "2024-01-11",
-    time: "13:55:31",
-  },
-  {
-    id: "6",
-    type: "buy",
-    coin: "ETH",
-    coinName: "Ethereum",
-    amount: "1.2",
-    value: "$3,075.74",
-    price: "$2,563.12",
-    status: "pending",
-    date: "2024-01-10",
-    time: "08:12:45",
-  },
-]
+import { useAuth } from "@/lib/auth-context"
+import { searchApiService, OrderSearchResult } from "@/lib/search-api"
+import { useToast } from "@/hooks/use-toast"
 
 export function TransactionHistory() {
+  const { user } = useAuth()
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [filter, setFilter] = useState<"all" | "buy" | "sell">("all")
+  const [orders, setOrders] = useState<OrderSearchResult[]>([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
 
-  const filteredTransactions = transactions.filter((tx) => {
-    const matchesSearch =
-      tx.coin.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tx.coinName.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFilter = filter === "all" || tx.type === filter
-    return matchesSearch && matchesFilter
-  })
+  useEffect(() => {
+    fetchOrders()
+  }, [user, filter, page])
+
+  const fetchOrders = async () => {
+    if (!user?.id) return
+
+    try {
+      setLoading(true)
+      const typeFilter = filter === "all" ? undefined : [filter]
+
+      const response = await searchApiService.searchOrders({
+        user_id: user.id,
+        type: typeFilter,
+        q: searchQuery || undefined,
+        page,
+        limit: 20,
+        sort: 'created_at_desc'
+      })
+
+      setOrders(response.results || [])
+      setTotalPages(response.total_pages || 1)
+    } catch (error) {
+      console.error('Failed to fetch orders:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load transaction history",
+        variant: "destructive"
+      })
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSearch = () => {
+    setPage(1)
+    fetchOrders()
+  }
+
+  const formatPrice = (price: string) => {
+    const num = parseFloat(price)
+    return isNaN(num) ? '$0.00' : `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr)
+      return {
+        date: date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+        time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      }
+    } catch {
+      return { date: 'N/A', time: 'N/A' }
+    }
+  }
+
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" => {
+    switch (status.toLowerCase()) {
+      case 'executed':
+        return 'default'
+      case 'pending':
+        return 'secondary'
+      case 'failed':
+      case 'cancelled':
+        return 'destructive'
+      default:
+        return 'secondary'
+    }
+  }
 
   return (
     <Card className="p-6">
@@ -108,11 +105,12 @@ export function TransactionHistory() {
               placeholder="Search transactions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               className="pl-10 w-full sm:w-64"
             />
           </div>
-          <Button variant="outline" size="icon">
-            <Download className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={handleSearch} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           </Button>
         </div>
       </div>
@@ -121,7 +119,7 @@ export function TransactionHistory() {
         <Button
           variant={filter === "all" ? "default" : "outline"}
           size="sm"
-          onClick={() => setFilter("all")}
+          onClick={() => { setFilter("all"); setPage(1); }}
           className="bg-transparent"
         >
           All
@@ -129,7 +127,7 @@ export function TransactionHistory() {
         <Button
           variant={filter === "buy" ? "default" : "outline"}
           size="sm"
-          onClick={() => setFilter("buy")}
+          onClick={() => { setFilter("buy"); setPage(1); }}
           className="bg-transparent"
         >
           Buy
@@ -137,78 +135,116 @@ export function TransactionHistory() {
         <Button
           variant={filter === "sell" ? "default" : "outline"}
           size="sm"
-          onClick={() => setFilter("sell")}
+          onClick={() => { setFilter("sell"); setPage(1); }}
           className="bg-transparent"
         >
           Sell
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="border-b border-border">
-            <tr>
-              <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Type</th>
-              <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Asset</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Amount</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden md:table-cell">Price</th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Value</th>
-              <th className="text-center p-4 text-sm font-semibold text-muted-foreground hidden lg:table-cell">
-                Status
-              </th>
-              <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden xl:table-cell">
-                Date & Time
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTransactions.map((tx) => (
-              <tr key={tx.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                <td className="p-4">
-                  <div
-                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
-                      tx.type === "buy" ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
-                    }`}
-                  >
-                    {tx.type === "buy" ? <ArrowDownRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                    <span className="text-sm font-semibold capitalize">{tx.type}</span>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">{tx.coin}</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold">{tx.coinName}</p>
-                      <p className="text-xs text-muted-foreground">{tx.coin}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-4 text-right font-medium">
-                  {tx.amount} {tx.coin}
-                </td>
-                <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{tx.price}</td>
-                <td className="p-4 text-right font-semibold">{tx.value}</td>
-                <td className="p-4 text-center hidden lg:table-cell">
-                  <Badge variant={tx.status === "completed" ? "default" : "secondary"} className="capitalize">
-                    {tx.status}
-                  </Badge>
-                </td>
-                <td className="p-4 text-right text-sm text-muted-foreground hidden xl:table-cell">
-                  <div>{tx.date}</div>
-                  <div className="text-xs">{tx.time}</div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {filteredTransactions.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No transactions found</p>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-border">
+                <tr>
+                  <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Type</th>
+                  <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Asset</th>
+                  <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Amount</th>
+                  <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden md:table-cell">Price</th>
+                  <th className="text-right p-4 text-sm font-semibold text-muted-foreground">Value</th>
+                  <th className="text-center p-4 text-sm font-semibold text-muted-foreground hidden lg:table-cell">
+                    Status
+                  </th>
+                  <th className="text-right p-4 text-sm font-semibold text-muted-foreground hidden xl:table-cell">
+                    Date & Time
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => {
+                  const { date, time } = formatDate(order.created_at)
+                  return (
+                    <tr key={order.id} className="border-b border-border hover:bg-accent/50 transition-colors">
+                      <td className="p-4">
+                        <div
+                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
+                            order.type === "buy" ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+                          }`}
+                        >
+                          {order.type === "buy" ? <ArrowDownRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                          <span className="text-sm font-semibold capitalize">{order.type}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-xs font-bold text-primary">{order.crypto_symbol}</span>
+                          </div>
+                          <div>
+                            <p className="font-semibold">{order.crypto_name}</p>
+                            <p className="text-xs text-muted-foreground">{order.crypto_symbol}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 text-right font-medium">
+                        {parseFloat(order.quantity).toFixed(4)} {order.crypto_symbol}
+                      </td>
+                      <td className="p-4 text-right text-muted-foreground hidden md:table-cell">
+                        {formatPrice(order.price)}
+                      </td>
+                      <td className="p-4 text-right font-semibold">{formatPrice(order.total_amount)}</td>
+                      <td className="p-4 text-center hidden lg:table-cell">
+                        <Badge variant={getStatusVariant(order.status)} className="capitalize">
+                          {order.status}
+                        </Badge>
+                      </td>
+                      <td className="p-4 text-right text-sm text-muted-foreground hidden xl:table-cell">
+                        <div>{date}</div>
+                        <div className="text-xs">{time}</div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {orders.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No transactions found</p>
+              <p className="text-sm text-muted-foreground mt-2">Start trading to see your transaction history</p>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </Card>
   )

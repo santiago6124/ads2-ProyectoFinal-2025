@@ -192,7 +192,10 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		// Actualizar holdings en el portfolio (asíncrono, no bloquea)
 		if s.portfolioClient != nil {
 			go func() {
-				_ = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "buy")
+				// Use background context for async operation to prevent cancellation when request finishes
+				bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				_ = s.portfolioClient.UpdateHoldings(bgCtx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "buy")
 			}()
 		}
 	} else if order.Type == models.OrderTypeSell {
@@ -205,7 +208,10 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 		// Actualizar holdings en el portfolio (asíncrono, no bloquea)
 		if s.portfolioClient != nil {
 			go func() {
-				_ = s.portfolioClient.UpdateHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "sell")
+				// Use background context for async operation to prevent cancellation when request finishes
+				bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				_ = s.portfolioClient.UpdateHoldings(bgCtx, int64(order.UserID), order.CryptoSymbol, order.Quantity, priceRes.price.MarketPrice, "sell")
 			}()
 		}
 	}

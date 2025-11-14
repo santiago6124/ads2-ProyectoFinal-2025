@@ -85,8 +85,6 @@ type UpdateHoldingsRequest struct {
 }
 
 // UpdateHoldings updates user holdings after an order execution
-// This is a stub implementation that just returns OK
-// The full implementation would require the complete portfolio-api infrastructure
 func (c *PortfolioController) UpdateHoldings(ctx *gin.Context) {
 	userIDParam := ctx.Param("userId")
 	userID, err := parseUserID(userIDParam)
@@ -101,16 +99,33 @@ func (c *PortfolioController) UpdateHoldings(ctx *gin.Context) {
 		return
 	}
 
-	// Log the request for debugging
-	c.logger.Infof("Portfolio update request: User %d, Symbol %s, Quantity %f, Price %f, Type %s", 
-		userID, req.Symbol, req.Quantity, req.Price, req.OrderType)
+	c.logger.Infof("📨 Holdings update: User %d, %s %f %s @ $%f",
+		userID, req.OrderType, req.Quantity, req.Symbol, req.Price)
 
-	// For now, just return success
-	// The full implementation would update the portfolio here
+	// Validate portfolio repository is available
+	if c.portfolioRepo == nil {
+		c.logger.Error("Portfolio repository not initialized")
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "portfolio service unavailable"})
+		return
+	}
+
+	requestCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Call the repository method to update holdings
+	err = c.portfolioRepo.UpdateHoldingsFromOrder(requestCtx, userID, req.Symbol, req.Quantity, req.Price, req.OrderType)
+	if err != nil {
+		c.logger.Errorf("Failed to update holdings for user %d: %v", userID, err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to update holdings: %v", err)})
+		return
+	}
+
+	c.logger.Infof("✅ Holdings updated successfully for user %d: %s %s", userID, req.OrderType, req.Symbol)
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "Holdings updated successfully",
 		"user_id": userID,
 		"symbol":  req.Symbol,
+		"order_type": req.OrderType,
 	})
 }
 
@@ -200,9 +215,11 @@ func (c *PortfolioController) GetPortfolio(ctx *gin.Context) {
 
 				holdings = append(holdings, gin.H{
 					"symbol":                   holding.Symbol,
+					"name":                     holding.Name,
 					"quantity":                 fmt.Sprintf("%.8f", quantity),
 					"average_buy_price":        fmt.Sprintf("%.2f", avgPrice),
 					"current_price":            fmt.Sprintf("%.2f", currentPrice),
+					"current_value":            fmt.Sprintf("%.2f", totalValue),
 					"total_value":              fmt.Sprintf("%.2f", totalValue),
 					"profit_loss":              fmt.Sprintf("%.2f", profitLoss),
 					"profit_loss_percentage":   fmt.Sprintf("%.2f", profitLossPct),

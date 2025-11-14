@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -132,6 +134,7 @@ func (c *Client) performSearch(ctx context.Context, endpoint string, params map[
 	// Build query string
 	queryParams := c.buildQueryParams(params)
 	fullURL := endpoint + "?" + queryParams.Encode()
+	log.Printf("DEBUG: Solr query URL: %s", fullURL)
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
@@ -150,6 +153,8 @@ func (c *Client) performSearch(ctx context.Context, endpoint string, params map[
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR: Solr returned status %d, body: %s", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("Solr returned status %d", resp.StatusCode)
 	}
 

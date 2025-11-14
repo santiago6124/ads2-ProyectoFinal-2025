@@ -94,10 +94,17 @@ func (mdc *MarketDataClient) GetPrices(ctx context.Context, symbols []string) (m
 	}
 
 	symbolsParam := strings.Join(symbols, ",")
-	url := fmt.Sprintf("%s/prices?symbols=%s", mdc.baseURL, strings.ToUpper(symbolsParam))
+	url := fmt.Sprintf("%s/api/v1/prices?symbols=%s", mdc.baseURL, strings.ToUpper(symbolsParam))
 
 	var response struct {
-		Data map[string]MarketPrice `json:"data"`
+		Count int `json:"count"`
+		Data  []struct {
+			Symbol    string  `json:"symbol"`
+			Name      string  `json:"name"`
+			Price     float64 `json:"price"`
+			Change24h float64 `json:"change_24h"`
+			Timestamp int64   `json:"timestamp"`
+		} `json:"data"`
 	}
 
 	err := mdc.makeRequest(ctx, "GET", url, nil, &response)
@@ -106,9 +113,13 @@ func (mdc *MarketDataClient) GetPrices(ctx context.Context, symbols []string) (m
 	}
 
 	result := make(map[string]*MarketPrice)
-	for symbol, price := range response.Data {
-		priceCopy := price
-		result[symbol] = &priceCopy
+	for _, priceData := range response.Data {
+		result[priceData.Symbol] = &MarketPrice{
+			Symbol:    priceData.Symbol,
+			Price:     decimal.NewFromFloat(priceData.Price),
+			Change24h: decimal.NewFromFloat(priceData.Change24h),
+			Timestamp: time.Unix(priceData.Timestamp, 0),
+		}
 	}
 
 	return result, nil
