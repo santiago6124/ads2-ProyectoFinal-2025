@@ -21,7 +21,20 @@ export function RecentActivity() {
       try {
         setLoading(true)
         const response = await searchApiService.getRecentOrders(user.id, 4)
-        setOrders(response.results || [])
+
+        console.log('🔍 Recent orders raw response:', response.results)
+
+        // Filter to only show executed orders (double-check in case API returns others)
+        const executedOrders = (response.results || []).filter(order => {
+          const isExecuted = order.status === 'executed'
+          if (!isExecuted) {
+            console.log(`⚠️ Filtering out order ${order.id} with status: ${order.status}`)
+          }
+          return isExecuted
+        })
+
+        console.log('✅ Filtered executed orders:', executedOrders.length, 'orders')
+        setOrders(executedOrders)
       } catch (error) {
         console.error('Failed to fetch recent orders:', error)
         setOrders([])

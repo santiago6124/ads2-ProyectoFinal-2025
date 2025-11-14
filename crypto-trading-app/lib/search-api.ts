@@ -65,6 +65,8 @@ class SearchApiService {
 
   async searchOrders(params: SearchOrderRequest): Promise<SearchResponse> {
     try {
+      console.log('🔍 Search API request params:', params)
+
       const response = await fetch(`${this.baseUrl}/api/v1/search`, {
         method: 'POST',
         headers: {
@@ -129,6 +131,7 @@ class SearchApiService {
       page: 1,
       limit,
       sort: 'created_at_desc',
+      status: ['executed'], // Only show executed orders
     })
   }
 }
