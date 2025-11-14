@@ -103,45 +103,81 @@ function TradeContent() {
       // Create order via Orders API
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
-        console.log('Order created successfully:', orderResponse)
+        console.log('Order response:', orderResponse)
 
-        toast({
-          title: "Buy Order Placed",
-          description: `Processing your buy order for ${qty} ${selectedCrypto.symbol}...`,
-        })
+        // Check order status and show appropriate message
+        if (orderResponse.status === "executed") {
+          // Success - order executed
+          toast({
+            title: "✅ Order Executed Successfully!",
+            description: `Bought ${qty} ${selectedCrypto.symbol} for ${formatPrice(totalCost)}`,
+          })
 
-        // Show success toast immediately
-        toast({
-          title: "Order Complete!",
-          description: `Successfully purchased ${qty} ${selectedCrypto.symbol}`,
-        })
+          // Wait for backend to process order and update balance/portfolio
+          await new Promise(resolve => setTimeout(resolve, 1500))
 
-        // Wait for backend to process order and update balance/portfolio
-        // This gives time for: order execution → balance update → portfolio update
-        await new Promise(resolve => setTimeout(resolve, 1500))
+          // Refresh user data to get updated balance
+          if (user) {
+            const accessToken = localStorage.getItem('crypto_access_token')
+            if (accessToken) {
+              try {
+                const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+                updateUser(updatedUser)
 
-        // Refresh user data to get updated balance
-        if (user) {
-          const accessToken = localStorage.getItem('crypto_access_token')
-          if (accessToken) {
-            try {
-              const updatedUser = await apiService.getUserProfile(user.id, accessToken)
-              updateUser(updatedUser)
-
-              // Trigger portfolio refresh event for other components
-              window.dispatchEvent(new CustomEvent('portfolio-refresh', {
-                detail: { userId: user.id, action: 'buy', symbol: selectedCrypto.symbol }
-              }))
-            } catch (error) {
-              console.error('Error refreshing user data:', error)
+                // Trigger portfolio refresh event for other components
+                window.dispatchEvent(new CustomEvent('portfolio-refresh', {
+                  detail: { userId: user.id, action: 'buy', symbol: selectedCrypto.symbol }
+                }))
+              } catch (error) {
+                console.error('Error refreshing user data:', error)
+              }
             }
           }
+        } else if (orderResponse.status === "failed") {
+          // Order failed - likely insufficient funds
+          const failureReason = totalCost > (user?.balance || 0)
+            ? `Insufficient funds. You need ${formatPrice(totalCost + (totalCost * 0.001))} (including 0.1% fee) but only have ${formatPrice(user?.balance || 0)}`
+            : "Order failed to execute. Please check your balance and try again."
+
+          toast({
+            title: "❌ Order Failed",
+            description: failureReason,
+            variant: "destructive"
+          })
+          return
+        } else if (orderResponse.status === "pending") {
+          // Order pending - waiting for execution
+          toast({
+            title: "⏳ Order Pending",
+            description: `Your buy order for ${qty} ${selectedCrypto.symbol} is being processed...`,
+          })
+
+          // Still refresh after a delay to check if it executed
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          if (user) {
+            const accessToken = localStorage.getItem('crypto_access_token')
+            if (accessToken) {
+              try {
+                const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+                updateUser(updatedUser)
+              } catch (error) {
+                console.error('Error refreshing user data:', error)
+              }
+            }
+          }
+        } else if (orderResponse.status === "cancelled") {
+          toast({
+            title: "🚫 Order Cancelled",
+            description: `Your buy order for ${qty} ${selectedCrypto.symbol} was cancelled`,
+            variant: "destructive"
+          })
+          return
         }
       } catch (apiError) {
         console.error('API Error:', apiError)
         toast({
-          title: "Order Failed",
-          description: apiError instanceof Error ? apiError.message : "Failed to place buy order",
+          title: "❌ Order Failed",
+          description: apiError instanceof Error ? apiError.message : "Failed to place buy order. Please try again.",
           variant: "destructive"
         })
         return
@@ -195,45 +231,77 @@ function TradeContent() {
       // Create order via Orders API
       try {
         const orderResponse = await ordersApiService.createOrder(orderData)
-        console.log('Order created successfully:', orderResponse)
+        console.log('Order response:', orderResponse)
 
-        toast({
-          title: "Sell Order Placed",
-          description: `Processing your sell order for ${qty} ${selectedCrypto.symbol}...`,
-        })
+        // Check order status and show appropriate message
+        if (orderResponse.status === "executed") {
+          // Success - order executed
+          toast({
+            title: "✅ Order Executed Successfully!",
+            description: `Sold ${qty} ${selectedCrypto.symbol} for ${formatPrice(totalValue)}`,
+          })
 
-        // Show success toast immediately
-        toast({
-          title: "Order Complete!",
-          description: `Successfully sold ${qty} ${selectedCrypto.symbol}`,
-        })
+          // Wait for backend to process order and update balance/portfolio
+          await new Promise(resolve => setTimeout(resolve, 1500))
 
-        // Wait for backend to process order and update balance/portfolio
-        // This gives time for: order execution → balance update → portfolio update
-        await new Promise(resolve => setTimeout(resolve, 1500))
+          // Refresh user data to get updated balance
+          if (user) {
+            const accessToken = localStorage.getItem('crypto_access_token')
+            if (accessToken) {
+              try {
+                const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+                updateUser(updatedUser)
 
-        // Refresh user data to get updated balance
-        if (user) {
-          const accessToken = localStorage.getItem('crypto_access_token')
-          if (accessToken) {
-            try {
-              const updatedUser = await apiService.getUserProfile(user.id, accessToken)
-              updateUser(updatedUser)
-
-              // Trigger portfolio refresh event for other components
-              window.dispatchEvent(new CustomEvent('portfolio-refresh', {
-                detail: { userId: user.id, action: 'sell', symbol: selectedCrypto.symbol }
-              }))
-            } catch (error) {
-              console.error('Error refreshing user data:', error)
+                // Trigger portfolio refresh event for other components
+                window.dispatchEvent(new CustomEvent('portfolio-refresh', {
+                  detail: { userId: user.id, action: 'sell', symbol: selectedCrypto.symbol }
+                }))
+              } catch (error) {
+                console.error('Error refreshing user data:', error)
+              }
             }
           }
+        } else if (orderResponse.status === "failed") {
+          // Order failed - likely insufficient holdings
+          toast({
+            title: "❌ Order Failed",
+            description: `Insufficient ${selectedCrypto.symbol} holdings. Please check your portfolio and try again.`,
+            variant: "destructive"
+          })
+          return
+        } else if (orderResponse.status === "pending") {
+          // Order pending - waiting for execution
+          toast({
+            title: "⏳ Order Pending",
+            description: `Your sell order for ${qty} ${selectedCrypto.symbol} is being processed...`,
+          })
+
+          // Still refresh after a delay to check if it executed
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          if (user) {
+            const accessToken = localStorage.getItem('crypto_access_token')
+            if (accessToken) {
+              try {
+                const updatedUser = await apiService.getUserProfile(user.id, accessToken)
+                updateUser(updatedUser)
+              } catch (error) {
+                console.error('Error refreshing user data:', error)
+              }
+            }
+          }
+        } else if (orderResponse.status === "cancelled") {
+          toast({
+            title: "🚫 Order Cancelled",
+            description: `Your sell order for ${qty} ${selectedCrypto.symbol} was cancelled`,
+            variant: "destructive"
+          })
+          return
         }
       } catch (apiError) {
         console.error('API Error:', apiError)
         toast({
-          title: "Order Failed",
-          description: apiError instanceof Error ? apiError.message : "Failed to place sell order",
+          title: "❌ Order Failed",
+          description: apiError instanceof Error ? apiError.message : "Failed to place sell order. Please try again.",
           variant: "destructive"
         })
         return
