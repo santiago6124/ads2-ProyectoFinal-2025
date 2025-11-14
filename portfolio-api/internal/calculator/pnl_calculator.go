@@ -20,10 +20,10 @@ type PnLCalculator struct {
 }
 
 // PnLResult represents the result of P&L calculation
+// Note: Cash balance is managed by Users API, not included here
 type PnLResult struct {
 	TotalValue            decimal.Decimal `json:"total_value"`
 	TotalInvested         decimal.Decimal `json:"total_invested"`
-	TotalCash             decimal.Decimal `json:"total_cash"`
 	RealizedPnL           decimal.Decimal `json:"realized_pnl"`
 	UnrealizedPnL         decimal.Decimal `json:"unrealized_pnl"`
 	TotalPnL              decimal.Decimal `json:"total_pnl"`
@@ -89,7 +89,6 @@ func (calc *PnLCalculator) CalculatePortfolioPnL(ctx context.Context, portfolio 
 	result := &PnLResult{
 		TotalInvested: decimal.Zero,
 		TotalValue:    decimal.Zero,
-		TotalCash:     portfolio.TotalCash,
 		RealizedPnL:   decimal.Zero,
 		UnrealizedPnL: decimal.Zero,
 	}
@@ -123,8 +122,8 @@ func (calc *PnLCalculator) CalculatePortfolioPnL(ctx context.Context, portfolio 
 		totalCryptoValue = totalCryptoValue.Add(holdingPnL.CurrentValue)
 	}
 
-	// Calculate total portfolio value
-	result.TotalValue = totalCryptoValue.Add(result.TotalCash)
+	// Calculate total portfolio value (crypto holdings only, cash managed by Users API)
+	result.TotalValue = totalCryptoValue
 
 	// Calculate total P&L and percentage
 	result.TotalPnL = result.RealizedPnL.Add(result.UnrealizedPnL)

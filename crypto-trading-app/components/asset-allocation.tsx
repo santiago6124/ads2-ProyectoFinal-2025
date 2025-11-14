@@ -45,9 +45,9 @@ export function AssetAllocation() {
           }
         })
 
-        // Add cash allocation
+        // Add cash allocation using user balance
         const totalValue = parseFloat(portfolio.total_value) || 0
-        const cash = parseFloat(portfolio.total_cash) || 0
+        const cash = user.balance || 0  // Use user balance instead of portfolio.total_cash
         const cashPercentage = totalValue > 0 ? (cash / totalValue) * 100 : 100
 
         if (cashPercentage > 0.01) { // Only show if > 0.01%
@@ -63,7 +63,7 @@ export function AssetAllocation() {
         setAssets(holdingsArray.sort((a, b) => b.value - a.value))
       } else {
         // No holdings, show only cash
-        const cash = parseFloat(portfolio.total_cash) || user.initial_balance || 0
+        const cash = user.balance || 0
         setAssets([{
           name: 'Cash',
           quantity: cash,
@@ -75,7 +75,7 @@ export function AssetAllocation() {
     } catch (error) {
       console.error('Error fetching holdings:', error)
       // Fallback to cash only
-      const fallbackCash = user.initial_balance || 0
+      const fallbackCash = user.balance || 0
       setAssets([{
         name: 'Cash',
         quantity: fallbackCash,

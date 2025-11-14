@@ -128,11 +128,11 @@ func NewSnapshot(portfolio *Portfolio, interval string) *Snapshot {
 		CreatedAt:   now,
 	}
 
-	// Copy value information
+	// Copy value information (cash is managed by Users API, not stored in snapshot)
 	snapshot.Value = SnapshotValue{
 		Total:                portfolio.TotalValue,
 		Invested:             portfolio.TotalInvested,
-		Cash:                 portfolio.TotalCash,
+		Cash:                 decimal.Zero,  // Cash managed by Users API
 		ProfitLoss:           portfolio.ProfitLoss,
 		ProfitLossPercentage: portfolio.ProfitLossPercentage,
 		DailyChange:          portfolio.Performance.DailyChange,

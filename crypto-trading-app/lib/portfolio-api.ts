@@ -18,7 +18,6 @@ export interface Portfolio {
   user_id: number
   total_value: string
   total_invested: string
-  total_cash: string
   profit_loss: string
   profit_loss_percentage: string
   currency: string

@@ -276,7 +276,6 @@ func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) error 
 			Currency:             "USD",
 			TotalValue:           decimal.Zero,
 			TotalInvested:        decimal.Zero,
-			TotalCash:            decimal.Zero,
 			ProfitLoss:           decimal.Zero,
 			ProfitLossPercentage: decimal.Zero,
 			Holdings:             []models.Holding{},
@@ -456,7 +455,7 @@ func (c *Consumer) recalculatePortfolio(portfolio *models.Portfolio) {
 	}
 
 	portfolio.TotalInvested = totalInvested
-	portfolio.TotalValue = totalCurrentValue.Add(portfolio.TotalCash)
+	portfolio.TotalValue = totalCurrentValue  // Only crypto value, cash managed by Users API
 	portfolio.ProfitLoss = totalCurrentValue.Sub(totalInvested)
 
 	if totalInvested.GreaterThan(decimal.Zero) {

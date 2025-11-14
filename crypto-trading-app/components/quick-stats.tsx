@@ -36,7 +36,7 @@ export function QuickStats() {
     try {
       const portfolio = await getPortfolio(user.id)
       const totalValue = parseFloat(portfolio.total_value) || 0
-      const cash = parseFloat(portfolio.total_cash) || 0
+      const cash = user.balance || 0  // Use user balance instead of portfolio.total_cash
 
       // Use real performance metrics from backend
       const daily24h = parseFloat(portfolio.performance?.daily_change || '0')
@@ -52,8 +52,8 @@ export function QuickStats() {
       setTotalProfitPercent(profitPercent)
     } catch (error) {
       console.error('Error fetching portfolio data:', error)
-      // Fallback to user initial balance
-      const fallback = user.initial_balance || 0
+      // Fallback to user balance
+      const fallback = user.balance || 0
       setPortfolioValue(fallback)
       setAvailableBalance(fallback)
       setDailyChange(0)

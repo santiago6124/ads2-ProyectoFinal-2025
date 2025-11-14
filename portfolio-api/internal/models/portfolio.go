@@ -14,7 +14,6 @@ type Portfolio struct {
 	UserID                int64                 `bson:"user_id" json:"user_id"`
 	TotalValue            decimal.Decimal       `bson:"total_value" json:"total_value"`
 	TotalInvested         decimal.Decimal       `bson:"total_invested" json:"total_invested"`
-	TotalCash             decimal.Decimal       `bson:"total_cash" json:"total_cash"`
 	ProfitLoss            decimal.Decimal       `bson:"profit_loss" json:"profit_loss"`
 	ProfitLossPercentage  decimal.Decimal       `bson:"profit_loss_percentage" json:"profit_loss_percentage"`
 	Currency              string                `bson:"currency" json:"currency"`
@@ -166,7 +165,6 @@ type PortfolioSummary struct {
 	UserID                int64                `json:"user_id"`
 	TotalValue            decimal.Decimal      `json:"total_value"`
 	TotalInvested         decimal.Decimal      `json:"total_invested"`
-	TotalCash             decimal.Decimal      `json:"total_cash"`
 	ProfitLoss            decimal.Decimal      `json:"profit_loss"`
 	ProfitLossPercentage  decimal.Decimal      `json:"profit_loss_percentage"`
 	Currency              string               `json:"currency"`
@@ -227,18 +225,19 @@ func (p *Portfolio) GetTotalCryptoValue() decimal.Decimal {
 }
 
 // GetAllocation returns portfolio allocation breakdown
+// Note: Cash allocation must be calculated separately using user balance from Users API
 func (p *Portfolio) GetAllocation() PortfolioAllocation {
 	cryptoValue := p.GetTotalCryptoValue()
-	totalValue := cryptoValue.Add(p.TotalCash)
 
 	allocation := PortfolioAllocation{
 		Crypto: cryptoValue,
-		Cash:   p.TotalCash,
+		Cash:   decimal.Zero, // Cash should be obtained from Users API
 	}
 
-	if totalValue.GreaterThan(decimal.Zero) {
-		allocation.CryptoPercentage = cryptoValue.Div(totalValue).Mul(decimal.NewFromInt(100))
-		allocation.CashPercentage = p.TotalCash.Div(totalValue).Mul(decimal.NewFromInt(100))
+	// Only calculate crypto percentage; cash percentage should be calculated with user balance
+	if p.TotalValue.GreaterThan(decimal.Zero) {
+		allocation.CryptoPercentage = cryptoValue.Div(p.TotalValue).Mul(decimal.NewFromInt(100))
+		allocation.CashPercentage = decimal.Zero
 	}
 
 	return allocation
@@ -250,7 +249,6 @@ func (p *Portfolio) GetSummary() PortfolioSummary {
 		UserID:               p.UserID,
 		TotalValue:           p.TotalValue,
 		TotalInvested:        p.TotalInvested,
-		TotalCash:            p.TotalCash,
 		ProfitLoss:           p.ProfitLoss,
 		ProfitLossPercentage: p.ProfitLossPercentage,
 		Currency:             p.Currency,

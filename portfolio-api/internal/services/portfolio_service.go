@@ -58,11 +58,7 @@ func (ps *PortfolioService) GetPortfolio(ctx context.Context, userID int64) (*mo
 	var portfolio models.Portfolio
 	err := ps.cache.GetPortfolio(ctx, userID, &portfolio)
 	if err == nil {
-		// Update cash balance from user API
-		userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
-		if err == nil {
-			portfolio.TotalCash = userBalance
-		}
+		// Cash balance is now managed by Users API, not stored in portfolio
 		return &portfolio, nil
 	}
 
@@ -72,16 +68,9 @@ func (ps *PortfolioService) GetPortfolio(ctx context.Context, userID int64) (*mo
 		return nil, fmt.Errorf("failed to get portfolio: %w", err)
 	}
 
-	// Get current user balance
-	userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user balance: %w", err)
-	}
-
-	// Update portfolio with current cash balance
+	// Cash balance is now managed by Users API, not stored in portfolio
 	if portfolioPtr != nil {
-		portfolioPtr.TotalCash = userBalance
-		// Cache the updated result
+		// Cache the result
 		_ = ps.cache.SetPortfolio(ctx, userID, portfolioPtr)
 		return portfolioPtr, nil
 	}
@@ -97,15 +86,8 @@ func (ps *PortfolioService) CreatePortfolio(ctx context.Context, userID int64) (
 		return nil, fmt.Errorf("portfolio already exists for user %d", userID)
 	}
 
-	// Get user balance
-	userBalance, err := ps.userClient.GetUserBalance(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user balance: %w", err)
-	}
-
-	// Create new portfolio with user's cash balance
+	// Create new portfolio (cash balance is managed by Users API)
 	portfolio := models.NewPortfolio(userID)
-	portfolio.TotalCash = userBalance
 
 	err = ps.portfolioRepo.Create(ctx, portfolio)
 	if err != nil {

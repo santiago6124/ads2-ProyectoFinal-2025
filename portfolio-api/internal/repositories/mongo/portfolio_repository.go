@@ -113,7 +113,7 @@ func (r *MongoPortfolioRepository) bsonToPortfolio(doc bson.M) (*models.Portfoli
 	// Parse decimal fields from strings
 	portfolio.TotalValue = parseDecimalField(doc, "total_value")
 	portfolio.TotalInvested = parseDecimalField(doc, "total_invested")
-	portfolio.TotalCash = parseDecimalField(doc, "total_cash")
+	// TotalCash removed - managed by Users API
 	portfolio.ProfitLoss = parseDecimalField(doc, "profit_loss")
 	portfolio.ProfitLossPercentage = parseDecimalField(doc, "profit_loss_percentage")
 
@@ -397,7 +397,6 @@ func (r *MongoPortfolioRepository) UpdateHoldingsFromOrder(ctx context.Context, 
 			UserID:        userID,
 			TotalValue:    decimal.Zero,
 			TotalInvested: decimal.Zero,
-			TotalCash:     decimal.Zero,
 			ProfitLoss:    decimal.Zero,
 			ProfitLossPercentage: decimal.Zero,
 			Currency:      "USD",
@@ -519,14 +518,14 @@ func (r *MongoPortfolioRepository) UpdateHoldingsFromOrder(ctx context.Context, 
 		portfolio.TotalInvested = portfolio.TotalInvested.Sub(sellCostBasis)
 	}
 
-	// Recalculate portfolio totals
+	// Recalculate portfolio totals (crypto holdings only, cash managed by Users API)
 	totalHoldingsValue := decimal.Zero
 	for i := range portfolio.Holdings {
 		totalHoldingsValue = totalHoldingsValue.Add(portfolio.Holdings[i].CurrentValue)
 	}
 
-	portfolio.TotalValue = totalHoldingsValue.Add(portfolio.TotalCash)
-	portfolio.ProfitLoss = portfolio.TotalValue.Sub(portfolio.TotalInvested).Sub(portfolio.TotalCash)
+	portfolio.TotalValue = totalHoldingsValue
+	portfolio.ProfitLoss = portfolio.TotalValue.Sub(portfolio.TotalInvested)
 	if portfolio.TotalInvested.GreaterThan(decimal.Zero) {
 		portfolio.ProfitLossPercentage = portfolio.ProfitLoss.Div(portfolio.TotalInvested).Mul(decimal.NewFromInt(100))
 	}
@@ -565,7 +564,7 @@ func (r *MongoPortfolioRepository) UpdateHoldingsFromOrder(ctx context.Context, 
 			"user_id":                 portfolio.UserID,
 			"total_value":             portfolio.TotalValue.String(),
 			"total_invested":          portfolio.TotalInvested.String(),
-			"total_cash":              portfolio.TotalCash.String(),
+			// total_cash removed - managed by Users API
 			"profit_loss":             portfolio.ProfitLoss.String(),
 			"profit_loss_percentage":  portfolio.ProfitLossPercentage.String(),
 			"currency":                portfolio.Currency,

@@ -22,14 +22,14 @@ export function PortfolioStats() {
 
       // Use pre-calculated values from backend
       const totalValue = parseFloat(portfolio.total_value) || 0
-      const cash = parseFloat(portfolio.total_cash) || 0
+      const cash = user.balance || 0  // Use user balance instead of portfolio.total_cash
 
       setTotalBalance(totalValue)
       setAvailableCash(cash)
     } catch (error) {
       console.error('Error fetching portfolio data:', error)
       // On error, try to fallback to user balance
-      const fallbackCash = user.initial_balance || 0
+      const fallbackCash = user.balance || 0
       setAvailableCash(fallbackCash)
       setTotalBalance(fallbackCash)
     } finally {
