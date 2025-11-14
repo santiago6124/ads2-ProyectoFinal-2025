@@ -11,7 +11,13 @@
       "Bash(docker exec:*)",
       "Bash(python -m json.tool:*)",
       "Bash(docker-compose down:*)",
-      "Bash(docker system prune:*)"
+      "Bash(docker system prune:*)",
+      "Bash(docker-compose stop:*)",
+      "Bash(docker-compose rm:*)",
+      "Bash(docker volume rm cryptosim-solr-data 2)",
+      "Bash($null)",
+      "Bash(docker-compose restart:*)",
+      "Bash(Start-Sleep -Seconds 10)"
     ],
     "deny": [],
     "ask": []
