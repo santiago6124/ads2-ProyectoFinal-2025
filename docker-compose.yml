@@ -264,8 +264,13 @@ services:
       - CACHE_PERFORMANCE_TTL=30m
       # RabbitMQ
       - RABBITMQ_URL=amqp://guest:guest@shared-rabbitmq:5672/
-      - RABBITMQ_EXCHANGE=portfolio_events
-      - RABBITMQ_QUEUE=portfolio_calculations
+      - RABBITMQ_EXCHANGE=orders.events
+      - RABBITMQ_QUEUE=portfolio.updates
+      - RABBITMQ_ORDER_ROUTING_KEY=orders.executed
+      # Balance Messaging
+      - RABBITMQ_BALANCE_REQUEST_EXCHANGE=balance.request.exchange
+      - RABBITMQ_BALANCE_REQUEST_ROUTING_KEY=balance.request
+      - RABBITMQ_BALANCE_RESPONSE_QUEUE=balance.response.portfolio
       # External APIs
       - MARKET_DATA_API_URL=http://market-data-api:8004
       - ORDERS_API_URL=http://orders-api:8080
