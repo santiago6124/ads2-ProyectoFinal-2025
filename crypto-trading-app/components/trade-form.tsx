@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { marketApiService } from "@/lib/market-api"
+import { getPortfolio, type Portfolio, type Holding } from "@/lib/portfolio-api"
+import { ordersApiService, type OrderRequest } from "@/lib/orders-api"
 import { ArrowDownUp, Loader2, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -36,6 +38,38 @@ export function TradeForm({ coin }: TradeFormProps) {
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
   const [orderLogs, setOrderLogs] = useState<OrderLog[]>([])
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
+  const [loadingPortfolio, setLoadingPortfolio] = useState(true)
+  const [currentHolding, setCurrentHolding] = useState<Holding | null>(null)
+
+  // Fetch portfolio holdings
+  useEffect(() => {
+    const fetchPortfolio = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoadingPortfolio(true)
+        const portfolioData = await getPortfolio(user.id)
+        setPortfolio(portfolioData)
+
+        // Find holding for current coin
+        const holding = portfolioData.holdings.find(
+          h => h.symbol.toLowerCase() === coin.toLowerCase()
+        )
+        setCurrentHolding(holding || null)
+      } catch (error) {
+        console.error('Failed to fetch portfolio:', error)
+      } finally {
+        setLoadingPortfolio(false)
+      }
+    }
+
+    fetchPortfolio()
+
+    // Refresh portfolio every 30 seconds
+    const interval = setInterval(fetchPortfolio, 30000)
+    return () => clearInterval(interval)
+  }, [user?.id, coin])
 
   // Fetch current price for the selected coin
   useEffect(() => {
@@ -107,10 +141,20 @@ export function TradeForm({ coin }: TradeFormProps) {
     try {
       setPlacing(true)
 
+      // Create order via API
+      const orderRequest: OrderRequest = {
+        type: "buy",
+        crypto_symbol: coin.toUpperCase(),
+        quantity: buyAmount,
+        order_kind: "market",
+        market_price: currentPrice.toString()
+      }
+
+      const orderResponse = await ordersApiService.createOrder(orderRequest)
+
       // Create order log
-      const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       const orderLog: OrderLog = {
-        id: orderId,
+        id: orderResponse.id,
         type: 'buy',
         coin: coin.toUpperCase(),
         amount: amount,
@@ -118,18 +162,6 @@ export function TradeForm({ coin }: TradeFormProps) {
         total: total,
         timestamp: new Date()
       }
-
-      // Log to console (simulating order API call)
-      console.log('=== BUY ORDER PLACED ===')
-      console.log('Order ID:', orderLog.id)
-      console.log('Type: BUY')
-      console.log('Coin:', orderLog.coin)
-      console.log('Amount:', orderLog.amount)
-      console.log('Price:', `$${(orderLog.price || 0).toLocaleString()}`)
-      console.log('Total:', `$${(orderLog.total || 0).toLocaleString()}`)
-      console.log('Timestamp:', orderLog.timestamp.toISOString())
-      console.log('User ID:', user?.id)
-      console.log('========================')
 
       // Add to order logs
       setOrderLogs(prev => [orderLog, ...prev])
@@ -139,8 +171,9 @@ export function TradeForm({ coin }: TradeFormProps) {
         title: "Order Placed Successfully",
         description: (
           <div className="space-y-1">
-            <p><strong>Order ID:</strong> {orderId}</p>
+            <p><strong>Order ID:</strong> {orderResponse.id}</p>
             <p>Bought {amount} {coin.toUpperCase()} for ${total.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground">Status: {orderResponse.status}</p>
           </div>
         )
       })
@@ -148,11 +181,28 @@ export function TradeForm({ coin }: TradeFormProps) {
       // Reset form
       setBuyAmount("")
       setBuyTotal("")
+
+      // Refresh portfolio to show updated holdings
+      if (user?.id) {
+        setTimeout(async () => {
+          try {
+            const portfolioData = await getPortfolio(user.id)
+            setPortfolio(portfolioData)
+            const holding = portfolioData.holdings.find(
+              h => h.symbol.toLowerCase() === coin.toLowerCase()
+            )
+            setCurrentHolding(holding || null)
+          } catch (error) {
+            console.error('Failed to refresh portfolio:', error)
+          }
+        }, 2000)
+      }
     } catch (error) {
       console.error('Failed to place order:', error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to place buy order. Please try again."
       toast({
         title: "Order Failed",
-        description: "Failed to place buy order. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -173,13 +223,35 @@ export function TradeForm({ coin }: TradeFormProps) {
     const amount = Number.parseFloat(sellAmount)
     const total = Number.parseFloat(sellTotal)
 
+    // Validate holdings - THIS IS THE KEY FIX
+    const availableAmount = currentHolding ? Number.parseFloat(currentHolding.quantity) : 0
+
+    if (amount > availableAmount) {
+      toast({
+        title: "Insufficient holdings",
+        description: `You need ${amount} ${coin.toUpperCase()} but only have ${availableAmount.toFixed(8)} ${coin.toUpperCase()}`,
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setPlacing(true)
 
+      // Create order via API
+      const orderRequest: OrderRequest = {
+        type: "sell",
+        crypto_symbol: coin.toUpperCase(),
+        quantity: sellAmount,
+        order_kind: "market",
+        market_price: currentPrice.toString()
+      }
+
+      const orderResponse = await ordersApiService.createOrder(orderRequest)
+
       // Create order log
-      const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       const orderLog: OrderLog = {
-        id: orderId,
+        id: orderResponse.id,
         type: 'sell',
         coin: coin.toUpperCase(),
         amount: amount,
@@ -187,18 +259,6 @@ export function TradeForm({ coin }: TradeFormProps) {
         total: total,
         timestamp: new Date()
       }
-
-      // Log to console (simulating order API call)
-      console.log('=== SELL ORDER PLACED ===')
-      console.log('Order ID:', orderLog.id)
-      console.log('Type: SELL')
-      console.log('Coin:', orderLog.coin)
-      console.log('Amount:', orderLog.amount)
-      console.log('Price:', `$${(orderLog.price || 0).toLocaleString()}`)
-      console.log('Total:', `$${(orderLog.total || 0).toLocaleString()}`)
-      console.log('Timestamp:', orderLog.timestamp.toISOString())
-      console.log('User ID:', user?.id)
-      console.log('========================')
 
       // Add to order logs
       setOrderLogs(prev => [orderLog, ...prev])
@@ -208,8 +268,9 @@ export function TradeForm({ coin }: TradeFormProps) {
         title: "Order Placed Successfully",
         description: (
           <div className="space-y-1">
-            <p><strong>Order ID:</strong> {orderId}</p>
+            <p><strong>Order ID:</strong> {orderResponse.id}</p>
             <p>Sold {amount} {coin.toUpperCase()} for ${total.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground">Status: {orderResponse.status}</p>
           </div>
         )
       })
@@ -217,11 +278,28 @@ export function TradeForm({ coin }: TradeFormProps) {
       // Reset form
       setSellAmount("")
       setSellTotal("")
+
+      // Refresh portfolio to show updated holdings
+      if (user?.id) {
+        setTimeout(async () => {
+          try {
+            const portfolioData = await getPortfolio(user.id)
+            setPortfolio(portfolioData)
+            const holding = portfolioData.holdings.find(
+              h => h.symbol.toLowerCase() === coin.toLowerCase()
+            )
+            setCurrentHolding(holding || null)
+          } catch (error) {
+            console.error('Failed to refresh portfolio:', error)
+          }
+        }, 2000)
+      }
     } catch (error) {
       console.error('Failed to place order:', error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to place sell order. Please try again."
       toast({
         title: "Order Failed",
-        description: "Failed to place sell order. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -341,7 +419,13 @@ export function TradeForm({ coin }: TradeFormProps) {
             <div className="p-4 rounded-lg bg-accent/50 border border-border">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm text-muted-foreground">Available {coin.toUpperCase()}</span>
-                <span className="text-sm font-semibold">0.0000 {coin.toUpperCase()}</span>
+                {loadingPortfolio ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span className="text-sm font-semibold">
+                    {currentHolding ? Number.parseFloat(currentHolding.quantity).toFixed(8) : '0.00000000'} {coin.toUpperCase()}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -377,10 +461,11 @@ export function TradeForm({ coin }: TradeFormProps) {
                   size="sm"
                   className="flex-1 bg-transparent"
                   onClick={() => {
-                    const amount = 0 * (percent / 100) // TODO: Get actual holdings
+                    const availableAmount = currentHolding ? Number.parseFloat(currentHolding.quantity) : 0
+                    const amount = availableAmount * (percent / 100)
                     handleSellAmountChange(amount.toString())
                   }}
-                  disabled={loading}
+                  disabled={loading || loadingPortfolio || !currentHolding}
                 >
                   {percent}%
                 </Button>

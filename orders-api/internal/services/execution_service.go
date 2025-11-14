@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"orders-api/internal/clients"
 	"orders-api/internal/models"
 )
 
@@ -39,6 +40,7 @@ type MarketClient interface {
 // PortfolioClient interface para actualizar holdings
 type PortfolioClient interface {
 	UpdateHoldings(ctx context.Context, userID int64, symbol string, quantity, price decimal.Decimal, orderType string) error
+	CheckHoldings(ctx context.Context, userID int64, symbol string, required decimal.Decimal) (*clients.HoldingsCheckResult, error)
 }
 
 // Resultados de cálculos concurrentes
@@ -55,6 +57,11 @@ type priceResult struct {
 type balanceResult struct {
 	balance *models.BalanceResult
 	err     error
+}
+
+type holdingsResult struct {
+	holdings *clients.HoldingsCheckResult
+	err      error
 }
 
 type feeResult struct {
@@ -178,6 +185,35 @@ func (s *ExecutionService) ExecuteOrder(ctx context.Context, order *models.Order
 					}
 					return "0"
 				}())
+		}
+	} else if order.Type == models.OrderTypeSell {
+		// Verificar holdings (solo para órdenes de venta)
+		if s.portfolioClient != nil {
+			holdingsChan := make(chan holdingsResult, 1)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				holdings, err := s.portfolioClient.CheckHoldings(ctx, int64(order.UserID), order.CryptoSymbol, order.Quantity)
+				holdingsChan <- holdingsResult{holdings: holdings, err: err}
+			}()
+			wg.Wait()
+
+			holdingsRes := <-holdingsChan
+			if holdingsRes.err != nil {
+				return nil, fmt.Errorf("holdings check failed: %w", holdingsRes.err)
+			}
+			if holdingsRes.holdings == nil || !holdingsRes.holdings.HasSufficient {
+				return nil, fmt.Errorf("insufficient holdings: required %.8f %s, available %.8f %s",
+					order.Quantity.InexactFloat64(),
+					order.CryptoSymbol,
+					func() float64 {
+						if holdingsRes.holdings != nil {
+							return holdingsRes.holdings.Available
+						}
+						return 0
+					}(),
+					order.CryptoSymbol)
+			}
 		}
 	}
 
