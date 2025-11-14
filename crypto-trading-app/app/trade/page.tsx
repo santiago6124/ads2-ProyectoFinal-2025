@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, Suspense } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { apiService } from "@/lib/api"
 import { DashboardLayout } from "@/components/dashboard-layout"
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 function TradeContent() {
   const { user, isLoading, updateUser } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCrypto, setSelectedCrypto] = useState<PriceData | null>(null)
@@ -31,6 +32,15 @@ function TradeContent() {
       router.push("/login")
     }
   }, [user, isLoading, router])
+
+  // Handle crypto pre-selection from URL parameter
+  useEffect(() => {
+    const cryptoParam = searchParams.get('crypto')
+    if (cryptoParam && !selectedCrypto) {
+      // Auto-search for the crypto from URL parameter
+      setSearchQuery(cryptoParam)
+    }
+  }, [searchParams, selectedCrypto])
 
   // Load only top 5 cryptocurrencies on initial load
   useEffect(() => {
@@ -57,11 +67,25 @@ function TradeContent() {
   // Debounced search function
   useEffect(() => {
     const searchCryptos = async () => {
+      const cryptoParam = searchParams.get('crypto')
+
       if (searchQuery.length >= 2) {
         try {
           setSearchLoading(true)
           const results = await marketApiService.searchCryptos(searchQuery)
           setCryptoList(results)
+
+          // Auto-select first result if coming from URL parameter
+          if (cryptoParam && results.length > 0 && !selectedCrypto) {
+            const matchedCrypto = results.find(c =>
+              c.symbol.toLowerCase() === cryptoParam.toLowerCase() ||
+              c.name.toLowerCase().includes(cryptoParam.toLowerCase())
+            )
+            if (matchedCrypto) {
+              setSelectedCrypto(matchedCrypto)
+              setSearchQuery(`${matchedCrypto.name} (${matchedCrypto.symbol})`)
+            }
+          }
         } catch (error) {
           console.error('Failed to search cryptocurrencies:', error)
         } finally {
@@ -84,7 +108,7 @@ function TradeContent() {
     // Debounce search by 300ms
     const timeoutId = setTimeout(searchCryptos, 300)
     return () => clearTimeout(timeoutId)
-  }, [searchQuery])
+  }, [searchQuery, searchParams, selectedCrypto])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)

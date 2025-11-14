@@ -6,7 +6,6 @@ import { useAuth } from "@/lib/auth-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { PortfolioOverview } from "@/components/portfolio-overview"
 import { QuickStats } from "@/components/quick-stats"
-import { TrendingCoins } from "@/components/trending-coins"
 import { RecentActivity } from "@/components/recent-activity"
 import { CryptoPricesGrid } from "@/components/crypto-prices"
 
@@ -48,14 +47,9 @@ export default function DashboardPage() {
           <CryptoPricesGrid />
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <PortfolioOverview />
-            <RecentActivity />
-          </div>
-          <div>
-            <TrendingCoins />
-          </div>
+        <div className="space-y-8">
+          <PortfolioOverview />
+          <RecentActivity />
         </div>
       </div>
     </DashboardLayout>

@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, Loader2, Flame } from "lucide-react"
 import { marketApiService, TrendingCoin } from "@/lib/market-api"
 
 export function TrendingCoins() {
+  const router = useRouter()
   const [trendingCoins, setTrendingCoins] = useState<TrendingCoin[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -90,6 +92,7 @@ export function TrendingCoins() {
           <div
             key={coin.id}
             className="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer"
+            onClick={() => router.push(`/trade?crypto=${coin.symbol}`)}
           >
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">

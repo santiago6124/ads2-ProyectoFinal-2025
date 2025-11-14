@@ -17,7 +17,9 @@
       "Bash(docker volume rm cryptosim-solr-data 2)",
       "Bash($null)",
       "Bash(docker-compose restart:*)",
-      "Bash(Start-Sleep -Seconds 10)"
+      "Bash(Start-Sleep -Seconds 10)",
+      "Bash(docker-compose ps:*)",
+      "Bash(Select-String \"frontend\")"
     ],
     "deny": [],
     "ask": []
