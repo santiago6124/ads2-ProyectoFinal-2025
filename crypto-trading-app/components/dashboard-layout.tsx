@@ -15,6 +15,9 @@ import {
   Menu,
   X,
   User,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -28,6 +31,7 @@ const navigation = [
   { name: "Markets", href: "/markets", icon: LineChart },
   { name: "Trade", href: "/trade", icon: ArrowLeftRight },
   { name: "Portfolio", href: "/portfolio", icon: Wallet },
+  { name: "Orders", href: "/orders", icon: FileText },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
@@ -36,6 +40,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -45,12 +50,25 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen flex bg-black">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 border-r border-white/10 bg-black fixed left-0 top-0 h-screen">
-        <div className="flex items-center gap-2 h-16 px-6 border-b border-white/10">
-          <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center border border-white/10">
-            <TrendingUp className="h-5 w-5 text-white" />
+      <aside className={cn(
+        "hidden lg:flex lg:flex-col border-r border-white/10 bg-black fixed left-0 top-0 h-screen transition-all duration-300",
+        isSidebarCollapsed ? "lg:w-20" : "lg:w-64"
+      )}>
+        <div className="flex items-center gap-2 h-16 px-6 border-b border-white/10 justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center border border-white/10 flex-shrink-0">
+              <TrendingUp className="h-5 w-5 text-white" />
+            </div>
+            {!isSidebarCollapsed && <span className="text-xl font-bold text-white truncate">CryptoTrade</span>}
           </div>
-          <span className="text-xl font-bold text-white">CryptoTrade</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="text-white/70 hover:text-white hover:bg-white/10 flex-shrink-0"
+          >
+            {isSidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+          </Button>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -60,54 +78,87 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
+                title={isSidebarCollapsed ? item.name : undefined}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                   isActive
                     ? "bg-blue-500 text-white"
                     : "text-white/70 hover:bg-white/10 hover:text-white",
+                  isSidebarCollapsed && "justify-center"
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                {item.name}
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">{item.name}</span>}
               </Link>
             )
           })}
         </nav>
 
         <div className="p-4 border-t border-white/10">
-          <Link href="/settings" className="block">
-            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/10">
-              <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10">
-                <span className="text-sm font-semibold text-white">
-                  {user?.first_name && user?.last_name 
-                    ? `${user.first_name[0]}${user.last_name[0]}`
-                    : user?.username?.[0]?.toUpperCase() || 'U'
-                  }
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-white">
-                  {user?.first_name && user?.last_name 
-                    ? `${user.first_name} ${user.last_name}`
-                    : user?.username || 'User'
-                  }
-                </p>
-                <p className="text-xs text-white/60 truncate">{user?.email}</p>
-                <p className="text-xs text-green-400 font-semibold mt-1">
-                  ${user?.initial_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                </p>
-              </div>
-            </div>
-          </Link>
-          <Button variant="ghost" className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
+          {!isSidebarCollapsed ? (
+            <>
+              <Link href="/settings" className="block">
+                <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/10">
+                  <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10 flex-shrink-0">
+                    <span className="text-sm font-semibold text-white">
+                      {user?.first_name && user?.last_name
+                        ? `${user.first_name[0]}${user.last_name[0]}`
+                        : user?.username?.[0]?.toUpperCase() || 'U'
+                      }
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate text-white">
+                      {user?.first_name && user?.last_name
+                        ? `${user.first_name} ${user.last_name}`
+                        : user?.username || 'User'
+                      }
+                    </p>
+                    <p className="text-xs text-white/60 truncate">{user?.email}</p>
+                    <p className="text-xs text-green-400 font-semibold mt-1">
+                      ${user?.initial_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+              <Button variant="ghost" className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/settings" className="block mb-2">
+                <div className="flex items-center justify-center p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/10">
+                  <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10">
+                    <span className="text-sm font-semibold text-white">
+                      {user?.first_name && user?.last_name
+                        ? `${user.first_name[0]}${user.last_name[0]}`
+                        : user?.username?.[0]?.toUpperCase() || 'U'
+                      }
+                    </span>
+                  </div>
+                </div>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-full text-white/70 hover:text-white hover:bg-white/10"
+                onClick={handleLogout}
+                title="Logout"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </>
+          )}
         </div>
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col lg:ml-64">
+      <div className={cn(
+        "flex-1 flex flex-col transition-all duration-300",
+        isSidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
+      )}>
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between h-16 px-4 border-b border-white/10 bg-black">
           <div className="flex items-center gap-2">
