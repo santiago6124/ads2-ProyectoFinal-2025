@@ -117,21 +117,53 @@ class MarketApiService {
     return this.getPrices(symbols)
   }
 
-  // Get top 100 cryptocurrencies by market cap
+  // Get top 5 cryptocurrencies by market cap
+  async getTop5(): Promise<PriceData[]> {
+    const symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP']
+    return this.getPrices(symbols)
+  }
+
+  // Get top 100 cryptocurrencies by market cap (optimized to top 40)
   async getTop100(): Promise<PriceData[]> {
+    // Top 40 most traded cryptocurrencies for better performance
     const symbols = [
       'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'ADA', 'AVAX', 'DOGE',
       'TRX', 'LINK', 'DOT', 'MATIC', 'LTC', 'BCH', 'ATOM', 'NEAR', 'UNI', 'ETC',
       'XLM', 'ICP', 'FIL', 'VET', 'ALGO', 'MANA', 'SAND', 'AXS', 'CHZ', 'ENJ',
-      'BAT', 'ZEC', 'FLOW', 'THETA', 'HBAR', 'EGLD', 'XTZ', 'KLAY', 'CAKE', 'COMP',
-      'AAVE', 'MKR', 'SNX', 'YFI', 'SUSHI', 'CRV', '1INCH', 'BAL', 'LRC', 'KNC',
-      'REN', 'STORJ', 'BAND', 'KAVA', 'ZRX', 'REP', 'NMR', 'MLN', 'CVC', 'GNT',
-      'DNT', 'FUN', 'REQ', 'MCO', 'WTC', 'SUB', 'OMG', 'PAY', 'CND', 'WABI',
-      'POWR', 'LEND', 'KMD', 'ARK', 'LSK', 'FCT', 'XEM', 'DASH', 'MONA', 'DCR',
-      'SC', 'DGB', 'DGD', 'WAVES', 'MAID', 'GAME', 'DCR', 'SC', 'DGB', 'DGD',
-      'WAVES', 'MAID', 'GAME', 'DCR', 'SC', 'DGB', 'DGD', 'WAVES', 'MAID', 'GAME'
+      'BAT', 'ZEC', 'FLOW', 'THETA', 'HBAR', 'EGLD', 'XTZ', 'AAVE', 'MKR', 'SUSHI'
     ]
     return this.getPrices(symbols)
+  }
+
+  // Search cryptocurrencies by name or symbol
+  async searchCryptos(query: string): Promise<PriceData[]> {
+    // Define a broader list of searchable cryptocurrencies
+    const allSymbols = [
+      'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'ADA', 'AVAX', 'DOGE',
+      'TRX', 'LINK', 'DOT', 'MATIC', 'LTC', 'BCH', 'ATOM', 'NEAR', 'UNI', 'ETC',
+      'XLM', 'ICP', 'FIL', 'VET', 'ALGO', 'MANA', 'SAND', 'AXS', 'CHZ', 'ENJ',
+      'BAT', 'ZEC', 'FLOW', 'THETA', 'HBAR', 'EGLD', 'XTZ', 'AAVE', 'MKR', 'SUSHI',
+      'CRV', '1INCH', 'BAL', 'LRC', 'KNC', 'STORJ', 'BAND', 'KAVA', 'ZRX', 'CAKE'
+    ]
+
+    const lowerQuery = query.toLowerCase()
+
+    // Filter symbols that match the query
+    const matchingSymbols = allSymbols.filter(symbol =>
+      symbol.toLowerCase().includes(lowerQuery)
+    )
+
+    // If we have matching symbols, fetch their prices
+    if (matchingSymbols.length > 0) {
+      const prices = await this.getPrices(matchingSymbols)
+      // Further filter by name after getting the full data
+      return prices.filter(crypto =>
+        crypto.name.toLowerCase().includes(lowerQuery) ||
+        crypto.symbol.toLowerCase().includes(lowerQuery)
+      ).slice(0, 10) // Return max 10 results
+    }
+
+    return []
   }
 
   // Get trending cryptocurrencies

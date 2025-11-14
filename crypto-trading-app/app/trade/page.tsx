@@ -32,17 +32,18 @@ function TradeContent() {
     }
   }, [user, isLoading, router])
 
+  // Load only top 5 cryptocurrencies on initial load
   useEffect(() => {
-    const fetchCryptoList = async () => {
+    const fetchTopCryptos = async () => {
       try {
         setSearchLoading(true)
-        const data = await marketApiService.getTop100()
+        const data = await marketApiService.getTop5()
         setCryptoList(data)
       } catch (error) {
-        console.error('Failed to fetch crypto list:', error)
+        console.error('Failed to fetch top cryptocurrencies:', error)
         toast({
           title: "Error",
-          description: "Failed to load cryptocurrency list",
+          description: "Failed to load top cryptocurrencies",
           variant: "destructive"
         })
       } finally {
@@ -50,20 +51,45 @@ function TradeContent() {
       }
     }
 
-    fetchCryptoList()
+    fetchTopCryptos()
   }, [toast])
+
+  // Debounced search function
+  useEffect(() => {
+    const searchCryptos = async () => {
+      if (searchQuery.length >= 2) {
+        try {
+          setSearchLoading(true)
+          const results = await marketApiService.searchCryptos(searchQuery)
+          setCryptoList(results)
+        } catch (error) {
+          console.error('Failed to search cryptocurrencies:', error)
+        } finally {
+          setSearchLoading(false)
+        }
+      } else if (searchQuery.length === 0) {
+        // Reset to top 5 when search is cleared
+        try {
+          setSearchLoading(true)
+          const data = await marketApiService.getTop5()
+          setCryptoList(data)
+        } catch (error) {
+          console.error('Failed to fetch top cryptocurrencies:', error)
+        } finally {
+          setSearchLoading(false)
+        }
+      }
+    }
+
+    // Debounce search by 300ms
+    const timeoutId = setTimeout(searchCryptos, 300)
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
-    if (query.length >= 2) {
-      const filtered = cryptoList.filter(crypto =>
-        crypto.name.toLowerCase().includes(query.toLowerCase()) ||
-        crypto.symbol.toLowerCase().includes(query.toLowerCase())
-      )
-      if (filtered.length > 0) {
-        setSelectedCrypto(filtered[0])
-      }
-    } else {
+    // Clear selected crypto when typing
+    if (query.length < 2) {
       setSelectedCrypto(null)
     }
   }
@@ -369,7 +395,7 @@ function TradeContent() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60" />
               <Input
-                placeholder="Search for a cryptocurrency (e.g., Bitcoin, BTC, Ethereum)"
+                placeholder="Type to search cryptocurrencies (e.g., Bitcoin, ETH, Doge)"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 className="pl-10 bg-black border-white/10 text-white placeholder:text-white/60 h-12 text-lg"
@@ -379,16 +405,15 @@ function TradeContent() {
               )}
             </div>
 
-            {/* Search Results */}
-            {searchQuery.length >= 2 && (
-              <div className="max-h-60 overflow-y-auto border border-white/10 rounded-lg">
-                {cryptoList
-                  .filter(crypto =>
-                    crypto.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    crypto.symbol.toLowerCase().includes(searchQuery.toLowerCase())
-                  )
-                  .slice(0, 10)
-                  .map((crypto, index) => (
+            {/* Search Results or Top 5 */}
+            {(searchQuery.length >= 2 || cryptoList.length > 0) && (
+              <div className="space-y-2">
+                <p className="text-sm text-white/60 px-1">
+                  {searchQuery.length >= 2 ? `Search Results (${cryptoList.length})` : 'Top 5 Cryptocurrencies'}
+                </p>
+                <div className="max-h-60 overflow-y-auto border border-white/10 rounded-lg">
+                  {cryptoList.length > 0 ? (
+                  cryptoList.map((crypto, index) => (
                     <div
                       key={`${crypto.symbol}-${crypto.name}-${index}`}
                       className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-white/10 last:border-b-0"
@@ -427,7 +452,14 @@ function TradeContent() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  ) : (
+                    <div className="p-6 text-center text-white/60">
+                      <p className="text-lg">No results found</p>
+                      <p className="text-sm mt-2">Try searching for a different cryptocurrency</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
