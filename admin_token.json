@@ -1,0 +1,21 @@
+{
+    "success": true,
+    "message": "Login successful",
+    "data": {
+        "user": {
+            "id": 9,
+            "username": "testadmin",
+            "email": "testadmin@test.com",
+            "first_name": null,
+            "last_name": null,
+            "role": "admin",
+            "initial_balance": 100000,
+            "created_at": "2025-11-26T12:52:02.628Z",
+            "is_active": true,
+            "preferences": "{\"language\":\"en\",\"notifications\":true,\"theme\":\"light\"}"
+        },
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo5LCJ1c2VybmFtZSI6InRlc3RhZG1pbiIsImVtYWlsIjoidGVzdGFkbWluQHRlc3QuY29tIiwicm9sZSI6ImFkbWluIiwiaXNzIjoidXNlcnMtYXBpIiwic3ViIjoiOSIsImF1ZCI6WyJjcnlwdG9zaW0iXSwiZXhwIjoxNzY0MTY1MzIwLCJuYmYiOjE3NjQxNjE3MjAsImlhdCI6MTc2NDE2MTcyMH0.9kMm6FmPDrHTd1HogWl6Vbect2uad1PPaA75QWktm-Q",
+        "refresh_token": "9_YHN1wDH84TS9cQx9qdQM1mJJKWkbJHALQki8vnvSU=",
+        "expires_in": 3600
+    }
+}
