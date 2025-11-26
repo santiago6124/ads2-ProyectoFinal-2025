@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,19 +13,26 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 
-	// "market-data-api/internal/cache" // Cache disabled for now
 	"market-data-api/internal/config"
 	"market-data-api/internal/models"
 )
 
+// Simple cache entry
+type CachedPrice struct {
+	Data      []byte
+	Timestamp time.Time
+}
+
 // Server holds all dependencies
 type Server struct {
-	router    *gin.Engine
-	port      int
-	coingecko *FreeCryptoClient
-	config    *config.Config
+	router      *gin.Engine
+	port        int
+	coingecko   *FreeCryptoClient
+	config      *config.Config
+	redisClient *redis.Client
 }
 
 func main() {
@@ -49,15 +57,52 @@ func main() {
 	apiKey := "ir4h8w22gcaa9nfgijoc" // FreeCryptoAPI key
 	coingeckoClient := NewFreeCryptoClient(apiKey)
 
-	// Cache disabled for now - will be implemented later if needed
-	// var cacheManager *cache.Manager
+	// Initialize Redis client
+	log.Println("Initializing Redis cache...")
+	redisURL := cfg.Redis.URL
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
+
+	// Parse Redis URL
+	redisHost := "localhost"
+	redisPort := 6379
+	if strings.HasPrefix(redisURL, "redis://") {
+		urlParts := strings.TrimPrefix(redisURL, "redis://")
+		hostPort := strings.Split(urlParts, ":")
+		if len(hostPort) >= 1 {
+			redisHost = hostPort[0]
+		}
+		if len(hostPort) >= 2 {
+			fmt.Sscanf(hostPort[1], "%d", &redisPort)
+		}
+	}
+
+	// Create simple Redis client
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", redisHost, redisPort),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Printf("Warning: Failed to connect to Redis: %v", err)
+		log.Println("Continuing without cache...")
+		redisClient = nil
+	} else {
+		log.Println("Redis cache initialized successfully")
+	}
 
 	// Initialize server
 	srv := &Server{
-		router:    gin.Default(),
-		port:      port,
-		coingecko: coingeckoClient,
-		config:    cfg,
+		router:      gin.Default(),
+		port:        port,
+		coingecko:   coingeckoClient,
+		config:      cfg,
+		redisClient: redisClient,
 	}
 
 	// Setup routes
@@ -90,10 +135,10 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer shutdownCancel()
 
-	if err := httpServer.Shutdown(ctx); err != nil {
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
 	}
 
@@ -132,12 +177,23 @@ func (s *Server) handleHealth(c *gin.Context) {
 		providerStatus = "degraded"
 	}
 
+	cacheEnabled := s.redisClient != nil
+	cacheStatus := "disabled"
+	if cacheEnabled {
+		if err := s.redisClient.Ping(ctx).Err(); err != nil {
+			cacheStatus = "error"
+		} else {
+			cacheStatus = "healthy"
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":          "healthy",
 		"timestamp":       time.Now().Unix(),
 		"service":         "market-data-api",
 		"provider_status": providerStatus,
-		"cache_enabled":   false,
+		"cache_enabled":   cacheEnabled,
+		"cache_status":    cacheStatus,
 	})
 }
 
@@ -159,39 +215,109 @@ func (s *Server) handleGetPrices(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Cache will be implemented later if needed
-	// For now, we fetch directly from CoinGecko
+	cacheTTL := 5 * time.Second // 5-second cache
+	response := make([]gin.H, 0, len(symbols))
+	cachedCount := 0
+	fetchedSymbols := make([]string, 0)
 
-	// Fetch prices from CoinGecko
-	prices, err := s.coingecko.GetPrices(ctx, symbols)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to fetch prices",
-			"message": err.Error(),
-		})
-		return
+	// Try to get prices from Redis cache first
+	if s.redisClient != nil {
+		for _, symbol := range symbols {
+			cacheKey := fmt.Sprintf("price:%s", symbol)
+			cachedData, err := s.redisClient.Get(ctx, cacheKey).Result()
+
+			if err == nil && cachedData != "" {
+				// Parse cached price data (stored as JSON)
+				var priceData Price
+				if json.Unmarshal([]byte(cachedData), &priceData) == nil {
+					response = append(response, gin.H{
+						"symbol":     priceData.Symbol,
+						"name":       priceData.Name,
+						"price":      priceData.Price,
+						"change_24h": priceData.Change24h,
+						"market_cap": priceData.MarketCap,
+						"volume":     priceData.Volume,
+						"timestamp":  priceData.Timestamp,
+						"cached":     true,
+					})
+					cachedCount++
+				} else {
+					fetchedSymbols = append(fetchedSymbols, symbol)
+				}
+			} else {
+				fetchedSymbols = append(fetchedSymbols, symbol)
+			}
+		}
+	} else {
+		fetchedSymbols = symbols
 	}
 
-	// Cache prices (will be implemented later if needed)
+	// Fetch missing prices from FreeCryptoAPI
+	if len(fetchedSymbols) > 0 {
+		prices, err := s.coingecko.GetPrices(ctx, fetchedSymbols)
+		if err != nil {
+			// If we have some cached prices, return them
+			if len(response) > 0 {
+				c.JSON(http.StatusOK, gin.H{
+					"data":         response,
+					"source":       "mixed",
+					"count":        len(response),
+					"cached_count": cachedCount,
+					"warning":      "Partial data - API fetch failed",
+				})
+				return
+			}
 
-	// Convert to response format
-	response := make([]gin.H, 0, len(prices))
-	for _, price := range prices {
-		response = append(response, gin.H{
-			"symbol":     price.Symbol,
-			"name":       price.Name,
-			"price":      price.Price,
-			"change_24h": price.Change24h,
-			"market_cap": price.MarketCap,
-			"volume":     price.Volume,
-			"timestamp":  price.Timestamp,
-		})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to fetch prices",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		// Convert and cache fetched prices
+		for symbol, price := range prices {
+			response = append(response, gin.H{
+				"symbol":     price.Symbol,
+				"name":       price.Name,
+				"price":      price.Price,
+				"change_24h": price.Change24h,
+				"market_cap": price.MarketCap,
+				"volume":     price.Volume,
+				"timestamp":  price.Timestamp,
+				"cached":     false,
+			})
+
+			// Store in Redis cache with 5-second TTL
+			if s.redisClient != nil {
+				cacheKey := fmt.Sprintf("price:%s", symbol)
+				priceJSON, err := json.Marshal(price)
+				if err == nil {
+					setErr := s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL).Err()
+					if setErr != nil {
+						log.Printf("Failed to cache price for %s: %v", symbol, setErr)
+					} else {
+						log.Printf("Cached price for %s with TTL %v", symbol, cacheTTL)
+					}
+				} else {
+					log.Printf("Failed to marshal price for %s: %v", symbol, err)
+				}
+			}
+		}
+	}
+
+	sourceType := "freecryptoapi"
+	if cachedCount > 0 && len(fetchedSymbols) > 0 {
+		sourceType = "mixed"
+	} else if cachedCount == len(symbols) {
+		sourceType = "cache"
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":   response,
-		"source": "freecryptoapi",
-		"count":  len(response),
+		"data":         response,
+		"source":       sourceType,
+		"count":        len(response),
+		"cached_count": cachedCount,
 	})
 }
 
@@ -201,9 +327,34 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Cache will be implemented later if needed
+	cacheTTL := 5 * time.Second // 5-second cache
+	cached := false
 
-	// Fetch from CoinGecko
+	// Try to get price from Redis cache first
+	if s.redisClient != nil {
+		cacheKey := fmt.Sprintf("price:%s", symbol)
+		cachedData, err := s.redisClient.Get(ctx, cacheKey).Result()
+
+		if err == nil && cachedData != "" {
+			// Parse cached price data
+			var priceData Price
+			if json.Unmarshal([]byte(cachedData), &priceData) == nil {
+				c.JSON(http.StatusOK, gin.H{
+					"symbol":     priceData.Symbol,
+					"name":       priceData.Name,
+					"price":      priceData.Price,
+					"change_24h": priceData.Change24h,
+					"market_cap": priceData.MarketCap,
+					"volume":     priceData.Volume,
+					"timestamp":  priceData.Timestamp,
+					"cached":     true,
+				})
+				return
+			}
+		}
+	}
+
+	// Fetch from FreeCryptoAPI if not in cache
 	price, err := s.coingecko.GetPrice(ctx, symbol)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -213,7 +364,19 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 		return
 	}
 
-	// Cache the price (will be implemented later if needed)
+	// Store in Redis cache with 5-second TTL
+	if s.redisClient != nil {
+		cacheKey := fmt.Sprintf("price:%s", symbol)
+		priceJSON, err := json.Marshal(price)
+		if err == nil {
+			setErr := s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL).Err()
+			if setErr != nil {
+				log.Printf("Failed to cache price for %s: %v", symbol, setErr)
+			} else {
+				log.Printf("Cached price for %s with TTL %v", symbol, cacheTTL)
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"symbol":     price.Symbol,
@@ -223,6 +386,7 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 		"market_cap": price.MarketCap,
 		"volume":     price.Volume,
 		"timestamp":  price.Timestamp,
+		"cached":     cached,
 	})
 }
 
