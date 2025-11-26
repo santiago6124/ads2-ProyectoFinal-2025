@@ -4,6 +4,8 @@ import { type ReactNode, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   TrendingUp,
   LayoutDashboard,
@@ -18,9 +20,20 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  Shield,
+  Plus,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { apiService } from "@/lib/api"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -36,15 +49,57 @@ const navigation = [
 ]
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { user, logout } = useAuth()
+  const { user, logout, updateBalance } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [addFundsDialogOpen, setAddFundsDialogOpen] = useState(false)
+  const [fundsAmount, setFundsAmount] = useState("")
+  const [fundsDescription, setFundsDescription] = useState("")
+  const [isAddingFunds, setIsAddingFunds] = useState(false)
+  const [transactionType, setTransactionType] = useState<'add' | 'withdraw'>('add')
 
   const handleLogout = () => {
     logout()
     router.push("/")
+  }
+
+  const handleAddFunds = async () => {
+    if (!fundsAmount) return
+
+    setIsAddingFunds(true)
+    try {
+      const accessToken = localStorage.getItem('crypto_access_token')
+      if (!accessToken) return
+
+      const amount = parseFloat(fundsAmount)
+      const finalAmount = transactionType === 'withdraw' ? -amount : amount
+      const description = transactionType === 'withdraw'
+        ? (fundsDescription || "Withdrawal")
+        : (fundsDescription || "Deposit")
+
+      const response = await apiService.addFunds(finalAmount, description, accessToken)
+
+      // Write-through cache: update balance immediately
+      if (response.data?.new_balance !== undefined) {
+        updateBalance(response.data.new_balance)
+      } else if (user?.current_balance !== undefined) {
+        updateBalance(user.current_balance + finalAmount)
+      }
+
+      const actionText = transactionType === 'withdraw' ? 'withdrawn' : 'added'
+      alert(`Successfully ${actionText} $${amount} ${transactionType === 'withdraw' ? 'from' : 'to'} your balance`)
+      setAddFundsDialogOpen(false)
+      setFundsAmount("")
+      setFundsDescription("")
+      setTransactionType('add')
+    } catch (error: any) {
+      console.error('Error processing transaction:', error)
+      alert(`Error processing transaction: ${error.message || 'Please try again'}`)
+    } finally {
+      setIsAddingFunds(false)
+    }
   }
 
   return (
@@ -92,6 +147,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </Link>
             )
           })}
+          {user?.role === 'admin' && (
+            <Link
+              href="/admin"
+              title={isSidebarCollapsed ? "Admin Panel" : undefined}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors border border-purple-500/30",
+                pathname === '/admin'
+                  ? "bg-purple-500 text-white"
+                  : "text-purple-400 hover:bg-purple-500/10 hover:text-purple-300",
+                isSidebarCollapsed && "justify-center"
+              )}
+            >
+              <Shield className="h-5 w-5 flex-shrink-0" />
+              {!isSidebarCollapsed && <span className="truncate">Admin Panel</span>}
+            </Link>
+          )}
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -115,9 +186,81 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       }
                     </p>
                     <p className="text-xs text-white/60 truncate">{user?.email}</p>
-                    <p className="text-xs text-green-400 font-semibold mt-1">
-                      ${user?.initial_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-green-400 font-semibold">
+                        ${user?.current_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                      </p>
+                      <Dialog open={addFundsDialogOpen} onOpenChange={setAddFundsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <button
+                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Plus className="h-3 w-3" />
+                            Add
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Manage Balance</DialogTitle>
+                            <DialogDescription>
+                              Add or withdraw funds from your trading account
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="flex gap-2">
+                              <Button
+                                variant={transactionType === 'add' ? 'default' : 'outline'}
+                                onClick={() => setTransactionType('add')}
+                                className="flex-1"
+                              >
+                                Add Funds
+                              </Button>
+                              <Button
+                                variant={transactionType === 'withdraw' ? 'default' : 'outline'}
+                                onClick={() => setTransactionType('withdraw')}
+                                className="flex-1"
+                              >
+                                Withdraw
+                              </Button>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="funds-amount">Amount (USD)</Label>
+                              <Input
+                                id="funds-amount"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="1000.00"
+                                value={fundsAmount}
+                                onChange={(e) => setFundsAmount(e.target.value)}
+                              />
+                              {transactionType === 'withdraw' && user?.current_balance && (
+                                <p className="text-xs text-muted-foreground">
+                                  Available: ${user.current_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="funds-description">Description (optional)</Label>
+                              <Input
+                                id="funds-description"
+                                placeholder={transactionType === 'add' ? 'e.g., Bank transfer' : 'e.g., Bank withdrawal'}
+                                value={fundsDescription}
+                                onChange={(e) => setFundsDescription(e.target.value)}
+                              />
+                            </div>
+                            <Button
+                              onClick={handleAddFunds}
+                              disabled={isAddingFunds || !fundsAmount || (transactionType === 'withdraw' && parseFloat(fundsAmount) > (user?.current_balance || 0))}
+                              className="w-full"
+                            >
+                              {isAddingFunds ? 'Processing...' : (transactionType === 'add' ? 'Add Funds' : 'Withdraw')}
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                 </div>
               </Link>
@@ -195,6 +338,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 )
               })}
+              {user?.role === 'admin' && (
+                <Link
+                  href="/admin"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors border border-purple-500/30",
+                    pathname === '/admin'
+                      ? "bg-purple-500 text-white"
+                      : "text-purple-400 hover:bg-purple-500/10 hover:text-purple-300",
+                  )}
+                >
+                  <Shield className="h-5 w-5" />
+                  Admin Panel
+                </Link>
+              )}
             </nav>
             <Button variant="outline" className="w-full justify-start bg-transparent border-white/20 text-white hover:bg-white/10" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />

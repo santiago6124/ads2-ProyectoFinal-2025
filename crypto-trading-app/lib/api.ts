@@ -12,6 +12,7 @@ export interface User {
   last_name: string | null
   role: 'normal' | 'admin'
   initial_balance: number
+  current_balance: number
   created_at: string
   last_login?: string
   is_active: boolean
@@ -188,7 +189,7 @@ class ApiService {
   async getOrders(userId: number, accessToken: string): Promise<any> {
     // Use orders-api URL for orders endpoints
     const url = `${ORDERS_API_URL}/api/v1/orders`
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -196,13 +197,101 @@ class ApiService {
         Authorization: `Bearer ${accessToken}`,
       },
     })
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       throw new ApiError(response.status, errorData.error || 'Request failed')
     }
 
     return await response.json()
+  }
+
+  // Admin methods
+  async getAllUsers(accessToken: string, page: number = 1, limit: number = 50): Promise<any> {
+    return this.request(`/api/admin/users?page=${page}&limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  }
+
+  async getAdminUserById(userId: number, accessToken: string): Promise<User> {
+    const response = await this.request<{ success: boolean; message: string; data: User }>(`/api/admin/users/${userId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+    return response.data
+  }
+
+  async updateUserBalance(userId: number, amount: number, description: string, accessToken: string): Promise<any> {
+    return this.request(`/api/admin/users/${userId}/balance`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ amount, description }),
+    })
+  }
+
+  async adminUpdateUser(userId: number, userData: Partial<User>, accessToken: string): Promise<User> {
+    const response = await this.request<{ success: boolean; message: string; data: User }>(`/api/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(userData),
+    })
+    return response.data
+  }
+
+  async adminDeleteUser(userId: number, accessToken: string): Promise<void> {
+    await this.request(`/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  }
+
+  async adminCreateUser(userData: {
+    username: string
+    email: string
+    password: string
+    first_name?: string
+    last_name?: string
+    role?: 'normal' | 'admin'
+    initial_balance?: number
+  }, accessToken: string): Promise<User> {
+    const response = await this.request<User>(`/api/admin/users`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(userData),
+    })
+    return response
+  }
+
+  async adminReactivateUser(userId: number, accessToken: string): Promise<any> {
+    return this.request(`/api/admin/users/${userId}/reactivate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+  }
+
+  async addFunds(amount: number, description: string, accessToken: string): Promise<any> {
+    return this.request(`/api/users/balance/add`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ amount, description }),
+    })
   }
 }
 

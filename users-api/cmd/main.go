@@ -58,9 +58,10 @@ func main() {
 
 	authController := controllers.NewAuthController(authService, userService)
 	userController := controllers.NewUserController(userService)
+	adminController := controllers.NewAdminController(userService)
 	healthController := controllers.NewHealthController(db)
 
-	router := setupRouter(cfg, authController, userController, healthController, tokenService)
+	router := setupRouter(cfg, authController, userController, adminController, healthController, tokenService)
 
 	log.Printf("Starting Users API server on port %s", cfg.Server.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Server.Port, router))
@@ -70,6 +71,7 @@ func setupRouter(
 	cfg *config.Config,
 	authController *controllers.AuthController,
 	userController *controllers.UserController,
+	adminController *controllers.AdminController,
 	healthController *controllers.HealthController,
 	tokenService services.TokenService,
 ) *gin.Engine {
@@ -101,6 +103,7 @@ func setupRouter(
 			authenticated.Use(middleware.AuthMiddleware(tokenService))
 			{
 				authenticated.POST("/logout-all", authController.LogoutAll)
+				authenticated.POST("/balance/add", userController.AddFunds)
 				authenticated.GET("/:id", userController.GetUser)
 				authenticated.PUT("/:id", userController.UpdateUser)
 				authenticated.PUT("/:id/password", userController.ChangePassword)
@@ -120,6 +123,20 @@ func setupRouter(
 				internal.GET("/:id/verify", userController.VerifyUser)
 				internal.PUT("/:id/balance", userController.UpdateBalance)
 			}
+		}
+
+		// Admin routes
+		admin := api.Group("/admin")
+		admin.Use(middleware.AuthMiddleware(tokenService))
+		admin.Use(middleware.AdminOnlyMiddleware())
+		{
+			admin.GET("/users", adminController.GetAllUsers)
+			admin.POST("/users", adminController.CreateUser)
+			admin.GET("/users/:id", adminController.GetUserByID)
+			admin.PUT("/users/:id", adminController.UpdateUser)
+			admin.DELETE("/users/:id", adminController.DeleteUser)
+			admin.POST("/users/:id/reactivate", adminController.ReactivateUser)
+			admin.PATCH("/users/:id/balance", adminController.UpdateUserBalance)
 		}
 	}
 

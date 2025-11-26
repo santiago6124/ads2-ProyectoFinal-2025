@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"users-api/internal/models"
 	"users-api/internal/repositories"
@@ -12,12 +13,16 @@ import (
 type UserService interface {
 	CreateUser(req *models.RegisterRequest) (*models.User, error)
 	GetUserByID(id int32) (*models.User, error)
+	GetByID(id int32) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
 	UpdateUser(id int32, req *models.UpdateUserRequest) (*models.User, error)
 	ChangePassword(id int32, req *models.ChangePasswordRequest) error
 	UpdateBalance(id int32, newBalance float64) error
+	UpdateBalanceWithTransaction(id int32, amount float64, description string) (float64, error)
 	DeactivateUser(id int32) error
+	DeleteUser(id int32) error
 	ListUsers(page, limit int, search, role string, isActive *bool) ([]models.User, int64, error)
+	GetAllUsers(offset, limit int) ([]models.User, int, error)
 	UpgradeUserToAdmin(id int32) (*models.User, error)
 	VerifyUser(id int32) (*models.UserVerificationResponse, error)
 }
@@ -140,7 +145,10 @@ func (s *userService) UpdateUser(id int32, req *models.UpdateUserRequest) (*mode
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	if !user.IsActive {
+	// Allow updating IsActive even if user is deactivated (for reactivation)
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
+	} else if !user.IsActive {
 		return nil, fmt.Errorf("cannot update deactivated user")
 	}
 
@@ -288,4 +296,92 @@ func (s *userService) VerifyUser(id int32) (*models.UserVerificationResponse, er
 		Role:     user.Role,
 		IsActive: user.IsActive,
 	}, nil
+}
+
+// GetByID is an alias for GetUserByID for admin controller compatibility
+func (s *userService) GetByID(id int32) (*models.User, error) {
+	return s.GetUserByID(id)
+}
+
+// DeleteUser performs a soft delete on a user
+func (s *userService) DeleteUser(id int32) error {
+	return s.DeactivateUser(id)
+}
+
+// GetAllUsers returns all users with pagination
+func (s *userService) GetAllUsers(offset, limit int) ([]models.User, int, error) {
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	users, total, err := s.userRepo.List(offset, limit, "", "", nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get users: %w", err)
+	}
+
+	// Add current balance for each user
+	for i := range users {
+		if s.balanceRepo != nil {
+			latestTx, err := s.balanceRepo.GetLatestByUserID(users[i].ID)
+			if err == nil && latestTx != nil {
+				users[i].CurrentBalance = latestTx.NewBalance
+			} else {
+				users[i].CurrentBalance = users[i].InitialBalance
+			}
+		} else {
+			users[i].CurrentBalance = users[i].InitialBalance
+		}
+	}
+
+	return users, int(total), nil
+}
+
+// UpdateBalanceWithTransaction updates user balance and creates a transaction record
+func (s *userService) UpdateBalanceWithTransaction(id int32, amount float64, description string) (float64, error) {
+	if s.balanceRepo == nil {
+		return 0, fmt.Errorf("balance transaction repository not available")
+	}
+
+	// Get current balance
+	user, err := s.GetUserByID(id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Calculate new balance
+	newBalance := user.CurrentBalance + amount
+
+	if newBalance < 0 {
+		return 0, fmt.Errorf("insufficient balance")
+	}
+
+	// Create transaction record
+	txType := "deposit"
+	if amount < 0 {
+		txType = "withdrawal"
+	}
+
+	// Generate unique order ID for admin balance updates
+	orderID := fmt.Sprintf("ADMIN_%d_%d", id, time.Now().Unix())
+
+	transaction := &models.BalanceTransaction{
+		OrderID:         orderID,
+		UserID:          id,
+		Amount:          amount,
+		TransactionType: txType,
+		CryptoSymbol:    "USD", // Admin balance adjustments are in fiat currency
+		PreviousBalance: user.CurrentBalance,
+		NewBalance:      newBalance,
+	}
+
+	if err := s.balanceRepo.Create(transaction); err != nil {
+		return 0, fmt.Errorf("failed to create transaction: %w", err)
+	}
+
+	// Update user's current balance
+	if err := s.UpdateBalance(id, newBalance); err != nil {
+		return 0, fmt.Errorf("failed to update user balance: %w", err)
+	}
+
+	return newBalance, nil
 }

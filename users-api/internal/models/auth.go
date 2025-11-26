@@ -66,9 +66,10 @@ type ChangePasswordRequest struct {
 }
 
 type UpdateUserRequest struct {
-	FirstName   *string `json:"first_name" binding:"omitempty,max=50"`
-	LastName    *string `json:"last_name" binding:"omitempty,max=50"`
-	Preferences string  `json:"preferences"`
+	FirstName   *string  `json:"first_name" binding:"omitempty,max=50"`
+	LastName    *string  `json:"last_name" binding:"omitempty,max=50"`
+	IsActive    *bool    `json:"is_active"`
+	Preferences string   `json:"preferences"`
 }
 
 type UpdateBalanceRequest struct {

@@ -14,6 +14,7 @@ type UserResponse struct {
 	LastName       *string         `json:"last_name"`
 	Role           models.UserRole `json:"role"`
 	InitialBalance float64         `json:"initial_balance"`
+	CurrentBalance float64         `json:"current_balance"`
 	CreatedAt      time.Time       `json:"created_at"`
 	LastLogin      *time.Time      `json:"last_login,omitempty"`
 	IsActive       bool            `json:"is_active"`
@@ -65,6 +66,7 @@ func ToUserResponse(user *models.User) UserResponse {
 		LastName:       user.LastName,
 		Role:           user.Role,
 		InitialBalance: user.InitialBalance,
+		CurrentBalance: user.CurrentBalance,
 		CreatedAt:      user.CreatedAt,
 		LastLogin:      user.LastLogin,
 		IsActive:       user.IsActive,
