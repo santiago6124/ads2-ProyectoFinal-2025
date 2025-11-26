@@ -415,3 +415,62 @@ func (uc *UserController) VerifyUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, verification)
 }
+
+// AddFunds godoc
+// @Summary Add funds to user balance
+// @Description Allow users to add funds to their own balance
+// @Tags users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body AddFundsRequest true "Add funds data"
+// @Success 200 {object} dto.APIResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/users/balance/add [post]
+func (uc *UserController) AddFunds(c *gin.Context) {
+	currentUserID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendUnauthorizedError(c, "User not authenticated")
+		return
+	}
+
+	var req AddFundsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendValidationError(c, err)
+		return
+	}
+
+	if req.Amount == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "amount cannot be zero",
+		})
+		return
+	}
+
+	// Update balance using UpdateBalanceWithTransaction
+	newBalance, err := uc.userService.UpdateBalanceWithTransaction(
+		currentUserID.(int32),
+		req.Amount,
+		"User deposit: "+req.Description,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			utils.SendNotFoundError(c, "User")
+			return
+		}
+		utils.SendInternalError(c, err)
+		return
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Funds added successfully", gin.H{
+		"new_balance": newBalance,
+		"amount":      req.Amount,
+	})
+}
+
+type AddFundsRequest struct {
+	Amount      float64 `json:"amount" binding:"required"`
+	Description string  `json:"description"`
+}

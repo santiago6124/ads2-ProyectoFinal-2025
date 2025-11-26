@@ -9,6 +9,7 @@ interface AuthContextType {
   signup: (username: string, email: string, password: string, firstName?: string, lastName?: string) => Promise<boolean>
   logout: () => void
   updateUser: (updatedUser: User) => void
+  updateBalance: (newBalance: number) => void
   isLoading: boolean
   error: string | null
 }
@@ -129,15 +130,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("crypto_user", JSON.stringify(updatedUser))
   }
 
+  const updateBalance = (newBalance: number) => {
+    if (user) {
+      const updatedUser = { ...user, current_balance: newBalance }
+      setUser(updatedUser)
+      localStorage.setItem("crypto_user", JSON.stringify(updatedUser))
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      login, 
-      signup, 
-      logout, 
+    <AuthContext.Provider value={{
+      user,
+      login,
+      signup,
+      logout,
       updateUser,
-      isLoading, 
-      error 
+      updateBalance,
+      isLoading,
+      error
     }}>
       {children}
     </AuthContext.Provider>

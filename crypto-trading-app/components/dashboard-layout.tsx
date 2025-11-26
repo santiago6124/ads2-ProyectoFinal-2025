@@ -191,10 +191,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         ${user?.current_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                       </p>
                       <Dialog open={addFundsDialogOpen} onOpenChange={setAddFundsDialogOpen}>
-                        <DialogTrigger asChild>
+                        <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <button
                             className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
                           >
                             <Plus className="h-3 w-3" />
                             Add
