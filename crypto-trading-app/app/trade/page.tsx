@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, Suspense, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { apiService } from "@/lib/api"
@@ -8,10 +8,11 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Loader2, TrendingUp, TrendingDown } from "lucide-react"
+import { Search, Loader2, TrendingUp, TrendingDown, Wallet, AlertCircle } from "lucide-react"
 import { marketApiService, PriceData } from "@/lib/market-api"
 import { ordersApiService, OrderRequest } from "@/lib/orders-api"
 import { useToast } from "@/hooks/use-toast"
+import { getPortfolio, Holding } from "@/lib/portfolio-api"
 
 function TradeContent() {
   const { user, isLoading, updateUser } = useAuth()
@@ -26,12 +27,74 @@ function TradeContent() {
   const [placing, setPlacing] = useState(false)
   const [quantity, setQuantity] = useState("")
   const [orderType, setOrderType] = useState<"buy" | "sell">("buy")
+  const [holdings, setHoldings] = useState<Holding[]>([])
+  const [portfolioLoading, setPortfolioLoading] = useState(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login")
     }
   }, [user, isLoading, router])
+
+  // Fetch user portfolio holdings
+  const fetchPortfolio = async () => {
+    if (!user?.id) return
+
+    try {
+      setPortfolioLoading(true)
+      const portfolio = await getPortfolio(user.id)
+      setHoldings(portfolio.holdings || [])
+    } catch (error) {
+      console.error('Failed to fetch portfolio:', error)
+      setHoldings([])
+    } finally {
+      setPortfolioLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPortfolio()
+  }, [user?.id])
+
+  // Listen for portfolio refresh events
+  useEffect(() => {
+    const handlePortfolioRefresh = () => {
+      fetchPortfolio()
+    }
+
+    window.addEventListener('portfolio-refresh', handlePortfolioRefresh)
+    return () => {
+      window.removeEventListener('portfolio-refresh', handlePortfolioRefresh)
+    }
+  }, [user?.id])
+
+  // Get holding for selected crypto
+  const selectedHolding = useMemo(() => {
+    if (!selectedCrypto) return null
+    return holdings.find(h => h.symbol.toUpperCase() === selectedCrypto.symbol.toUpperCase()) || null
+  }, [selectedCrypto, holdings])
+
+  // Get available balance (USD)
+  const availableBalance = user?.initial_balance || 0
+
+  // Calculate if user can buy (has enough USD)
+  const canBuy = useMemo(() => {
+    if (!selectedCrypto || !quantity) return false
+    const qty = parseFloat(quantity)
+    if (isNaN(qty) || qty <= 0) return false
+    const totalCost = qty * selectedCrypto.price
+    const totalWithFee = totalCost * 1.001 // 0.1% fee
+    return totalWithFee <= availableBalance
+  }, [selectedCrypto, quantity, availableBalance])
+
+  // Calculate if user can sell (has enough crypto)
+  const canSell = useMemo(() => {
+    if (!selectedCrypto || !quantity || !selectedHolding) return false
+    const qty = parseFloat(quantity)
+    if (isNaN(qty) || qty <= 0) return false
+    const holdingQty = parseFloat(selectedHolding.quantity)
+    return qty <= holdingQty
+  }, [selectedCrypto, quantity, selectedHolding])
 
   // Handle crypto pre-selection from URL parameter
   useEffect(() => {
@@ -531,6 +594,28 @@ function TradeContent() {
                 </div>
               </div>
 
+              {/* Balance & Holdings Info */}
+              <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <div className="flex items-center gap-2 text-green-400 mb-1">
+                    <Wallet className="h-4 w-4" />
+                    <span className="text-sm font-medium">Available USD</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {formatPrice(availableBalance)}
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <div className="flex items-center gap-2 text-blue-400 mb-1">
+                    <TrendingUp className="h-4 w-4" />
+                    <span className="text-sm font-medium">Your {selectedCrypto.symbol}</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {selectedHolding ? parseFloat(selectedHolding.quantity).toFixed(6) : '0.000000'}
+                  </p>
+                </div>
+              </div>
+
               {/* Quantity Input */}
               <div className="space-y-4">
                 <div className="text-center">
@@ -546,14 +631,70 @@ function TradeContent() {
                     min="0"
                     step="0.000001"
                   />
+                  {/* Quick amount buttons */}
+                  {selectedHolding && parseFloat(selectedHolding.quantity) > 0 && (
+                    <div className="flex gap-2 justify-center mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs bg-transparent border-white/20 text-white/70 hover:bg-white/10"
+                        onClick={() => setQuantity((parseFloat(selectedHolding.quantity) * 0.25).toFixed(6))}
+                      >
+                        25%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs bg-transparent border-white/20 text-white/70 hover:bg-white/10"
+                        onClick={() => setQuantity((parseFloat(selectedHolding.quantity) * 0.5).toFixed(6))}
+                      >
+                        50%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs bg-transparent border-white/20 text-white/70 hover:bg-white/10"
+                        onClick={() => setQuantity((parseFloat(selectedHolding.quantity) * 0.75).toFixed(6))}
+                      >
+                        75%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs bg-transparent border-white/20 text-white/70 hover:bg-white/10"
+                        onClick={() => setQuantity(parseFloat(selectedHolding.quantity).toFixed(6))}
+                      >
+                        MAX
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                
+
                 {quantity && !isNaN(parseFloat(quantity)) && parseFloat(quantity) > 0 && (
                   <div className="text-center space-y-2">
-                    <p className="text-white/60 text-sm">Total Cost</p>
+                    <p className="text-white/60 text-sm">Total Cost (+ 0.1% fee)</p>
                     <p className="text-2xl font-bold text-white">
-                      {formatPrice(parseFloat(quantity) * selectedCrypto.price)}
+                      {formatPrice(parseFloat(quantity) * selectedCrypto.price * 1.001)}
                     </p>
+                    {/* Validation warnings */}
+                    {!canBuy && (
+                      <div className="flex items-center justify-center gap-2 text-yellow-400 text-sm">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>Insufficient USD balance to buy</span>
+                      </div>
+                    )}
+                    {!canSell && !selectedHolding && (
+                      <div className="flex items-center justify-center gap-2 text-yellow-400 text-sm">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>You don't own any {selectedCrypto.symbol}</span>
+                      </div>
+                    )}
+                    {!canSell && selectedHolding && parseFloat(quantity) > parseFloat(selectedHolding.quantity) && (
+                      <div className="flex items-center justify-center gap-2 text-yellow-400 text-sm">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>Insufficient {selectedCrypto.symbol} to sell</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -562,9 +703,13 @@ function TradeContent() {
               <div className="flex gap-4 justify-center">
                 <Button
                   size="lg"
-                  className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg font-semibold"
+                  className={`px-8 py-3 text-lg font-semibold ${
+                    canBuy
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-green-600/30 text-white/50 cursor-not-allowed'
+                  }`}
                   onClick={handleBuy}
-                  disabled={placing || !quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0}
+                  disabled={placing || !canBuy}
                 >
                   {placing ? (
                     <>
@@ -577,9 +722,13 @@ function TradeContent() {
                 </Button>
                 <Button
                   size="lg"
-                  className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-lg font-semibold"
+                  className={`px-8 py-3 text-lg font-semibold ${
+                    canSell
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-red-600/30 text-white/50 cursor-not-allowed'
+                  }`}
                   onClick={handleSell}
-                  disabled={placing || !quantity || isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0}
+                  disabled={placing || !canSell}
                 >
                   {placing ? (
                     <>
