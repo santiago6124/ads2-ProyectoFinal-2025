@@ -571,12 +571,12 @@ function OrdersContent() {
             )}
 
             {/* Pagination */}
-            {searchResults && (
+            {searchResults && searchResults.total > 0 && searchResults.total_pages > 0 && (
               <div className="flex items-center justify-between">
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! - 1)}
-                  disabled={filters.page === 1 || searchResults.total_pages <= 1}
+                  disabled={filters.page === 1 || !searchResults.total_pages || searchResults.total_pages <= 1}
                   className="bg-black border-white/10 text-white"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
@@ -604,14 +604,14 @@ function OrdersContent() {
                     </Select>
                   </div>
                   <span className="text-white/60">
-                    Page {filters.page} of {searchResults.total_pages}
+                    Page {filters.page} of {searchResults.total_pages || 1}
                   </span>
                 </div>
 
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! + 1)}
-                  disabled={filters.page === searchResults.total_pages || searchResults.total_pages <= 1}
+                  disabled={!searchResults.total_pages || filters.page === searchResults.total_pages || searchResults.total_pages <= 1}
                   className="bg-black border-white/10 text-white"
                 >
                   Next
