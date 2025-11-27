@@ -215,19 +215,20 @@ func (s *Server) handleGetPrices(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	cacheTTL := 5 * time.Second // 5-second cache
+	cacheTTL := 5 * time.Second   // Fresh cache - 5 seconds
+	backupTTL := 24 * time.Hour   // Backup cache - 24 hours for fallback
+
 	response := make([]gin.H, 0, len(symbols))
 	cachedCount := 0
 	fetchedSymbols := make([]string, 0)
 
-	// Try to get prices from Redis cache first
+	// Try to get prices from fresh cache first
 	if s.redisClient != nil {
 		for _, symbol := range symbols {
 			cacheKey := fmt.Sprintf("price:%s", symbol)
 			cachedData, err := s.redisClient.Get(ctx, cacheKey).Result()
 
 			if err == nil && cachedData != "" {
-				// Parse cached price data (stored as JSON)
 				var priceData Price
 				if json.Unmarshal([]byte(cachedData), &priceData) == nil {
 					response = append(response, gin.H{
@@ -256,14 +257,40 @@ func (s *Server) handleGetPrices(c *gin.Context) {
 	if len(fetchedSymbols) > 0 {
 		prices, err := s.coingecko.GetPrices(ctx, fetchedSymbols)
 		if err != nil {
-			// If we have some cached prices, return them
+			// API failed - try backup cache for missing symbols
+			if s.redisClient != nil {
+				for _, symbol := range fetchedSymbols {
+					backupKey := fmt.Sprintf("price:%s:backup", symbol)
+					backupData, backupErr := s.redisClient.Get(ctx, backupKey).Result()
+					if backupErr == nil && backupData != "" {
+						var priceData Price
+						if json.Unmarshal([]byte(backupData), &priceData) == nil {
+							response = append(response, gin.H{
+								"symbol":     priceData.Symbol,
+								"name":       priceData.Name,
+								"price":      priceData.Price,
+								"change_24h": priceData.Change24h,
+								"market_cap": priceData.MarketCap,
+								"volume":     priceData.Volume,
+								"timestamp":  priceData.Timestamp,
+								"cached":     true,
+								"stale":      true,
+							})
+							cachedCount++
+						}
+					}
+				}
+			}
+
+			// If we have any data (fresh or backup), return it
 			if len(response) > 0 {
+				log.Printf("API failed, returning %d cached prices (some may be stale)", len(response))
 				c.JSON(http.StatusOK, gin.H{
 					"data":         response,
-					"source":       "mixed",
+					"source":       "cache",
 					"count":        len(response),
 					"cached_count": cachedCount,
-					"warning":      "Partial data - API fetch failed",
+					"warning":      "API unavailable - returning cached data",
 				})
 				return
 			}
@@ -288,19 +315,16 @@ func (s *Server) handleGetPrices(c *gin.Context) {
 				"cached":     false,
 			})
 
-			// Store in Redis cache with 5-second TTL
+			// Store in both caches
 			if s.redisClient != nil {
 				cacheKey := fmt.Sprintf("price:%s", symbol)
+				backupKey := fmt.Sprintf("price:%s:backup", symbol)
 				priceJSON, err := json.Marshal(price)
 				if err == nil {
-					setErr := s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL).Err()
-					if setErr != nil {
-						log.Printf("Failed to cache price for %s: %v", symbol, setErr)
-					} else {
-						log.Printf("Cached price for %s with TTL %v", symbol, cacheTTL)
-					}
-				} else {
-					log.Printf("Failed to marshal price for %s: %v", symbol, err)
+					// Fresh cache (5 seconds)
+					s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL)
+					// Backup cache (24 hours)
+					s.redisClient.Set(ctx, backupKey, priceJSON, backupTTL)
 				}
 			}
 		}
@@ -327,16 +351,16 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	cacheTTL := 5 * time.Second // 5-second cache
-	cached := false
+	cacheTTL := 5 * time.Second       // Fresh cache - 5 seconds
+	backupTTL := 24 * time.Hour       // Backup cache - 24 hours for fallback
 
-	// Try to get price from Redis cache first
+	cacheKey := fmt.Sprintf("price:%s", symbol)
+	backupKey := fmt.Sprintf("price:%s:backup", symbol)
+
+	// Try to get price from fresh cache first
 	if s.redisClient != nil {
-		cacheKey := fmt.Sprintf("price:%s", symbol)
 		cachedData, err := s.redisClient.Get(ctx, cacheKey).Result()
-
 		if err == nil && cachedData != "" {
-			// Parse cached price data
 			var priceData Price
 			if json.Unmarshal([]byte(cachedData), &priceData) == nil {
 				c.JSON(http.StatusOK, gin.H{
@@ -354,9 +378,31 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 		}
 	}
 
-	// Fetch from FreeCryptoAPI if not in cache
+	// Fetch from FreeCryptoAPI
 	price, err := s.coingecko.GetPrice(ctx, symbol)
 	if err != nil {
+		// API failed - try backup cache
+		if s.redisClient != nil {
+			backupData, backupErr := s.redisClient.Get(ctx, backupKey).Result()
+			if backupErr == nil && backupData != "" {
+				var priceData Price
+				if json.Unmarshal([]byte(backupData), &priceData) == nil {
+					log.Printf("API failed for %s, returning backup cache", symbol)
+					c.JSON(http.StatusOK, gin.H{
+						"symbol":     priceData.Symbol,
+						"name":       priceData.Name,
+						"price":      priceData.Price,
+						"change_24h": priceData.Change24h,
+						"market_cap": priceData.MarketCap,
+						"volume":     priceData.Volume,
+						"timestamp":  priceData.Timestamp,
+						"cached":     true,
+						"stale":      true,
+					})
+					return
+				}
+			}
+		}
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "Price not found",
 			"message": err.Error(),
@@ -364,17 +410,15 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 		return
 	}
 
-	// Store in Redis cache with 5-second TTL
+	// Store in both caches
 	if s.redisClient != nil {
-		cacheKey := fmt.Sprintf("price:%s", symbol)
 		priceJSON, err := json.Marshal(price)
 		if err == nil {
-			setErr := s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL).Err()
-			if setErr != nil {
-				log.Printf("Failed to cache price for %s: %v", symbol, setErr)
-			} else {
-				log.Printf("Cached price for %s with TTL %v", symbol, cacheTTL)
-			}
+			// Fresh cache (5 seconds)
+			s.redisClient.Set(ctx, cacheKey, priceJSON, cacheTTL)
+			// Backup cache (24 hours)
+			s.redisClient.Set(ctx, backupKey, priceJSON, backupTTL)
+			log.Printf("Cached price for %s (fresh: %v, backup: %v)", symbol, cacheTTL, backupTTL)
 		}
 	}
 
@@ -386,7 +430,7 @@ func (s *Server) handleGetPriceBySymbol(c *gin.Context) {
 		"market_cap": price.MarketCap,
 		"volume":     price.Volume,
 		"timestamp":  price.Timestamp,
-		"cached":     cached,
+		"cached":     false,
 	})
 }
 
