@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Shield, DollarSign, Users, Edit, Trash2, UserPlus, RotateCcw } from "lucide-react"
 import { apiService, type User } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 import {
   Table,
   TableBody,
@@ -30,6 +31,7 @@ import {
 export default function AdminPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
@@ -38,6 +40,8 @@ export default function AdminPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [balanceDialogOpen, setBalanceDialogOpen] = useState(false)
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<number | null>(null)
   const [newUser, setNewUser] = useState({
     username: "",
     email: "",
@@ -91,7 +95,10 @@ export default function AdminPage() {
         accessToken
       )
 
-      alert('Balance updated successfully!')
+      toast({
+        title: "Success",
+        description: "Balance updated successfully!"
+      })
       setBalanceDialogOpen(false)
       setBalanceAmount("")
       setBalanceDescription("")
@@ -99,31 +106,48 @@ export default function AdminPage() {
       loadUsers()
     } catch (error) {
       console.error('Error updating balance:', error)
-      alert('Error updating balance. Please try again.')
+      toast({
+        title: "Error",
+        description: "Error updating balance. Please try again.",
+        variant: "destructive"
+      })
     } finally {
       setIsUpdating(false)
     }
   }
 
-  const handleDeleteUser = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
 
     try {
       const accessToken = localStorage.getItem('crypto_access_token')
       if (!accessToken) return
 
-      await apiService.adminDeleteUser(userId, accessToken)
-      alert('User deleted successfully!')
+      await apiService.adminDeleteUser(userToDelete, accessToken)
+      toast({
+        title: "Success",
+        description: "User deleted successfully!"
+      })
+      setDeleteDialogOpen(false)
+      setUserToDelete(null)
       loadUsers()
     } catch (error) {
       console.error('Error deleting user:', error)
-      alert('Error deleting user. Please try again.')
+      toast({
+        title: "Error",
+        description: "Error deleting user. Please try again.",
+        variant: "destructive"
+      })
     }
   }
 
   const handleCreateUser = async () => {
     if (!newUser.username || !newUser.email || !newUser.password) {
-      alert('Please fill in all required fields')
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      })
       return
     }
 
@@ -142,7 +166,10 @@ export default function AdminPage() {
         initial_balance: newUser.initial_balance
       }, accessToken)
 
-      alert('User created successfully!')
+      toast({
+        title: "Success",
+        description: "User created successfully!"
+      })
       setCreateUserDialogOpen(false)
       setNewUser({
         username: "",
@@ -156,7 +183,11 @@ export default function AdminPage() {
       loadUsers()
     } catch (error: any) {
       console.error('Error creating user:', error)
-      alert(`Error creating user: ${error.message || 'Please try again'}`)
+      toast({
+        title: "Error",
+        description: `Error creating user: ${error.message || 'Please try again'}`,
+        variant: "destructive"
+      })
     } finally {
       setIsUpdating(false)
     }
@@ -168,11 +199,18 @@ export default function AdminPage() {
       if (!accessToken) return
 
       await apiService.adminReactivateUser(userId, accessToken)
-      alert('User reactivated successfully!')
+      toast({
+        title: "Success",
+        description: "User reactivated successfully!"
+      })
       loadUsers()
     } catch (error) {
       console.error('Error reactivating user:', error)
-      alert('Error reactivating user. Please try again.')
+      toast({
+        title: "Error",
+        description: "Error reactivating user. Please try again.",
+        variant: "destructive"
+      })
     }
   }
 
@@ -409,14 +447,46 @@ export default function AdminPage() {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteUser(u.id)}
-                            disabled={u.id === user.id}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <Dialog open={deleteDialogOpen && userToDelete === u.id} onOpenChange={(open) => {
+                            setDeleteDialogOpen(open)
+                            if (!open) setUserToDelete(null)
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setUserToDelete(u.id)}
+                                disabled={u.id === user.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Delete User</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to delete {u.username}? This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="flex gap-2 justify-end pt-4">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDeleteDialogOpen(false)
+                                    setUserToDelete(null)
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  onClick={handleDeleteUser}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       </TableCell>
                     </TableRow>

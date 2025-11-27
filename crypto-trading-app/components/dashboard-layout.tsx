@@ -26,6 +26,7 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { apiService } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, updateBalance } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const { toast } = useToast()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [addFundsDialogOpen, setAddFundsDialogOpen] = useState(false)
@@ -94,14 +96,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }))
 
       const actionText = transactionType === 'withdraw' ? 'withdrawn' : 'added'
-      alert(`Successfully ${actionText} $${amount} ${transactionType === 'withdraw' ? 'from' : 'to'} your balance`)
+      toast({
+        title: "Success",
+        description: `Successfully ${actionText} $${amount} ${transactionType === 'withdraw' ? 'from' : 'to'} your balance`
+      })
       setAddFundsDialogOpen(false)
       setFundsAmount("")
       setFundsDescription("")
       setTransactionType('add')
     } catch (error: any) {
       console.error('Error processing transaction:', error)
-      alert(`Error processing transaction: ${error.message || 'Please try again'}`)
+      toast({
+        title: "Error",
+        description: `Error processing transaction: ${error.message || 'Please try again'}`,
+        variant: "destructive"
+      })
     } finally {
       setIsAddingFunds(false)
     }

@@ -10,10 +10,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { User } from "lucide-react"
 import { apiService } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
   const { user, isLoading, updateUser } = useAuth()
   const router = useRouter()
+  const { toast } = useToast()
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
@@ -49,14 +51,21 @@ export default function SettingsPage() {
       }
 
       const updatedUser = await apiService.updateUserProfile(user.id, updateData, accessToken)
-      
+
       // Actualizar el usuario en el contexto
       updateUser(updatedUser)
-      
-      alert('Changes saved successfully!')
+
+      toast({
+        title: "Success",
+        description: "Changes saved successfully!"
+      })
     } catch (error) {
       console.error('Error saving changes:', error)
-      alert('Error saving changes. Please try again.')
+      toast({
+        title: "Error",
+        description: "Error saving changes. Please try again.",
+        variant: "destructive"
+      })
     } finally {
       setIsSaving(false)
     }

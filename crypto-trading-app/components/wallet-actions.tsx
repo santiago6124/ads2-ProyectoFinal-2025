@@ -13,8 +13,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export function WalletActions() {
+  const { toast } = useToast()
   const [depositAmount, setDepositAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [depositOpen, setDepositOpen] = useState(false)
@@ -22,14 +24,20 @@ export function WalletActions() {
 
   const handleDeposit = () => {
     if (!depositAmount || Number.parseFloat(depositAmount) <= 0) return
-    alert(`Deposit request: $${depositAmount}`)
+    toast({
+      title: "Deposit Request",
+      description: `Deposit request: $${depositAmount}`
+    })
     setDepositAmount("")
     setDepositOpen(false)
   }
 
   const handleWithdraw = () => {
     if (!withdrawAmount || Number.parseFloat(withdrawAmount) <= 0) return
-    alert(`Withdrawal request: $${withdrawAmount}`)
+    toast({
+      title: "Withdrawal Request",
+      description: `Withdrawal request: $${withdrawAmount}`
+    })
     setWithdrawAmount("")
     setWithdrawOpen(false)
   }
