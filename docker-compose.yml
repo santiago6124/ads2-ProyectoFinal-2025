@@ -490,16 +490,9 @@ services:
       - SOLR_HEAP=1g
     volumes:
       - solr-data:/var/solr
-      - ./search-api/scripts/solr-init-orders.sh:/docker-entrypoint-initdb.d/solr-init-orders.sh:ro
     networks:
       - cryptosim-network
-    command: >
-      bash -c "
-        solr-precreate orders_search &&
-        sleep 5 &&
-        chmod +x /docker-entrypoint-initdb.d/solr-init-orders.sh &&
-        /docker-entrypoint-initdb.d/solr-init-orders.sh || true
-      "
+    command: ["solr-precreate", "orders_search"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8983/solr/orders_search/admin/ping"]

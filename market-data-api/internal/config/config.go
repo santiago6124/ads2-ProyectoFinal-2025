@@ -173,7 +173,7 @@ func Load() *Config {
 			RetryDelay:          getEnvAsDuration("RETRY_DELAY", "1s"),
 		},
 		Cache: CacheConfig{
-			PriceTTL:     getEnvAsDuration("PRICE_CACHE_TTL", "30s"),
+			PriceTTL:     getEnvAsDuration("PRICE_CACHE_TTL", "5m"),
 			StatsTTL:     getEnvAsDuration("STATS_CACHE_TTL", "5m"),
 			HistoryTTL:   getEnvAsDuration("HISTORY_CACHE_TTL", "1h"),
 			OrderBookTTL: getEnvAsDuration("ORDERBOOK_CACHE_TTL", "5s"),
