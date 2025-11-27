@@ -571,19 +571,38 @@ function OrdersContent() {
             )}
 
             {/* Pagination */}
-            {searchResults && searchResults.total_pages > 1 && (
+            {searchResults && (
               <div className="flex items-center justify-between">
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! - 1)}
-                  disabled={filters.page === 1}
+                  disabled={filters.page === 1 || searchResults.total_pages <= 1}
                   className="bg-black border-white/10 text-white"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Previous
                 </Button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white/60 text-sm">Items per page:</span>
+                    <Select
+                      value={filters.limit?.toString() || "20"}
+                      onValueChange={(value) => {
+                        setFilters(prev => ({ ...prev, limit: parseInt(value), page: 1 }))
+                      }}
+                    >
+                      <SelectTrigger className="w-20 bg-black border-white/10 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-black border-white/10">
+                        <SelectItem value="10" className="text-white">10</SelectItem>
+                        <SelectItem value="20" className="text-white">20</SelectItem>
+                        <SelectItem value="50" className="text-white">50</SelectItem>
+                        <SelectItem value="100" className="text-white">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <span className="text-white/60">
                     Page {filters.page} of {searchResults.total_pages}
                   </span>
@@ -592,7 +611,7 @@ function OrdersContent() {
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! + 1)}
-                  disabled={filters.page === searchResults.total_pages}
+                  disabled={filters.page === searchResults.total_pages || searchResults.total_pages <= 1}
                   className="bg-black border-white/10 text-white"
                 >
                   Next
