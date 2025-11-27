@@ -46,9 +46,6 @@ func (sc *SearchController) Search(c *gin.Context) {
 		return
 	}
 
-	// Set defaults before validation
-	req.SetDefaults()
-
 	// Validate request
 	if err := req.Validate(); err != nil {
 		sc.logger.WithFields(logrus.Fields{

@@ -76,50 +76,28 @@ class SearchApiService {
       })
 
       if (!response.ok) {
-        // Handle rate limiting gracefully
-        if (response.status === 429) {
-          console.warn('⚠️ Search API rate limit reached, returning empty results')
-          return {
-            results: [],
-            total: 0,
-            page: params.page || 1,
-            limit: params.limit || 20,
-            total_pages: 0,
-          }
-        }
         throw new Error(`Search failed: ${response.statusText}`)
       }
 
       return await response.json()
     } catch (error) {
       console.error('Search API error:', error)
-      // Return empty results instead of crashing
-      return {
-        results: [],
-        total: 0,
-        page: params.page || 1,
-        limit: params.limit || 20,
-        total_pages: 0,
-      }
+      throw error
     }
   }
 
-  async getOrderById(orderId: string): Promise<OrderSearchResult | null> {
+  async getOrderById(orderId: string): Promise<OrderSearchResult> {
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/orders/${orderId}`)
 
       if (!response.ok) {
-        if (response.status === 429) {
-          console.warn('⚠️ Search API rate limit reached')
-          return null
-        }
         throw new Error(`Get order failed: ${response.statusText}`)
       }
 
       return await response.json()
     } catch (error) {
       console.error('Search API error:', error)
-      return null
+      throw error
     }
   }
 
@@ -128,36 +106,13 @@ class SearchApiService {
       const response = await fetch(`${this.baseUrl}/api/v1/filters`)
 
       if (!response.ok) {
-        if (response.status === 429) {
-          console.warn('⚠️ Search API rate limit reached, returning default filters')
-          return {
-            statuses: [],
-            types: [],
-            order_kinds: [],
-            crypto_symbols: [],
-            sort_options: [
-              { value: 'created_at_desc', label: 'Newest First' },
-              { value: 'created_at_asc', label: 'Oldest First' },
-            ],
-          }
-        }
         throw new Error(`Get filters failed: ${response.statusText}`)
       }
 
       return await response.json()
     } catch (error) {
       console.error('Search API error:', error)
-      // Return default empty filters
-      return {
-        statuses: [],
-        types: [],
-        order_kinds: [],
-        crypto_symbols: [],
-        sort_options: [
-          { value: 'created_at_desc', label: 'Newest First' },
-          { value: 'created_at_asc', label: 'Oldest First' },
-        ],
-      }
+      throw error
     }
   }
 
