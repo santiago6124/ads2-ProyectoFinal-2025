@@ -132,10 +132,10 @@ export function TradeForm({ coin }: TradeFormProps) {
     const amount = Number.parseFloat(buyAmount)
     const total = Number.parseFloat(buyTotal)
 
-    if (total > (user?.balance || 0)) {
+    if (total > (user?.current_balance || 0)) {
       toast({
         title: "Insufficient balance",
-        description: `You need $${total.toFixed(2)} but only have $${user?.balance.toFixed(2)}`,
+        description: `You need $${total.toFixed(2)} but only have $${(user?.current_balance || 0).toFixed(2)}`,
         variant: "destructive"
       })
       return
@@ -185,9 +185,11 @@ export function TradeForm({ coin }: TradeFormProps) {
       setBuyAmount("")
       setBuyTotal("")
 
-      // Trigger animation
-      setCongratsType("buy")
-      setShowCongrats(true)
+      // Trigger animation only if order is executed
+      if (orderResponse.status === "executed") {
+        setCongratsType("buy")
+        setShowCongrats(true)
+      }
 
       // Refresh portfolio to show updated holdings
       if (user?.id) {
@@ -286,9 +288,11 @@ export function TradeForm({ coin }: TradeFormProps) {
       setSellAmount("")
       setSellTotal("")
 
-      // Trigger animation
-      setCongratsType("sell")
-      setShowCongrats(true)
+      // Trigger animation only if order is executed
+      if (orderResponse.status === "executed") {
+        setCongratsType("sell")
+        setShowCongrats(true)
+      }
 
       // Refresh portfolio to show updated holdings
       if (user?.id) {
@@ -341,7 +345,7 @@ export function TradeForm({ coin }: TradeFormProps) {
             <div className="p-4 rounded-lg bg-accent/50 border border-border">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm text-muted-foreground">Available Balance</span>
-                <span className="text-sm font-semibold">${(user?.balance || 0).toLocaleString()}</span>
+                <span className="text-sm font-semibold">${(user?.current_balance || 0).toLocaleString()}</span>
               </div>
             </div>
 
@@ -547,214 +551,16 @@ export function TradeForm({ coin }: TradeFormProps) {
                 <p className="text-xs text-muted-foreground">
                   {order.timestamp?.toLocaleString() || 'Unknown time'}
                 </p>
-                onChange={(e) => handleBuyAmountChange(e.target.value)}
-                step="0.00000001"
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex justify-center">
-              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
-                <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="buy-total">Total (USD)</Label>
-              <Input
-                id="buy-total"
-                type="number"
-                placeholder="0.00"
-                value={buyTotal}
-                onChange={(e) => handleBuyTotalChange(e.target.value)}
-                step="0.01"
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              {[25, 50, 75, 100].map((percent) => (
-                <Button
-                  key={percent}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 bg-transparent"
-                  onClick={() => {
-                    const total = (user?.balance || 0) * (percent / 100)
-                    handleBuyTotalChange(total.toString())
-                  }}
-                  disabled={loading}
-                >
-                  {percent}%
-                </Button>
-              ))}
-            </div>
-
-            <div className="p-4 rounded-lg bg-accent/50 border border-border space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Price</span>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <span className="font-medium">{formatPrice(currentPrice)}</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Fee (0.1%)</span>
-                <span className="font-medium">${(Number.parseFloat(buyTotal || "0") * 0.001).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <Button
-              className="w-full h-12 text-base font-semibold bg-green-600 hover:bg-green-700"
-              onClick={handleBuy}
-              disabled={loading || placing}
-            >
-              {placing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Placing Order...
-                </>
-              ) : (
-                `Buy ${coin.toUpperCase()}`
-              )}
-            </Button>
-          </TabsContent>
-
-          <TabsContent value="sell" className="space-y-4">
-            <div className="p-4 rounded-lg bg-accent/50 border border-border">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-muted-foreground">Available {coin.toUpperCase()}</span>
-                {loadingPortfolio ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <span className="text-sm font-semibold">
-                    {currentHolding ? Number.parseFloat(currentHolding.quantity).toFixed(8) : '0.00000000'} {coin.toUpperCase()}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sell-amount">Amount ({coin.toUpperCase()})</Label>
-              <Input
-                id="sell-amount"
-                type="number"
-                placeholder="0.00"
-                value={sellAmount}
-                onChange={(e) => handleSellAmountChange(e.target.value)}
-                step="0.00000001"
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex justify-center">
-              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
-                <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sell-total">Total (USD)</Label>
-              <Input id="sell-total" type="number" placeholder="0.00" value={sellTotal} readOnly disabled={loading} />
-            </div>
-
-            <div className="flex gap-2">
-              {[25, 50, 75, 100].map((percent) => (
-                <Button
-                  key={percent}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 bg-transparent"
-                  onClick={() => {
-                    const availableAmount = currentHolding ? Number.parseFloat(currentHolding.quantity) : 0
-                    const amount = availableAmount * (percent / 100)
-                    handleSellAmountChange(amount.toString())
-                  }}
-                  disabled={loading || loadingPortfolio || !currentHolding}
-                >
-                  {percent}%
-                </Button>
-              ))}
-            </div>
-
-            <div className="p-4 rounded-lg bg-accent/50 border border-border space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Price</span>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <span className="font-medium">{formatPrice(currentPrice)}</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Fee (0.1%)</span>
-                <span className="font-medium">${(Number.parseFloat(sellTotal || "0") * 0.001).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <Button
-              className="w-full h-12 text-base font-semibold bg-red-600 hover:bg-red-700"
-              onClick={handleSell}
-              disabled={loading || placing}
-            >
-              {placing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Placing Order...
-                </>
-              ) : (
-                `Sell ${coin.toUpperCase()}`
-              )}
-            </Button>
-          </TabsContent>
-        </Tabs>
-      </Card>
-
-      {/* Order Logs */ }
-  {
-    orderLogs.length > 0 && (
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
-          <h3 className="font-semibold">Recent Orders</h3>
-        </div>
-        <div className="space-y-2 max-h-[300px] overflow-auto">
-          {orderLogs.map((order) => (
-            <div
-              key={order.id}
-              className={`p-3 rounded-lg border ${order.type === 'buy'
-                ? 'bg-green-500/10 border-green-500/30'
-                : 'bg-red-500/10 border-red-500/30'
-                }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="font-mono text-xs text-muted-foreground mb-1">{order.id}</p>
-                  <p className="font-semibold text-sm">
-                    {order.type === 'buy' ? '🟢 BUY' : '🔴 SELL'} {order.amount} {order.coin}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">${order.total.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{formatPrice(order.price)}/unit</p>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {order.timestamp?.toLocaleString() || 'Unknown time'}
-              </p>
-            </div>
-          ))}
-        </div>
-      </Card>
-    )
-  }
-
-  <CongratsAnimation
-    isVisible={showCongrats}
-    type={congratsType}
-    onComplete={() => setShowCongrats(false)}
-  />
-    </div >
+            ))}
+          </div>
+        </Card>
+      )}
+      <CongratsAnimation
+        isVisible={showCongrats}
+        type={congratsType}
+        onComplete={() => setShowCongrats(false)}
+      />
+    </div>
   )
 }

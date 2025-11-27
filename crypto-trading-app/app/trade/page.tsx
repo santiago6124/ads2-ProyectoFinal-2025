@@ -13,6 +13,7 @@ import { marketApiService, PriceData } from "@/lib/market-api"
 import { ordersApiService, OrderRequest } from "@/lib/orders-api"
 import { useToast } from "@/hooks/use-toast"
 import { getPortfolio, Holding } from "@/lib/portfolio-api"
+import { CongratsAnimation } from "@/components/congrats-animation"
 
 function TradeContent() {
   const { user, isLoading, updateUser } = useAuth()
@@ -29,6 +30,8 @@ function TradeContent() {
   const [orderType, setOrderType] = useState<"buy" | "sell">("buy")
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [showCongrats, setShowCongrats] = useState(false)
+  const [congratsType, setCongratsType] = useState<"buy" | "sell">("buy")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -226,6 +229,10 @@ function TradeContent() {
             description: `Bought ${qty} ${selectedCrypto.symbol} for ${formatPrice(totalCost)}`,
           })
 
+          // Trigger casino celebration animation
+          setCongratsType("buy")
+          setShowCongrats(true)
+
           // Wait for backend to process order and update balance/portfolio
           await new Promise(resolve => setTimeout(resolve, 1500))
 
@@ -353,6 +360,10 @@ function TradeContent() {
             title: "✅ Order Executed Successfully!",
             description: `Sold ${qty} ${selectedCrypto.symbol} for ${formatPrice(totalValue)}`,
           })
+
+          // Trigger casino celebration animation
+          setCongratsType("sell")
+          setShowCongrats(true)
 
           // Wait for backend to process order and update balance/portfolio
           await new Promise(resolve => setTimeout(resolve, 1500))
@@ -744,6 +755,11 @@ function TradeContent() {
           </Card>
         )}
       </div>
+      <CongratsAnimation
+        isVisible={showCongrats}
+        type={congratsType}
+        onComplete={() => setShowCongrats(false)}
+      />
     </DashboardLayout>
   )
 }
