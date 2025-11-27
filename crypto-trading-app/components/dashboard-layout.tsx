@@ -84,9 +84,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       // Write-through cache: update balance immediately
       if (response.data?.new_balance !== undefined) {
         updateBalance(response.data.new_balance)
-      } else if (user?.current_balance !== undefined) {
-        updateBalance(user.current_balance + finalAmount)
+      } else if (user?.initial_balance !== undefined) {
+        updateBalance(user.initial_balance + finalAmount)
       }
+
+      // Dispatch portfolio-refresh event to update all components
+      window.dispatchEvent(new CustomEvent('portfolio-refresh', {
+        detail: { userId: user?.id, action: transactionType === 'withdraw' ? 'withdraw' : 'deposit' }
+      }))
 
       const actionText = transactionType === 'withdraw' ? 'withdrawn' : 'added'
       alert(`Successfully ${actionText} $${amount} ${transactionType === 'withdraw' ? 'from' : 'to'} your balance`)
@@ -188,7 +193,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <p className="text-xs text-white/60 truncate">{user?.email}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <p className="text-xs text-green-400 font-semibold">
-                        ${user?.current_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                        ${user?.initial_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                       </p>
                     </div>
                   </div>
@@ -235,9 +240,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                                 value={fundsAmount}
                                 onChange={(e) => setFundsAmount(e.target.value)}
                               />
-                              {transactionType === 'withdraw' && user?.current_balance && (
+                              {transactionType === 'withdraw' && user?.initial_balance && (
                                 <p className="text-xs text-muted-foreground">
-                                  Available: ${user.current_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  Available: ${user.initial_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                               )}
                             </div>
@@ -252,7 +257,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             </div>
                             <Button
                               onClick={handleAddFunds}
-                              disabled={isAddingFunds || !fundsAmount || (transactionType === 'withdraw' && parseFloat(fundsAmount) > (user?.current_balance || 0))}
+                              disabled={isAddingFunds || !fundsAmount || (transactionType === 'withdraw' && parseFloat(fundsAmount) > (user?.initial_balance || 0))}
                               className="w-full"
                             >
                               {isAddingFunds ? 'Processing...' : (transactionType === 'add' ? 'Add Funds' : 'Withdraw')}

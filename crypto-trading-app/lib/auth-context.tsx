@@ -131,11 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const updateBalance = (newBalance: number) => {
-    if (user) {
-      const updatedUser = { ...user, current_balance: newBalance }
-      setUser(updatedUser)
-      localStorage.setItem("crypto_user", JSON.stringify(updatedUser))
-    }
+    setUser(currentUser => {
+      if (currentUser) {
+        const updatedUser = { ...currentUser, initial_balance: newBalance }
+        localStorage.setItem("crypto_user", JSON.stringify(updatedUser))
+        return updatedUser
+      }
+      return currentUser
+    })
   }
 
   return (
