@@ -18,6 +18,7 @@ import (
 type IndexingService struct {
 	ordersClient *clients.OrdersClient
 	solrRepo     repositories.SearchRepository
+	cacheRepo    repositories.CachedSearchRepository
 	logger       *logrus.Logger
 }
 
@@ -41,11 +42,13 @@ type LegacyOrderEvent struct {
 func NewIndexingService(
 	ordersClient *clients.OrdersClient,
 	solrRepo repositories.SearchRepository,
+	cacheRepo repositories.CachedSearchRepository,
 	logger *logrus.Logger,
 ) *IndexingService {
 	return &IndexingService{
 		ordersClient: ordersClient,
 		solrRepo:     solrRepo,
+		cacheRepo:    cacheRepo,
 		logger:       logger,
 	}
 }
@@ -137,6 +140,28 @@ func (s *IndexingService) IndexOrder(ctx context.Context, order *models.Order) e
 		"order_id": order.ID,
 		"status":   order.Status,
 	}).Debug("Order indexed successfully")
+
+	// Invalidate cache for this user's orders to ensure fresh results
+	if s.cacheRepo != nil {
+		// Invalidate all search caches
+		// Since DeletePrefix works with prefixes and InvalidateSearch adds "search:" prefix,
+		// we pass an empty pattern to invalidate all search caches
+		// This ensures users always see their latest orders when they refresh
+		pattern := ""
+		if err := s.cacheRepo.InvalidateSearch(context.Background(), pattern); err != nil {
+			s.logger.WithFields(logrus.Fields{
+				"order_id": order.ID,
+				"user_id":  order.UserID,
+				"pattern":  pattern,
+				"error":    err,
+			}).Warn("Failed to invalidate cache after indexing order")
+		} else {
+			s.logger.WithFields(logrus.Fields{
+				"order_id": order.ID,
+				"user_id":  order.UserID,
+			}).Debug("Cache invalidated for all searches (user will see fresh results)")
+		}
+	}
 
 	return nil
 }

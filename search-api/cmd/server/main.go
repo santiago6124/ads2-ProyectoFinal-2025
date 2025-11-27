@@ -103,7 +103,7 @@ func main() {
 	ordersClient := clients.NewOrdersClient(ordersClientConfig)
 
 	// Initialize indexing service
-	indexingService := services.NewIndexingService(ordersClient, solrRepo, logger)
+	indexingService := services.NewIndexingService(ordersClient, solrRepo, cacheRepo, logger)
 
 	// Initialize trending service
 	trendingConfig := services.DefaultTrendingConfig()
