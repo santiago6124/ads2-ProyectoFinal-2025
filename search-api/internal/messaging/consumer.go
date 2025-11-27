@@ -318,23 +318,14 @@ func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, 
 	processCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// Parse message
-	var eventMsg EventMessage
-	if err := json.Unmarshal(delivery.Body, &eventMsg); err != nil {
-		c.logger.WithFields(logrus.Fields{
-			"worker": workerID,
-			"error":  err,
-		}).Error("Failed to unmarshal message")
-
-		if !c.config.AutoAck {
-			delivery.Nack(false, false) // Don't requeue malformed messages
-		}
-		return
-	}
-
-	// Handle legacy/simple order events published directly by orders-api
+	// Try to parse as legacy OrderEvent first (most common format from orders-api)
 	var orderEvent OrderEvent
 	if err := json.Unmarshal(delivery.Body, &orderEvent); err == nil && orderEvent.OrderID != "" {
+		c.logger.WithFields(logrus.Fields{
+			"worker":      workerID,
+			"order_id":    orderEvent.OrderID,
+			"routing_key": delivery.RoutingKey,
+		}).Info("Received legacy order event")
 		eventType := delivery.RoutingKey
 		if eventType == "" {
 			eventType = orderEvent.EventType
@@ -344,6 +335,13 @@ func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, 
 		}
 
 		if c.indexingService != nil && eventType != "" {
+			// Timestamp is already a string in OrderEvent, use it directly
+			// If it's empty, use current time as RFC3339 string
+			timestampStr := orderEvent.Timestamp
+			if timestampStr == "" {
+				timestampStr = time.Now().Format(time.RFC3339)
+			}
+			
 			legacy := &services.LegacyOrderEvent{
 				EventType:    orderEvent.EventType,
 				OrderID:      orderEvent.OrderID,
@@ -355,7 +353,7 @@ func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, 
 				Price:        orderEvent.Price,
 				TotalAmount:  orderEvent.TotalAmount,
 				Fee:          orderEvent.Fee,
-				Timestamp:    orderEvent.Timestamp,
+				Timestamp:    timestampStr,
 				ErrorMessage: orderEvent.ErrorMessage,
 			}
 			if err := c.indexingService.SyncOrderFromEvent(processCtx, orderEvent.OrderID, eventType, legacy); err != nil {
@@ -392,11 +390,26 @@ func (c *Consumer) processMessage(ctx context.Context, delivery *amqp.Delivery, 
 		return
 	}
 
+	// If not a legacy event, try to parse as EventMessage
+	var eventMsg EventMessage
+	if err := json.Unmarshal(delivery.Body, &eventMsg); err != nil {
+		c.logger.WithFields(logrus.Fields{
+			"worker":      workerID,
+			"error":       err,
+			"routing_key": delivery.RoutingKey,
+		}).Error("Failed to unmarshal message in both legacy and EventMessage formats")
+		
+		if !c.config.AutoAck {
+			delivery.Nack(false, false) // Don't requeue malformed messages
+		}
+		return
+	}
+
 	c.logger.WithFields(logrus.Fields{
 		"worker":       workerID,
 		"message_id":   eventMsg.ID,
 		"message_type": eventMsg.Type,
-	}).Debug("Processing message")
+	}).Debug("Processing message as EventMessage")
 
 	err := c.handleMessage(processCtx, &eventMsg)
 	processingTime := time.Since(startTime)

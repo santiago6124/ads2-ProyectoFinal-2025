@@ -69,9 +69,20 @@ func (s *IndexingService) SyncOrderFromEvent(ctx context.Context, orderID string
 	}
 
 	// For create/update/execute events, fetch complete order from orders-api
+	s.logger.WithFields(logrus.Fields{
+		"order_id":   orderID,
+		"event_type": eventType,
+	}).Debug("Attempting to fetch order from orders-api")
+
 	orderResp, err := s.ordersClient.GetOrderByID(ctx, orderID)
 	var order *models.Order
 	if err != nil {
+		s.logger.WithFields(logrus.Fields{
+			"order_id":   orderID,
+			"event_type": eventType,
+			"error":      err,
+		}).Warn("Failed to fetch order from orders-api, will use legacy event data if available")
+
 		if legacy == nil {
 			return fmt.Errorf("failed to fetch order from orders-api: %w", err)
 		}
@@ -79,11 +90,14 @@ func (s *IndexingService) SyncOrderFromEvent(ctx context.Context, orderID string
 		s.logger.WithFields(logrus.Fields{
 			"order_id":   orderID,
 			"event_type": eventType,
-			"error":      err,
-		}).Warn("Falling back to event payload for indexing")
+		}).Info("Using legacy event payload for indexing")
 
 		order = s.orderFromLegacyEvent(legacy, eventType)
 	} else {
+		s.logger.WithFields(logrus.Fields{
+			"order_id":   orderID,
+			"event_type": eventType,
+		}).Debug("Successfully fetched order from orders-api")
 		order = s.convertToOrderModel(orderResp)
 	}
 
