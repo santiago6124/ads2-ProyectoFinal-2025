@@ -12,7 +12,6 @@ export interface User {
   last_name: string | null
   role: 'normal' | 'admin'
   initial_balance: number
-  current_balance: number
   created_at: string
   last_login?: string
   is_active: boolean

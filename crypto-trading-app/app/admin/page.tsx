@@ -369,7 +369,7 @@ export default function AdminPage() {
                         </span>
                       </TableCell>
                       <TableCell className="font-mono">
-                        ${u.current_balance?.toLocaleString() || '0'}
+                        ${u.initial_balance?.toLocaleString() || '0'}
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${
@@ -413,7 +413,7 @@ export default function AdminPage() {
                               <DialogHeader>
                                 <DialogTitle>Update Balance for {u.username}</DialogTitle>
                                 <DialogDescription>
-                                  Current balance: ${u.current_balance?.toLocaleString() || '0'}
+                                  Current balance: ${u.initial_balance?.toLocaleString() || '0'}
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="space-y-4 py-4">

@@ -132,10 +132,10 @@ export function TradeForm({ coin }: TradeFormProps) {
     const amount = Number.parseFloat(buyAmount)
     const total = Number.parseFloat(buyTotal)
 
-    if (total > (user?.current_balance || 0)) {
+    if (total > (user?.initial_balance || 0)) {
       toast({
         title: "Insufficient balance",
-        description: `You need $${total.toFixed(2)} but only have $${(user?.current_balance || 0).toFixed(2)}`,
+        description: `You need $${total.toFixed(2)} but only have $${(user?.initial_balance || 0).toFixed(2)}`,
         variant: "destructive"
       })
       return
@@ -345,7 +345,7 @@ export function TradeForm({ coin }: TradeFormProps) {
             <div className="p-4 rounded-lg bg-accent/50 border border-border">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm text-muted-foreground">Available Balance</span>
-                <span className="text-sm font-semibold">${(user?.current_balance || 0).toLocaleString()}</span>
+                <span className="text-sm font-semibold">${(user?.initial_balance || 0).toLocaleString()}</span>
               </div>
             </div>
 

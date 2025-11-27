@@ -20,9 +20,20 @@ export function PortfolioStats() {
       // Get complete portfolio data from portfolio-api (includes current prices, P&L, etc.)
       const portfolio = await getPortfolio(user.id)
 
-      // Use pre-calculated values from backend
-      const totalValue = parseFloat(portfolio.total_value) || 0
-      const cash = user.initial_balance || 0  // Use initial_balance (current balance) from user
+      // Get current cash balance from user (initial_balance is the available balance)
+      const cash = user.initial_balance || 0
+
+      // Calculate total value: cash + sum of all holdings
+      let holdingsValue = 0
+      if (portfolio.holdings && portfolio.holdings.length > 0) {
+        holdingsValue = portfolio.holdings.reduce((sum, holding) => {
+          const value = parseFloat(holding.current_value || holding.total_value || "0")
+          return sum + (isNaN(value) ? 0 : value)
+        }, 0)
+      }
+
+      // Total Balance = Cash + Holdings Value
+      const totalValue = cash + holdingsValue
 
       setTotalBalance(totalValue)
       setAvailableCash(cash)
