@@ -168,8 +168,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="p-4 border-t border-white/10">
           {!isSidebarCollapsed ? (
             <>
-              <Link href="/settings" className="block">
-                <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/10">
+              <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/10">
+                <Link href="/settings" className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity">
                   <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center border border-white/10 flex-shrink-0">
                     <span className="text-sm font-semibold text-white">
                       {user?.first_name && user?.last_name
@@ -190,15 +190,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <p className="text-xs text-green-400 font-semibold">
                         ${user?.current_balance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                       </p>
-                      <Dialog open={addFundsDialogOpen} onOpenChange={setAddFundsDialogOpen}>
-                        <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Add
-                          </button>
-                        </DialogTrigger>
+                    </div>
+                  </div>
+                </Link>
+                <Dialog open={addFundsDialogOpen} onOpenChange={setAddFundsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <button className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 flex-shrink-0">
+                      <Plus className="h-3 w-3" />
+                      Add
+                    </button>
+                  </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Manage Balance</DialogTitle>
@@ -258,11 +259,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             </Button>
                           </div>
                         </DialogContent>
-                      </Dialog>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+                </Dialog>
+              </div>
               <Button variant="ghost" className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
