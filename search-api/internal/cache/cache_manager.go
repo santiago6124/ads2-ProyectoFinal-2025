@@ -147,6 +147,60 @@ func (cm *CacheManager) Get(ctx context.Context, key string) (interface{}, bool)
 	return nil, false
 }
 
+// GetStale attempts to retrieve a value from cache even if it's expired (up to staleTTL)
+// This is useful for fallback scenarios when the primary source is unavailable
+func (cm *CacheManager) GetStale(ctx context.Context, key string, staleTTL time.Duration) (interface{}, bool) {
+	fullKey := cm.buildKey(key)
+
+	// Try distributed cache first (it stores creation time)
+	if cm.distributedCache != nil {
+		select {
+		case <-ctx.Done():
+			return nil, false
+		default:
+		}
+
+		// Try to get from Memcached (it may have expired but still be retrievable)
+		// Note: Memcached may return expired items depending on implementation
+		if item, err := cm.distributedCache.Get(fullKey); err == nil {
+			var cacheEntry CacheEntry
+			if err := json.Unmarshal(item.Value, &cacheEntry); err == nil {
+				// Check if entry is within stale TTL (even if expired from normal TTL)
+				age := time.Since(cacheEntry.CreatedAt)
+				if age <= staleTTL {
+					// Store in local cache for faster subsequent access
+					cm.localCache.Set(fullKey, cacheEntry.Value, cm.config.LocalTTL)
+
+					cm.logger.WithFields(logrus.Fields{
+						"key":    key,
+						"source": "stale_distributed",
+						"age":    age,
+					}).Debug("Stale cache hit")
+
+					return cacheEntry.Value, true
+				}
+			}
+		}
+	}
+
+	// Try local cache (CCache may have items that are expired but not yet evicted)
+	if item := cm.localCache.Get(fullKey); item != nil {
+		// CCache doesn't expose creation time, but if item exists (even if expired),
+		// we can use it as stale data
+		value := item.Value()
+		if value != nil {
+			cm.logger.WithFields(logrus.Fields{
+				"key":    key,
+				"source": "stale_local",
+			}).Debug("Stale cache hit from local")
+
+			return value, true
+		}
+	}
+
+	return nil, false
+}
+
 // Set stores a value in both local and distributed cache
 func (cm *CacheManager) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	cm.incrementTotalOperations()

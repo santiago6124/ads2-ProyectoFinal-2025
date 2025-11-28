@@ -117,7 +117,7 @@ func main() {
 	}()
 
 	// Initialize search service
-	searchService := services.NewSearchService(solrRepo, cacheRepo, trendingService, logger)
+	searchService := services.NewSearchService(solrRepo, cacheRepo, trendingService, ordersClient, logger)
 
 	// Warm cache
 	go func() {

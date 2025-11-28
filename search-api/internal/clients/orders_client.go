@@ -89,3 +89,66 @@ func (c *OrdersClient) GetOrderByID(ctx context.Context, orderID string) (*Order
 
 	return &orderResp, nil
 }
+
+// SearchOrdersResponse represents the response from orders-api list endpoint
+type SearchOrdersResponse struct {
+	Orders     []OrderResponse `json:"orders"`
+	Total      int64           `json:"total"`
+	Page       int             `json:"page"`
+	PageSize   int             `json:"page_size"`
+	TotalPages int             `json:"total_pages"`
+}
+
+// SearchOrders searches orders from orders-api with filters (fallback when Solr is down)
+func (c *OrdersClient) SearchOrders(ctx context.Context, userID *int, status, orderType, symbol string, page, pageSize int) (*SearchOrdersResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/orders", c.baseURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Build query parameters
+	q := req.URL.Query()
+	if userID != nil {
+		q.Set("user_id", fmt.Sprintf("%d", *userID))
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	if orderType != "" {
+		q.Set("type", orderType)
+	}
+	if symbol != "" {
+		q.Set("symbol", symbol)
+	}
+	if page > 0 {
+		q.Set("page", fmt.Sprintf("%d", page))
+	}
+	if pageSize > 0 {
+		q.Set("page_size", fmt.Sprintf("%d", pageSize))
+	}
+	req.URL.RawQuery = q.Encode()
+
+	// Use internal API key for service-to-service communication
+	req.Header.Set("X-Internal-Service", "search-api")
+	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("orders-api returned status %d", resp.StatusCode)
+	}
+
+	var searchResp SearchOrdersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &searchResp, nil
+}

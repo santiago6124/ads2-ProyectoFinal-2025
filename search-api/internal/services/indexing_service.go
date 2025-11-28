@@ -163,6 +163,19 @@ func (s *IndexingService) IndexOrder(ctx context.Context, order *models.Order) e
 		}
 	}
 
+	// Reindex missing orders for this user in background (non-blocking)
+	go func() {
+		reindexCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		if err := s.reindexMissingOrdersForUser(reindexCtx, order.UserID); err != nil {
+			s.logger.WithFields(logrus.Fields{
+				"user_id": order.UserID,
+				"error":   err,
+			}).Warn("Failed to reindex missing orders for user")
+		}
+	}()
+
 	return nil
 }
 
@@ -315,4 +328,81 @@ func (s *IndexingService) orderToSolrDoc(order *models.Order) map[string]interfa
 	}
 
 	return doc
+}
+
+// reindexMissingOrdersForUser reindexa órdenes faltantes de un usuario
+// Se ejecuta en background cuando se indexa una orden nueva
+func (s *IndexingService) reindexMissingOrdersForUser(ctx context.Context, userID int) error {
+	s.logger.WithFields(logrus.Fields{
+		"user_id": userID,
+	}).Info("Starting reindex of missing orders for user")
+
+	// Obtener todas las órdenes del usuario desde Orders API
+	// Usamos paginación para no sobrecargar
+	page := 1
+	pageSize := 100
+	totalIndexed := 0
+	totalSkipped := 0
+
+	for {
+		// Obtener órdenes de esta página
+		ordersResp, err := s.ordersClient.SearchOrders(ctx, &userID, "", "", "", page, pageSize)
+		if err != nil {
+			s.logger.WithFields(logrus.Fields{
+				"user_id": userID,
+				"page":    page,
+				"error":   err,
+			}).Warn("Failed to fetch orders from Orders API for reindexing")
+			break
+		}
+
+		if len(ordersResp.Orders) == 0 {
+			// No hay más órdenes
+			break
+		}
+
+		// Verificar cada orden si está en Solr
+		for _, orderResp := range ordersResp.Orders {
+			// Verificar si la orden ya está indexada en Solr
+			_, err := s.solrRepo.GetOrderByID(ctx, orderResp.ID)
+			if err == nil {
+				// Orden ya existe en Solr, skip
+				totalSkipped++
+				continue
+			}
+
+			// Orden no existe en Solr, indexarla
+			order := s.convertToOrderModel(&orderResp)
+			if err := s.IndexOrder(ctx, order); err != nil {
+				s.logger.WithFields(logrus.Fields{
+					"user_id":  userID,
+					"order_id": orderResp.ID,
+					"error":    err,
+				}).Warn("Failed to reindex missing order")
+				continue
+			}
+
+			totalIndexed++
+			s.logger.WithFields(logrus.Fields{
+				"user_id":  userID,
+				"order_id": orderResp.ID,
+			}).Debug("Reindexed missing order")
+		}
+
+		// Si esta página tiene menos órdenes que pageSize, es la última
+		if len(ordersResp.Orders) < pageSize {
+			break
+		}
+
+		page++
+	}
+
+	s.logger.WithFields(logrus.Fields{
+		"user_id":      userID,
+		"indexed":      totalIndexed,
+		"skipped":      totalSkipped,
+		"total_checked": totalIndexed + totalSkipped,
+	}).Info("Completed reindex of missing orders for user")
+
+	return nil
 }

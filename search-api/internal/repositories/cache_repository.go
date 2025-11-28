@@ -19,6 +19,7 @@ type CacheRepository struct {
 // CachedSearchRepository defines the cached search repository interface
 type CachedSearchRepository interface {
 	GetSearchResults(ctx context.Context, req *dto.SearchRequest) (*SearchResult, bool)
+	GetStaleSearchResults(ctx context.Context, req *dto.SearchRequest) (*SearchResult, bool)
 	SetSearchResults(ctx context.Context, req *dto.SearchRequest, result *SearchResult) error
 	GetTrendingResults(ctx context.Context, period string, limit int) ([]models.TrendingCrypto, bool)
 	SetTrendingResults(ctx context.Context, period string, limit int, trending []models.TrendingCrypto) error
@@ -47,6 +48,21 @@ func (r *CacheRepository) GetSearchResults(ctx context.Context, req *dto.SearchR
 	key := r.buildSearchKey(req)
 
 	if value, found := r.cacheManager.Get(ctx, key); found {
+		if result, ok := value.(*SearchResult); ok {
+			return result, true
+		}
+	}
+
+	return nil, false
+}
+
+// GetStaleSearchResults retrieves search results from cache even if expired (up to 30 minutes)
+// This is used as a fallback when Solr is unavailable
+func (r *CacheRepository) GetStaleSearchResults(ctx context.Context, req *dto.SearchRequest) (*SearchResult, bool) {
+	key := r.buildSearchKey(req)
+	staleTTL := 30 * time.Minute // Allow stale cache up to 30 minutes
+
+	if value, found := r.cacheManager.GetStale(ctx, key, staleTTL); found {
 		if result, ok := value.(*SearchResult); ok {
 			return result, true
 		}

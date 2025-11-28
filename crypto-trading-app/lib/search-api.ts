@@ -1,5 +1,4 @@
 import { config } from './config'
-import { ordersCache } from './orders-cache'
 
 export interface SearchOrderRequest {
   q?: string
@@ -68,19 +67,6 @@ class SearchApiService {
     try {
       console.log('🔍 Search API request params:', params)
 
-      // Try cache first for user-specific searches
-      if (params.user_id && params.page) {
-        const cached = ordersCache.getUserOrders(params.user_id, params.page)
-        if (cached) {
-          console.log('✅ Cache hit for user orders')
-          // Return cached data and revalidate in background
-          this.revalidateUserOrders(params).catch(err =>
-            console.warn('Background revalidation failed:', err)
-          )
-          return cached
-        }
-      }
-
       const response = await fetch(`${this.baseUrl}/api/v1/search`, {
         method: 'POST',
         headers: {
@@ -90,65 +76,17 @@ class SearchApiService {
       })
 
       if (!response.ok) {
-        // Handle rate limiting gracefully
         if (response.status === 429) {
-          console.warn('⚠️ Search API rate limit reached, trying cache')
-
-          // Try to return stale cache
-          if (params.user_id && params.page) {
-            const staleCache = ordersCache.getUserOrders(params.user_id, params.page)
-            if (staleCache) {
-              console.log('✅ Returning stale cache for rate limit')
-              return staleCache
-            }
-          }
+          console.warn('⚠️ Search API rate limit reached')
         }
         throw new Error(`Search failed: ${response.statusText}`)
       }
 
       const data = await response.json()
-
-      // Cache successful results
-      if (params.user_id && params.page && data.results?.length > 0) {
-        ordersCache.setUserOrders(params.user_id, params.page, data)
-      }
-
       return data
     } catch (error) {
       console.error('Search API error:', error)
-
-      // Try to return cached data on any error
-      if (params.user_id && params.page) {
-        const cached = ordersCache.getUserOrders(params.user_id, params.page)
-        if (cached) {
-          console.log('✅ Returning cache after error')
-          return cached
-        }
-      }
-
       throw error
-    }
-  }
-
-  private async revalidateUserOrders(params: SearchOrderRequest): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/v1/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (params.user_id && params.page && data.results?.length > 0) {
-          ordersCache.setUserOrders(params.user_id, params.page, data)
-        }
-      }
-    } catch (error) {
-      // Silently fail background revalidation
-      console.debug('Background revalidation failed:', error)
     }
   }
 
@@ -192,75 +130,13 @@ class SearchApiService {
   }
 
   async getRecentOrders(userId: number, limit: number = 10): Promise<SearchResponse> {
-    // Try cache first
-    const cached = ordersCache.getRecentOrders(userId)
-    if (cached && cached.length > 0) {
-      console.log('✅ Cache hit for recent orders')
-      // Return cached orders wrapped in SearchResponse format
-      const response: SearchResponse = {
-        results: cached.slice(0, limit),
-        total: cached.length,
-        page: 1,
-        limit,
-        total_pages: 1,
-      }
-
-      // Revalidate in background
-      this.revalidateRecentOrders(userId, limit).catch(err =>
-        console.warn('Background revalidation of recent orders failed:', err)
-      )
-
-      return response
-    }
-
-    // Cache miss, fetch from API
-    try {
-      const response = await this.searchOrders({
-        user_id: userId,
-        page: 1,
-        limit,
-        sort: 'created_at_desc',
-        status: ['executed'],
-      })
-
-      // Cache the results
-      if (response.results && response.results.length > 0) {
-        ordersCache.setRecentOrders(userId, response.results)
-      }
-
-      return response
-    } catch (error) {
-      // Try to return any cached data on error
-      if (cached && cached.length > 0) {
-        console.log('✅ Returning stale cache for recent orders after error')
-        return {
-          results: cached.slice(0, limit),
-          total: cached.length,
-          page: 1,
-          limit,
-          total_pages: 1,
-        }
-      }
-      throw error
-    }
-  }
-
-  private async revalidateRecentOrders(userId: number, limit: number): Promise<void> {
-    try {
-      const response = await this.searchOrders({
-        user_id: userId,
-        page: 1,
-        limit,
-        sort: 'created_at_desc',
-        status: ['executed'],
-      })
-
-      if (response.results && response.results.length > 0) {
-        ordersCache.setRecentOrders(userId, response.results)
-      }
-    } catch (error) {
-      console.debug('Background revalidation of recent orders failed:', error)
-    }
+    return this.searchOrders({
+      user_id: userId,
+      page: 1,
+      limit,
+      sort: 'created_at_desc',
+      status: ['executed'],
+    })
   }
 }
 

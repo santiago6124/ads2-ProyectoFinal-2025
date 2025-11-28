@@ -228,7 +228,18 @@ func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	orders, total, summary, err := h.orderService.ListUserOrders(ctx, userID.(int), filter)
+	// For internal services, allow user_id from query parameter
+	actualUserID := userID.(int)
+	userRole, _ := c.Get("user_role")
+	if userRole == "internal" {
+		if queryUserID := c.Query("user_id"); queryUserID != "" {
+			if parsedUserID, err := strconv.Atoi(queryUserID); err == nil && parsedUserID > 0 {
+				actualUserID = parsedUserID
+			}
+		}
+	}
+
+	orders, total, summary, err := h.orderService.ListUserOrders(ctx, actualUserID, filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

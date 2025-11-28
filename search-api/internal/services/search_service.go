@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
+	"search-api/internal/clients"
 	"search-api/internal/dto"
 	"search-api/internal/models"
 	"search-api/internal/repositories"
@@ -17,6 +19,7 @@ type SearchService struct {
 	solrRepo        repositories.SearchRepository
 	cacheRepo       repositories.CachedSearchRepository
 	trendingService *TrendingService
+	ordersClient    *clients.OrdersClient
 	logger          *logrus.Logger
 }
 
@@ -25,17 +28,19 @@ func NewSearchService(
 	solrRepo repositories.SearchRepository,
 	cacheRepo repositories.CachedSearchRepository,
 	trendingService *TrendingService,
+	ordersClient *clients.OrdersClient,
 	logger *logrus.Logger,
 ) *SearchService {
 	return &SearchService{
 		solrRepo:        solrRepo,
 		cacheRepo:       cacheRepo,
 		trendingService: trendingService,
+		ordersClient:    ordersClient,
 		logger:          logger,
 	}
 }
 
-// Search performs a comprehensive search with caching
+// Search performs a comprehensive search with caching and fallback
 func (s *SearchService) Search(ctx context.Context, req *dto.SearchRequest) (*dto.SearchResponse, error) {
 	startTime := time.Now()
 
@@ -45,7 +50,7 @@ func (s *SearchService) Search(ctx context.Context, req *dto.SearchRequest) (*dt
 	}
 	req.SetDefaults()
 
-	// Try cache first
+	// Level 1: Try fresh cache first (5 min TTL)
 	if result, found := s.cacheRepo.GetSearchResults(ctx, req); found {
 		s.logger.WithFields(logrus.Fields{
 			"query": req.Query,
@@ -56,14 +61,64 @@ func (s *SearchService) Search(ctx context.Context, req *dto.SearchRequest) (*dt
 		return s.buildSearchResponse(result, req, true, time.Since(startTime)), nil
 	}
 
-	// Execute search against Solr
+	// Level 2: Execute search against Solr
 	result, err := s.solrRepo.Search(ctx, req)
 	if err != nil {
 		s.logger.WithFields(logrus.Fields{
 			"query": req.Query,
 			"error": err,
-		}).Error("Search execution failed")
-		return nil, fmt.Errorf("search failed: %w", err)
+		}).Warn("Search execution failed, attempting fallback")
+
+		// Level 3: Try stale cache (30 min TTL)
+		if staleResult, found := s.cacheRepo.GetStaleSearchResults(ctx, req); found {
+			s.logger.WithFields(logrus.Fields{
+				"query": req.Query,
+				"page":  req.Page,
+				"cache": "stale",
+			}).Warn("Returning stale cache due to Solr failure")
+
+			return s.buildSearchResponse(staleResult, req, true, time.Since(startTime)), nil
+		}
+
+		// Level 4: Fallback to Orders API (direct database query)
+		if s.ordersClient != nil {
+			s.logger.WithFields(logrus.Fields{
+				"query": req.Query,
+			}).Warn("Attempting fallback to Orders API")
+
+			fallbackResult, fallbackErr := s.fallbackToOrdersAPI(ctx, req)
+			if fallbackErr == nil {
+				s.logger.WithFields(logrus.Fields{
+					"query":   req.Query,
+					"results": len(fallbackResult.Results),
+					"total":   fallbackResult.Total,
+					"source":  "orders_api",
+				}).Info("Fallback to Orders API successful")
+
+				// Cache the fallback result for future use
+				go func() {
+					cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+
+					if err := s.cacheRepo.SetSearchResults(cacheCtx, req, fallbackResult); err != nil {
+						s.logger.WithFields(logrus.Fields{
+							"query": req.Query,
+							"error": err,
+						}).Warn("Failed to cache fallback results")
+					}
+				}()
+
+				return s.buildSearchResponse(fallbackResult, req, false, time.Since(startTime)), nil
+			}
+
+			s.logger.WithFields(logrus.Fields{
+				"query": req.Query,
+				"error": fallbackErr,
+			}).Error("Fallback to Orders API also failed")
+		}
+
+		// All fallbacks failed
+		return nil, fmt.Errorf("search failed and all fallbacks exhausted: %w", err)
 	}
 
 	// Cache the results asynchronously
@@ -405,4 +460,138 @@ func (s *SearchService) WarmCache(ctx context.Context) error {
 
 	s.logger.Info("Cache warming completed successfully")
 	return nil
+}
+
+// fallbackToOrdersAPI queries Orders API directly when Solr is unavailable
+func (s *SearchService) fallbackToOrdersAPI(ctx context.Context, req *dto.SearchRequest) (*repositories.SearchResult, error) {
+	// Convert SearchRequest to Orders API parameters
+	// Note: Orders API has limited filtering compared to Solr
+	var status, orderType, symbol string
+	if len(req.Status) > 0 {
+		status = req.Status[0] // Take first status if multiple
+	}
+	if len(req.Type) > 0 {
+		orderType = req.Type[0] // Take first type if multiple
+	}
+	if len(req.CryptoSymbol) > 0 {
+		symbol = req.CryptoSymbol[0] // Take first symbol if multiple
+	}
+
+	// Call Orders API
+	ordersResp, err := s.ordersClient.SearchOrders(ctx, req.UserID, status, orderType, symbol, req.Page, req.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("orders API search failed: %w", err)
+	}
+
+	// Convert Orders API response to SearchResult
+	result := s.convertOrdersAPIResponseToSearchResult(ordersResp, req)
+
+	return result, nil
+}
+
+// convertOrdersAPIResponseToSearchResult converts Orders API response to SearchResult format
+func (s *SearchService) convertOrdersAPIResponseToSearchResult(ordersResp *clients.SearchOrdersResponse, req *dto.SearchRequest) *repositories.SearchResult {
+	results := make([]interface{}, 0, len(ordersResp.Orders))
+
+	for _, orderResp := range ordersResp.Orders {
+		// Convert OrderResponse to Order model
+		order := s.convertOrderResponseToOrderModel(&orderResp)
+
+		// Convert to OrderSearchResult
+		orderSearchResult := models.OrderSearchResult{
+			Order:      *order,
+			Score:      1.0, // Default score for fallback results
+			MatchType:  "fallback",
+			Highlighting: make(map[string][]string),
+		}
+
+		// Apply text matching if query is provided (simple contains check)
+		if req.Query != "" {
+			queryLower := strings.ToLower(req.Query)
+			if strings.Contains(strings.ToLower(order.CryptoSymbol), queryLower) ||
+				strings.Contains(strings.ToLower(order.CryptoName), queryLower) {
+				orderSearchResult.MatchType = "symbol_match"
+				orderSearchResult.Score = 0.8
+			}
+		}
+
+		results = append(results, orderSearchResult)
+	}
+
+	// Build facets from results (simplified)
+	facets := s.buildFacetsFromOrders(ordersResp.Orders)
+
+	return &repositories.SearchResult{
+		Results:   results,
+		Total:     ordersResp.Total,
+		Facets:    facets,
+		QueryTime: 0, // Not measured for fallback
+	}
+}
+
+// convertOrderResponseToOrderModel converts OrderResponse to Order model
+func (s *SearchService) convertOrderResponseToOrderModel(resp *clients.OrderResponse) *models.Order {
+	order := &models.Order{
+		ID:           resp.ID,
+		UserID:       resp.UserID,
+		Type:         resp.Type,
+		Status:       resp.Status,
+		OrderKind:    resp.OrderKind,
+		CryptoSymbol: resp.CryptoSymbol,
+		CryptoName:   resp.CryptoName,
+		Quantity:     resp.Quantity,
+		Price:        resp.OrderPrice,
+		TotalAmount:  resp.TotalAmount,
+		Fee:          resp.Fee,
+		CreatedAt:    resp.CreatedAt,
+		UpdatedAt:    resp.UpdatedAt,
+	}
+
+	if resp.ExecutedAt != nil {
+		order.ExecutedAt = resp.ExecutedAt
+	}
+
+	if resp.CancelledAt != nil {
+		order.CancelledAt = resp.CancelledAt
+	}
+
+	// Build search text
+	order.SearchText = s.buildSearchTextFromOrder(order)
+
+	return order
+}
+
+// buildSearchTextFromOrder builds searchable text from order
+func (s *SearchService) buildSearchTextFromOrder(order *models.Order) string {
+	parts := []string{
+		order.ID,
+		order.CryptoSymbol,
+		order.CryptoName,
+		order.Type,
+		order.Status,
+		order.OrderKind,
+		order.Quantity,
+		order.Price,
+		order.TotalAmount,
+	}
+	return strings.Join(parts, " ")
+}
+
+// buildFacetsFromOrders builds facets from orders list
+func (s *SearchService) buildFacetsFromOrders(orders []clients.OrderResponse) models.OrderFacets {
+	facets := models.OrderFacets{
+		Statuses:      make(map[string]int64),
+		Types:         make(map[string]int64),
+		OrderKinds:    make(map[string]int64),
+		CryptoSymbols: make(map[string]int64),
+	}
+
+	for _, order := range orders {
+		facets.Statuses[order.Status]++
+		facets.Types[order.Type]++
+		facets.OrderKinds[order.OrderKind]++
+		facets.CryptoSymbols[order.CryptoSymbol]++
+	}
+
+	return facets
 }
