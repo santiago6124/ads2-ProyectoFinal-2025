@@ -471,6 +471,10 @@ function OrdersContent() {
     { value: 'executed_at_desc', label: 'Recently Executed' },
   ]
 
+  // Calculate total_pages for pagination display
+  const limit = filters.limit || 20
+  const totalPages = searchResults?.total_pages || (searchResults?.total ? Math.ceil(searchResults.total / limit) : 0)
+
   return (
     <DashboardLayout>
       <div className="min-h-screen bg-black p-6">
@@ -571,12 +575,12 @@ function OrdersContent() {
             )}
 
             {/* Pagination */}
-            {searchResults && searchResults.total > 0 && searchResults.total_pages > 0 && (
+            {searchResults && searchResults.total > 0 && totalPages > 0 && (
               <div className="flex items-center justify-between">
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! - 1)}
-                  disabled={filters.page === 1 || !searchResults.total_pages || searchResults.total_pages <= 1}
+                  disabled={filters.page === 1 || totalPages <= 1}
                   className="bg-black border-white/10 text-white"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
@@ -587,7 +591,7 @@ function OrdersContent() {
                   <div className="flex items-center gap-2">
                     <span className="text-white/60 text-sm">Items per page:</span>
                     <Select
-                      value={filters.limit?.toString() || "20"}
+                      value={limit.toString()}
                       onValueChange={(value) => {
                         setFilters(prev => ({ ...prev, limit: parseInt(value), page: 1 }))
                       }}
@@ -604,14 +608,14 @@ function OrdersContent() {
                     </Select>
                   </div>
                   <span className="text-white/60">
-                    Page {filters.page} of {searchResults.total_pages || 1}
+                    Page {filters.page || 1} of {totalPages}
                   </span>
                 </div>
 
                 <Button
                   variant="outline"
                   onClick={() => handlePageChange(filters.page! + 1)}
-                  disabled={!searchResults.total_pages || filters.page === searchResults.total_pages || searchResults.total_pages <= 1}
+                  disabled={totalPages <= 1 || (filters.page || 1) >= totalPages}
                   className="bg-black border-white/10 text-white"
                 >
                   Next

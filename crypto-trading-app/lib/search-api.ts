@@ -83,6 +83,21 @@ class SearchApiService {
       }
 
       const data = await response.json()
+      
+      // Map the API response structure to the frontend interface
+      // API returns: { results, pagination: { total, page, limit, total_pages }, facets, query_info }
+      // Frontend expects: { results, total, page, limit, total_pages }
+      if (data.pagination) {
+        return {
+          results: data.results || [],
+          total: data.pagination.total || 0,
+          page: data.pagination.page || 1,
+          limit: data.pagination.limit || 20,
+          total_pages: data.pagination.total_pages || 0,
+        }
+      }
+      
+      // Fallback for backward compatibility
       return data
     } catch (error) {
       console.error('Search API error:', error)
