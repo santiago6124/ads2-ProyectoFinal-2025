@@ -447,20 +447,21 @@ export default function AdminPage() {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          <Dialog open={deleteDialogOpen && userToDelete === u.id} onOpenChange={(open) => {
-                            setDeleteDialogOpen(open)
-                            if (!open) setUserToDelete(null)
-                          }}>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setUserToDelete(u.id)}
-                                disabled={u.id === user.id}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
+                          {u.is_active && (
+                            <Dialog open={deleteDialogOpen && userToDelete === u.id} onOpenChange={(open) => {
+                              setDeleteDialogOpen(open)
+                              if (!open) setUserToDelete(null)
+                            }}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setUserToDelete(u.id)}
+                                  disabled={u.id === user.id}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>Delete User</DialogTitle>
@@ -487,6 +488,7 @@ export default function AdminPage() {
                               </div>
                             </DialogContent>
                           </Dialog>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
