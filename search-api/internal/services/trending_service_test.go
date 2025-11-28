@@ -221,7 +221,7 @@ func TestTrendingService_ScoreCalculations(t *testing.T) {
 		assert.Greater(t, diff1, diff2)
 	})
 
-	t.Run("volume score calculation", t *testing.T) {
+	t.Run("volume score calculation", func(t *testing.T) {
 		score1M := service.calculateVolumeScore(1000000.0)   // $1M
 		score10M := service.calculateVolumeScore(10000000.0) // $10M
 		score100M := service.calculateVolumeScore(100000000.0) // $100M

@@ -38,7 +38,7 @@ func (m *MockTokenService) RevokeRefreshToken(token string) error {
 	return args.Error(0)
 }
 
-func (m *MockTokenService) RevokeAllUserTokens(userID uint) error {
+func (m *MockTokenService) RevokeAllUserTokens(userID int32) error {
 	args := m.Called(userID)
 	return args.Error(0)
 }

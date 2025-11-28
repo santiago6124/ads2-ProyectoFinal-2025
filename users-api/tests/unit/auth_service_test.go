@@ -3,7 +3,6 @@ package unit
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -39,8 +38,8 @@ func TestAuthService_Authenticate(t *testing.T) {
 		mockLoginAttemptRepo.On("CountFailedAttempts", "test@example.com", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Once()
 		mockUserRepo.On("GetByEmail", "test@example.com").Return(user, nil).Once()
 		mockTokenService.On("GenerateTokenPair", user).Return(tokenPair, nil).Once()
-		mockUserRepo.On("UpdateLastLogin", uint(1)).Return(nil).Once()
-		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Twice()
+		mockUserRepo.On("UpdateLastLogin", int32(1)).Return(nil).Once()
+		mockLoginAttemptRepo.On("Create", mock.AnythingOfType("*models.LoginAttempt")).Return(nil).Once()
 
 		authResponse, err := service.Authenticate("test@example.com", "Test123!", "192.168.1.1", "Mozilla/5.0")
 

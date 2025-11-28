@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"users-api/internal/models"
 	"users-api/internal/services"
+	"users-api/pkg/utils"
 	"users-api/tests/mocks"
 )
 
@@ -142,7 +143,7 @@ func TestUserService_GetUserByID(t *testing.T) {
 			IsActive: true,
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(expectedUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(expectedUser, nil).Once()
 
 		user, err := service.GetUserByID(1)
 
@@ -154,7 +155,7 @@ func TestUserService_GetUserByID(t *testing.T) {
 	})
 
 	t.Run("user not found", func(t *testing.T) {
-		mockRepo.On("GetByID", uint(999)).Return(nil, fmt.Errorf("user not found")).Once()
+		mockRepo.On("GetByID", int32(999)).Return(nil, fmt.Errorf("user not found")).Once()
 
 		user, err := service.GetUserByID(999)
 
@@ -172,7 +173,7 @@ func TestUserService_GetUserByID(t *testing.T) {
 			IsActive: false,
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(deactivatedUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(deactivatedUser, nil).Once()
 
 		user, err := service.GetUserByID(1)
 
@@ -202,7 +203,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 			LastName:  &lastName,
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(existingUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(existingUser, nil).Once()
 		mockRepo.On("Update", mock.AnythingOfType("*models.User")).Return(nil).Once()
 
 		user, err := service.UpdateUser(1, req)
@@ -217,7 +218,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 	t.Run("user not found", func(t *testing.T) {
 		req := &models.UpdateUserRequest{}
 
-		mockRepo.On("GetByID", uint(999)).Return(nil, fmt.Errorf("user not found")).Once()
+		mockRepo.On("GetByID", int32(999)).Return(nil, fmt.Errorf("user not found")).Once()
 
 		user, err := service.UpdateUser(999, req)
 
@@ -233,11 +234,12 @@ func TestUserService_ChangePassword(t *testing.T) {
 	service := services.NewUserService(mockRepo)
 
 	t.Run("successful password change", func(t *testing.T) {
+		hashedPassword, _ := utils.HashPassword("Test123!")
 		existingUser := &models.User{
 			ID:           1,
 			Username:     "testuser",
 			Email:        "test@example.com",
-			PasswordHash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdF6Xe5dPaLu3U6", // "Test123!"
+			PasswordHash: hashedPassword,
 			IsActive:     true,
 		}
 
@@ -246,7 +248,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 			NewPassword:     "NewTest456!",
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(existingUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(existingUser, nil).Once()
 		mockRepo.On("Update", mock.AnythingOfType("*models.User")).Return(nil).Once()
 
 		err := service.ChangePassword(1, req)
@@ -256,11 +258,12 @@ func TestUserService_ChangePassword(t *testing.T) {
 	})
 
 	t.Run("incorrect current password", func(t *testing.T) {
+		hashedPassword, _ := utils.HashPassword("Test123!")
 		existingUser := &models.User{
 			ID:           1,
 			Username:     "testuser",
 			Email:        "test@example.com",
-			PasswordHash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdF6Xe5dPaLu3U6", // "Test123!"
+			PasswordHash: hashedPassword,
 			IsActive:     true,
 		}
 
@@ -269,7 +272,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 			NewPassword:     "NewTest456!",
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(existingUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(existingUser, nil).Once()
 
 		err := service.ChangePassword(1, req)
 
@@ -279,11 +282,12 @@ func TestUserService_ChangePassword(t *testing.T) {
 	})
 
 	t.Run("invalid new password", func(t *testing.T) {
+		hashedPassword, _ := utils.HashPassword("Test123!")
 		existingUser := &models.User{
 			ID:           1,
 			Username:     "testuser",
 			Email:        "test@example.com",
-			PasswordHash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdF6Xe5dPaLu3U6", // "Test123!"
+			PasswordHash: hashedPassword,
 			IsActive:     true,
 		}
 
@@ -292,7 +296,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 			NewPassword:     "weak",
 		}
 
-		mockRepo.On("GetByID", uint(1)).Return(existingUser, nil).Once()
+		mockRepo.On("GetByID", int32(1)).Return(existingUser, nil).Once()
 
 		err := service.ChangePassword(1, req)
 
