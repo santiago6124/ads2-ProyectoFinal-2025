@@ -61,8 +61,11 @@ func (s *SearchService) Search(ctx context.Context, req *dto.SearchRequest) (*dt
 		return s.buildSearchResponse(result, req, true, time.Since(startTime)), nil
 	}
 
-	// Level 2: Execute search against Solr
-	result, err := s.solrRepo.Search(ctx, req)
+	// Level 2: Execute search against Solr with shorter timeout for faster fallback
+	solrCtx, solrCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer solrCancel()
+
+	result, err := s.solrRepo.Search(solrCtx, req)
 	if err != nil {
 		s.logger.WithFields(logrus.Fields{
 			"query": req.Query,

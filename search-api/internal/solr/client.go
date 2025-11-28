@@ -64,10 +64,10 @@ type FacetCounts struct {
 // NewClient creates a new Solr client
 func NewClient(config *Config) *Client {
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = 5 * time.Second // Reduced from 30s to 5s for faster failure
 	}
 	if config.MaxRetries == 0 {
-		config.MaxRetries = 3
+		config.MaxRetries = 1 // Reduced from 3 to 1 for faster fallback
 	}
 	if config.RetryDelay == 0 {
 		config.RetryDelay = time.Second
@@ -456,19 +456,25 @@ func determineMatchType(query, symbol, name string) string {
 }
 
 func isNonRetryableError(err error) bool {
-	// Don't retry on certain errors like 400 Bad Request
-	if strings.Contains(err.Error(), "status 400") {
+	errStr := err.Error()
+	
+	// Don't retry on certain HTTP status errors
+	if strings.Contains(errStr, "status 400") ||
+		strings.Contains(errStr, "status 401") ||
+		strings.Contains(errStr, "status 403") ||
+		strings.Contains(errStr, "status 404") {
 		return true
 	}
-	if strings.Contains(err.Error(), "status 401") {
+	
+	// Don't retry on connection/timeout errors (Solr is down)
+	if strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "deadline exceeded") ||
+		strings.Contains(errStr, "context deadline exceeded") {
 		return true
 	}
-	if strings.Contains(err.Error(), "status 403") {
-		return true
-	}
-	if strings.Contains(err.Error(), "status 404") {
-		return true
-	}
+	
 	return false
 }
 
